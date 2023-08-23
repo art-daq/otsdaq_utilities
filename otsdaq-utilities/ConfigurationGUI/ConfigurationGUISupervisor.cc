@@ -1659,8 +1659,7 @@ try
 	const std::map<std::string, TableInfo>& allTableInfo = cfgMgr->getAllTableInfo(false);
 
 	std::map<std::string /*name*/, TableVersion /*version*/> modifiedTablesMap;
-	std::map<std::string /*name*/, TableVersion /*version*/>::iterator
-	    modifiedTablesMapIt;
+	std::map<std::string /*name*/, TableVersion /*version*/>::iterator modifiedTablesMapIt;
 
 	if(usingActiveGroups)
 	{
@@ -3081,8 +3080,7 @@ void ConfigurationGUISupervisor::handleFillTreeViewXML(HttpXmlDocument&        x
 		}
 		else
 		{
-			ConfigurationTree startNode =
-			    cfgMgr->getNode(startPath, true /*doNotThrowOnBrokenUIDLinks*/);
+			ConfigurationTree startNode = cfgMgr->getNode(startPath, true /*doNotThrowOnBrokenUIDLinks*/);
 			if(startNode.isLinkNode() && startNode.isDisconnected())
 			{
 				xmlOut.addTextElementToData("DisconnectedStartNode", "1");

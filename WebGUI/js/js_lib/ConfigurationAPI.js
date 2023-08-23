@@ -440,10 +440,12 @@ ConfigurationAPI.getAliasesAndGroups = function(responseHandler,optionForNoAlias
 //			from the subset that match the filter list
 //
 ConfigurationAPI.getSubsetRecords = function(subsetBasePath,
-		filterList,responseHandler,modifiedTables)
+											 filterList,
+											 responseHandler,
+											 modifiedTables)
 {
 	var modifiedTablesListStr = "";
-	for(var i=0;modifiedTables && i<modifiedTables.length;++i)
+	for(var i = 0; modifiedTables && i < modifiedTables.length; ++i)
 	{
 		if(i) modifiedTablesListStr += ",";
 		modifiedTablesListStr += modifiedTables[i].tableName + "," +
@@ -461,26 +463,25 @@ ConfigurationAPI.getSubsetRecords = function(subsetBasePath,
 			"&modifiedTables=" + modifiedTablesListStr, //end post data
 			function(req)
 			{
-		ConfigurationAPI.extractActiveGroups(req);
-		
-		var records = [];
-		var err = DesktopContent.getXMLValue(req,"Error");
-		if(err) 
-		{
-			Debug.log(err,Debug.HIGH_PRIORITY);
-			if(responseHandler) responseHandler(records);
-			return;
-		}
-		
-		//console.log(req);
-		
-		var tree = DesktopContent.getXMLNode(req,"tree");
-		var nodes = tree.children;
-		for(var i=0;i<nodes.length;++i)
-			records.push(nodes[i].getAttribute("value"));
-		Debug.log("Records: " + records);
-		if(responseHandler) responseHandler(records);
-
+				ConfigurationAPI.extractActiveGroups(req);
+				
+				var records = [];
+				var err = DesktopContent.getXMLValue(req,"Error");
+				if(err) 
+				{
+					Debug.log(err,Debug.HIGH_PRIORITY);
+					if(responseHandler) responseHandler(records);
+					return;
+				}
+				
+				//console.log(req);
+				
+				var tree = DesktopContent.getXMLNode(req,"tree");
+				var nodes = tree.children;
+				for(var i=0;i<nodes.length;++i)
+					records.push(nodes[i].getAttribute("value"));
+				Debug.log("Records: " + records);
+				if(responseHandler) responseHandler(records);
 			}, //handler
 			0, //handler param
 			0,true); //progressHandler, callHandlerOnErr
