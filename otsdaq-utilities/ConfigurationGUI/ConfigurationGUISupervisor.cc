@@ -2397,9 +2397,8 @@ void ConfigurationGUISupervisor::handleFillSetTreeNodeFieldValuesXML(
 			std::string        fieldValue;
 			while(getline(f, fieldValue, ','))
 			{
-				fieldValues.push_back(
-				    fieldValue);  // setURIEncodedValue is expected
-				                  // StringMacros::decodeURIComponent(fieldValue));
+				fieldValues.push_back(fieldValue);  // setURIEncodedValue is expected
+				                  					// StringMacros::decodeURIComponent(fieldValue));
 			}
 
 			// if last value is "" then push empty value
@@ -2480,10 +2479,8 @@ void ConfigurationGUISupervisor::handleFillSetTreeNodeFieldValuesXML(
 					             << __E__;
 
 					// if link must get parent table name
-					table = cfgMgr->getTableByName(
-					    targetNode.getFieldTableName());  // NOT getTableName!
-					if(!(temporaryVersion = table->getViewP()->getVersion())
-					        .isTemporaryVersion())
+					table = cfgMgr->getTableByName(targetNode.getFieldTableName());  // NOT getTableName!
+					if(!(temporaryVersion = table->getViewP()->getVersion()).isTemporaryVersion())
 					{
 						// create temporary version for editing
 						temporaryVersion =
@@ -2508,8 +2505,7 @@ void ConfigurationGUISupervisor::handleFillSetTreeNodeFieldValuesXML(
 					                                      targetNode.getFieldColumn(),
 					                                      author);
 
-					table->getViewP()
-					    ->init();  // verify new table (throws runtime_errors)
+					table->getViewP()->init();  // verify new table (throws runtime_errors)
 				}
 			}
 		}
