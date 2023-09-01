@@ -159,7 +159,9 @@
 	<script type="text/JavaScript" src="/WebPath/js/js_lib/SimpleContextMenu.js"></script>
 	<script type="text/JavaScript" src="/WebPath/js/js_lib/ConfigurationAPI.js"></script>
 	
-	<script>		
+	<script>
+	
+		// TODO: write the new description
 		//	Description of Configuration-FHiCL Functionality/Behavior:
 		//	
 		//	GET parameters:
@@ -212,30 +214,30 @@
 		var _TABLE_BOOL_TYPE_FALSE_COLOR = "rgb(255, 178, 178)";
 		
 		
-		var _leftPane, _rightPane, _topPane;
-		var _leftPaneHidden = false;
+		var _mainPane, _topPane;
+		// var _leftPaneHidden = false;
 		
-		var _rightPaneFields;
-		var _RIGHT_PANE_RW_BTN_HEIGHT = 48;
+		// var _rightPaneFields;
+		// var _RIGHT_PANE_RW_BTN_HEIGHT = 48;
 		
 		var eventListenersCreated = false;
 		
 		//global vars for GET params
 		var _subsetBasePath;			
 		var _groupingFieldList;	
-		var _editableFieldList;			
-		var _recordPreFilterList;
+		// var _editableFieldList;			
+		// var _recordPreFilterList;
 		var _recordsAlias;
 		
 		var _mapOfGroupFieldToLinkIndex = {};
-		var _selectedGroupFieldValues;	
-		var _selectedGroupIDs;	
-		var _selectedRecords;	
+		// var _selectedGroupFieldValues;	
+		// var _selectedGroupIDs;	
+		// var _selectedRecords;	
 		
 		//global vars for multiselects				
-		var _filterValsObj; //for each filter MultiSelect (one for each grouping field), an array of filter values
+		var _valsObj; //for each filter MultiSelect (one for each grouping field), an array of filter values
 		var _subsetUIDs; //array of UIDs defined by the subset selected filterVals in multiselects (based on _subsetBasePath and _recordPreFilterList)
-		var _filterTimer;
+		// var _filterTimer;
 		MultiSelectBox.REQUIRE_CTRL_MULTI_CLICK = true; //require control
 		
 		//global vars for fields
@@ -290,7 +292,7 @@
 		//	init called once body has loaded
 		function init() 
 		{									
-			Debug.log("CfgGUI_sebset init ");			
+			Debug.log("CfgGUI_FHiCL_editor init ");			
 			
 			//extract get parameters
 			if(!extractGETParameters())
@@ -299,24 +301,18 @@
 						Debug.HIGH_PRIORITY);
 				return;
 			}
-			var windowTooltip = "Welcome to the Configuration-Subset GUI targeting " + _recordsAlias +
-				". Here you can manipulate the fields " +
-				"of a subset of your <i>otsdaq</i> system. \n\n" +
-				"The organization of the Configuration-Subset GUI is in the form of two panes, a left and right.\n\n" +
 
-				"Briefly, here is a description of the two panes: " +
-				"\n\t- The 'Left Pane' is for selecting one or more records to target." +
-				"\n\t- The 'Right Pane' is for modifying the common fields associated with the selected records.";
+			// prepare the info for the page tooltip
+			var windowTooltip = "Welcome to the Configuration-FHiCL GUI targeting " + _recordsAlias +
+				". Here you can manipulate the fields of a FHiCL file. \n\n" +
+				"The organization of the Configuration-FHiCL GUI is in the form where you can directly edit the fields.\n\n";
 			DesktopContent.tooltip("Configuration-Subset GUI Introduction", windowTooltip);
 			DesktopContent.setWindowTooltip(windowTooltip);
 
-			//get subset record uids and 
+			// get subset record uids and 
 			//	filter values for all possible grouping fields
 			//	calls paint() and adds resize listener when done
-			initSubsetGlobalData();
-				//paint();
-				//window.addEventListener("resize",paint);
-						
+			initSubsetGlobalData();						
 		} //end init()
 		
 		//=====================================================================================
@@ -343,54 +339,54 @@
 			var BORDER_SZ = 0;			
 			var MARGIN = 5;
 			
-			if(!_leftPane && !_rightPane && !_topPane)
+			if(!_mainPane && !_topPane)
 			{
 				//first time create elements
 				createTopPaneContent();
-				createLeftPaneContent(LEFT_W-2*BORDER_SZ);
-				createRightPaneContent();
+				// createLeftPaneContent(LEFT_W-2*BORDER_SZ);
+				// createRightPaneContent();
 				
 				updateRecordsAndFields();
 			}
 
+			// TODO: check the sizes with the new layout
+			// var y = MARGIN;
+			// var x = MARGIN;
+			// w -= 2*MARGIN;
+			// h -= 2*MARGIN;
 			
-			var y = MARGIN;
-			var x = MARGIN;
-			w -= 2*MARGIN;
-			h -= 2*MARGIN;
+			// _topPane.style.left = x + "px";
+			// _topPane.style.top = y + "px";
+			// _topPane.style.width = (w - 2*BORDER_SZ) + "px";
+			// _topPane.style.height = (TOP_H - 2*BORDER_SZ) + "px";
 			
-			_topPane.style.left = x + "px";
-			_topPane.style.top = y + "px";
-			_topPane.style.width = (w - 2*BORDER_SZ) + "px";
-			_topPane.style.height = (TOP_H - 2*BORDER_SZ) + "px";
-			
-			y += TOP_H + MARGIN;
-			h -= TOP_H + MARGIN;
+			// y += TOP_H + MARGIN;
+			// h -= TOP_H + MARGIN;
 
-			//set left pane sizes
-			if(!_leftPaneHidden)
-			{
-				_leftPane.style.left = MARGIN + "px";
-				_leftPane.style.top = y + "px";
-				_leftPane.style.width = (LEFT_W-2*BORDER_SZ) + "px";
-				_leftPane.style.height = (h - 2*BORDER_SZ) + "px";
+			// //set left pane sizes
+			// if(!_leftPaneHidden)
+			// {
+			// 	_leftPane.style.left = MARGIN + "px";
+			// 	_leftPane.style.top = y + "px";
+			// 	_leftPane.style.width = (LEFT_W-2*BORDER_SZ) + "px";
+			// 	_leftPane.style.height = (h - 2*BORDER_SZ) + "px";
 	
-				x += LEFT_W + MARGIN;
-				w -= LEFT_W + MARGIN;
-			}
+			// 	x += LEFT_W + MARGIN;
+			// 	w -= LEFT_W + MARGIN;
+			// }
 
-			//set right pane sizes
-			h -= 2*BORDER_SZ + MARGIN;
-			w -= 2*BORDER_SZ;
-			_rightPane.style.left = x + "px";
-			_rightPane.style.top = y + "px";
-			_rightPane.style.width = w + "px";
-			_rightPane.style.height = h + "px";
+			// //set right pane sizes
+			// h -= 2*BORDER_SZ + MARGIN;
+			// w -= 2*BORDER_SZ;
+			// _rightPane.style.left = x + "px";
+			// _rightPane.style.top = y + "px";
+			// _rightPane.style.width = w + "px";
+			// _rightPane.style.height = h + "px";
 
-			//_rightPaneFields.style.width = (w - 2*BORDER_SZ - 2*MARGIN) + "px";
-			_rightPaneFields.style.height = (h - 20 - //for left pane hide
-					(_RIGHT_PANE_RW_BTN_HEIGHT*2) - //for top/bottom read/write buttons
-					2*BORDER_SZ - 2*MARGIN) + "px";
+			// //_rightPaneFields.style.width = (w - 2*BORDER_SZ - 2*MARGIN) + "px";
+			// _rightPaneFields.style.height = (h - 20 - //for left pane hide
+			// 		(_RIGHT_PANE_RW_BTN_HEIGHT*2) - //for top/bottom read/write buttons
+			// 		2*BORDER_SZ - 2*MARGIN) + "px";
 						
 		}	//end paint()
 
@@ -517,7 +513,7 @@
 			ConfigurationAPI.getFieldsOfRecords(
 					_subsetBasePath,
 					_subsetUIDs,
-					_editableFieldList,
+					// _editableFieldList,
 					-1 /*maxDepth*/,
 					function(recordFields)
 					{				
@@ -580,6 +576,7 @@
 		//=====================================================================================
 		//extractGETParameters ~~
 		//	return false, if illegal params
+		// TODO: check the parameter that are actually needed
 		function extractGETParameters() 
 		{
 			//extract get parameters (most optional)
@@ -591,42 +588,40 @@
 			//		<selectedRecords> 		= CSV list of pre-chosen record UID selections (this will override default behavior of selecting the first record,.. if only one record is chosen, that record will be loaded) 
 			//		<recordsAlias> 			= PLURAL Records display name, e.g. "Front-ends"
 			
-			_subsetBasePath		= DesktopContent.getParameter(0,"subsetBasePath");//"FEInterfaceConfiguration"; //DesktopContent.getParameter(0,"subsetBasePath");			
-			_groupingFieldList 	= DesktopContent.getParameter(0,"groupingFieldList"); //"LinkToFETypeConfiguration,FEInterfacePluginName"; //DesktopContent.getParameter(0,"groupingFieldList");			
-			_editableFieldList	= DesktopContent.getParameter(0,"editableFieldList");//"";//DesktopContent.getParameter(0,"editableFieldList");			
-			_recordPreFilterList= DesktopContent.getParameter(0,"recordPreFilterList"); //"";//FEInterfacePluginName=myNewInterface";//DesktopContent.getParameter(0,"recordPreFilterList");
-			_recordsAlias		= DesktopContent.getParameter(0,"recordAlias"); //"Front-ends"; //default to records
+			_subsetBasePath	= DesktopContent.getParameter(0,"subsetBasePath");//"FEInterfaceConfiguration"; //DesktopContent.getParameter(0,"subsetBasePath");			
+			_groupingFieldList = DesktopContent.getParameter(0,"groupingFieldList"); //"LinkToFETypeConfiguration,FEInterfacePluginName"; //DesktopContent.getParameter(0,"groupingFieldList");			
+			// _editableFieldList	= DesktopContent.getParameter(0,"editableFieldList");//"";//DesktopContent.getParameter(0,"editableFieldList");			
+			// _recordPreFilterList= DesktopContent.getParameter(0,"recordPreFilterList"); //"";//FEInterfacePluginName=myNewInterface";//DesktopContent.getParameter(0,"recordPreFilterList");
+			_recordsAlias = DesktopContent.getParameter(0,"recordAlias"); //"Front-ends"; //default to records
 			
-			_selectedGroupFieldValues = DesktopContent.getParameter(0,"selectedGroupFieldValues"); //"ParameterGroupID=myNewInterfaceParameters,myNewInterfaceParameters;FEInterfacePluginName=myNewInterface""; 
-			_selectedGroupIDs 	= DesktopContent.getParameter(0,"selectedGroupIDs"); //"ParameterGroupID=myNewInterfaceParameters,myNewInterfaceParameters;FEInterfacePluginName=myNewInterface""; 
-			_selectedRecords	= DesktopContent.getParameter(0,"selectedRecords"); //"myNewInterface,myNewInterface2";
+			// _selectedGroupFieldValues = DesktopContent.getParameter(0,"selectedGroupFieldValues"); //"ParameterGroupID=myNewInterfaceParameters,myNewInterfaceParameters;FEInterfacePluginName=myNewInterface""; 
+			// _selectedGroupIDs 	= DesktopContent.getParameter(0,"selectedGroupIDs"); //"ParameterGroupID=myNewInterfaceParameters,myNewInterfaceParameters;FEInterfacePluginName=myNewInterface""; 
+			// _selectedRecords	= DesktopContent.getParameter(0,"selectedRecords"); //"myNewInterface,myNewInterface2";
 									
 			
 			if(!_subsetBasePath)
 			{
-				Debug.log("Missing required GET parameter 'subsetBasePath.'",
-						Debug.HIGH_PRIORITY);
+				Debug.log("Missing required GET parameter 'subsetBasePath.'", Debug.HIGH_PRIORITY);
 				return false;
 			}
 			if(!_groupingFieldList) _groupingFieldList = "";
-			if(!_editableFieldList) _editableFieldList = "";
-			if(!_recordPreFilterList) _recordPreFilterList = "";
+			// if(!_editableFieldList) _editableFieldList = "";
+			// if(!_recordPreFilterList) _recordPreFilterList = "";
 			if(!_recordsAlias) _recordsAlias = "Records";
 			
-			if(!_selectedGroupFieldValues) _selectedGroupFieldValues = "";
-			if(!_selectedGroupIDs) _selectedGroupIDs = "";
-			if(!_selectedRecords) _selectedRecords = "";
+			// if(!_selectedGroupFieldValues) _selectedGroupFieldValues = "";
+			// if(!_selectedGroupIDs) _selectedGroupIDs = "";
+			// if(!_selectedRecords) _selectedRecords = "";
 
 			Debug.logv({_subsetBasePath});
 			Debug.logv({_groupingFieldList});
-			Debug.logv({_editableFieldList});
-			Debug.logv({_recordPreFilterList});
+			// Debug.logv({_editableFieldList});
+			// Debug.logv({_recordPreFilterList});
 			Debug.logv({_recordsAlias});
 
-			Debug.logv({_selectedGroupFieldValues});
-			Debug.logv({_selectedGroupIDs});
-			Debug.logv({_selectedRecords});
-			
+			// Debug.logv({_selectedGroupFieldValues});
+			// Debug.logv({_selectedGroupIDs});
+			// Debug.logv({_selectedRecords});
 			return true;
 		}	//end extractGETParameters()
 		
@@ -634,46 +629,41 @@
 		//initSubsetGlobalData ~~
 		//	fills _subsetUIDs
 		//		array of UIDs defined by the subset (based on _subsetBasePath and _recordPreFilterList)
-		//	fills _filterValsObj
+		//	fills _valsObj
 		//		for each filter MultiSelect (one for each grouping field), an array of filter values
 		function initSubsetGlobalData() 
 		{
 			//get list of records that match <subsetBasePath> AND <recordPreFilterList>
 			_subsetUIDs = []; //reset
-			_filterValsObj = {}; //reset
+			_valsObj = {}; //reset
 			_fields = undefined; //reset
 			_modifiedTables = undefined; //reset
 			_mapOfGroupFieldToLinkIndex = {}; //reset
 			
-
-			if(_leftPane && _rightPane && _topPane)
+			// if the view is already loaded I have to reset it
+			if(_mainPane && _topPane)
 			{
 				_topPane.innerHTML = ""; //clear
-				_rightPane.innerHTML = ""; //clear
-				_leftPane.innerHTML = ""; //clear
+				_mainPane.innerHTML = ""; //clear
 				_topPane.parentNode.removeChild(_topPane); //remove element
-				_rightPane.parentNode.removeChild(_rightPane); //remove element
-				_leftPane.parentNode.removeChild(_leftPane); //remove element
-				
+				_mainPane.parentNode.removeChild(_mainPane); //remove element
 			}
+
 			_topPane = undefined; //reset
-			_rightPane = undefined; //reset
-			_leftPane = undefined; //reset
+			_mainPane = undefined; //reset
 						
-			window.clearTimeout(_filterTimer); 
+			// window.clearTimeout(_filterTimer); 
 			_selectedFieldIndex = -1;
 			_editFieldIndex = -1;
 			
-			
 			ConfigurationAPI.getSubsetRecords(
 					_subsetBasePath,
-					_recordPreFilterList,
+					"",	// no filter
 					function(records)
 					{
                         _subsetUIDs = records;
                         Debug.log("records found = " + records.length);
-                        console.log(records);
-				
+						
                         //groupingFieldList = AUTO is special key word
                         //	if AUTO, then server picks filter fields (usually 3, with preference
                         //	for GroupID, On/Off, and FixedChoice fields.
@@ -685,9 +675,9 @@
                                 _groupingFieldList,
                                 function(uniqueValues)
                                 {
-                                    _filterValsObj = uniqueValues;
+                                    _valsObj = uniqueValues;
                                     Debug.log("uniqueValue sets found = " + uniqueValues.length);
-                                    console.log("uniqueValues",uniqueValues);
+                                    console.log("uniqueValues", uniqueValues);
 					
                                     if(_groupingFieldList == "AUTO")
                                     {
@@ -705,10 +695,9 @@
                                     }
 					
                                     //create map of group field to child link index
-                                    for(var i = 0; i < _filterValsObj.length; ++i)
-                                        if(_filterValsObj[i].childLinkIndex)
-                                            _mapOfGroupFieldToLinkIndex[_filterValsObj[i].fieldName] = 
-                                                    _filterValsObj[i].childLinkIndex;
+                                    for(var i = 0; i < _valsObj.length; ++i)
+                                        if(_valsObj[i].childLinkIndex)
+                                            _mapOfGroupFieldToLinkIndex[_valsObj[i].fieldName] = _valsObj[i].childLinkIndex;
                                     console.log("_mapOfGroupFieldToLinkIndex",_mapOfGroupFieldToLinkIndex);
 					
 					                paint();
@@ -720,156 +709,156 @@
                                         eventListenersCreated = true; //prevent multiple event creation
                                     }
 					
-                                    localApplyFilterPreSelections();
+                                    // localApplyFilterPreSelections();
                                     return;
 					
-                                    //now apply filter selections, if any
-                                    function localApplyFilterPreSelections()
-                                    {
-                                        Debug.log("localApplyFilterPreSelections()");
+                                    // //now apply filter selections, if any
+                                    // function localApplyFilterPreSelections()
+                                    // {
+                                    //     Debug.log("localApplyFilterPreSelections()");
                             
-                                        var groups = _groupingFieldList.split(',');
-                                        Debug.log("groups length " + groups.length);
+                                    //     var groups = _groupingFieldList.split(',');
+                                    //     Debug.log("groups length " + groups.length);
                             
-                                        //handle group filter pre-selects
-                                        var groupSelects = _selectedGroupFieldValues.split(';');
-                                        Debug.log("groupSelects length " + groupSelects.length);
+                                    //     //handle group filter pre-selects
+                                    //     var groupSelects = _selectedGroupFieldValues.split(';');
+                                    //     Debug.log("groupSelects length " + groupSelects.length);
 						
-                                        for(var i = 0; i < groupSelects.length; ++i)
-                                        {
-                                            var fieldArr = groupSelects[i].split('=');
+                                    //     for(var i = 0; i < groupSelects.length; ++i)
+                                    //     {
+                                    //         var fieldArr = groupSelects[i].split('=');
                                             
-                                            if(fieldArr.length < 2) continue; //skip empty selects
+                                    //         if(fieldArr.length < 2) continue; //skip empty selects
                                             
-                                            //find group box
-                                            for(var g = 0; g < groups.length; ++g)
-                                            {
-                                                if(groups[g] == fieldArr[0])
-                                                {
-                                                    Debug.log("Found pre-select group " + g);
+                                    //         //find group box
+                                    //         for(var g = 0; g < groups.length; ++g)
+                                    //         {
+                                    //             if(groups[g] == fieldArr[0])
+                                    //             {
+                                    //                 Debug.log("Found pre-select group " + g);
                                                     
                                                     
-                                                    var el = document.getElementById("groupFilterMultiSelect-" + g);
+                                    //                 var el = document.getElementById("groupFilterMultiSelect-" + g);
                                                     
-                                                    var selectValues = fieldArr[1].split(',');
-                                                    console.log("selectValues",selectValues);
-                                                    for(var j = 0; j < selectValues.length; ++j)
-                                                    {
-                                                        //find select val in multi-select values
-                                                        var selectVal = decodeURIComponent(selectValues[j]);
-                                                        for(var k = 0; k < _filterValsObj[g].fieldUniqueValueArray.length; ++k)
-                                                        {
-                                                            if(selectVal == _filterValsObj[g].fieldUniqueValueArray[k])
-                                                            {
-                                                                Debug.log("Found pre-select value " + selectVal);
-                                                                MultiSelectBox.setSelectionElementByIndex(el, k, true /*selected*/);
-                                                            }
-                                                        }
-                                                    }
-                                                    break;
-                                                }
-                                            }
-                                        } //end group pre-selects search loop
+                                    //                 var selectValues = fieldArr[1].split(',');
+                                    //                 console.log("selectValues",selectValues);
+                                    //                 for(var j = 0; j < selectValues.length; ++j)
+                                    //                 {
+                                    //                     //find select val in multi-select values
+                                    //                     var selectVal = decodeURIComponent(selectValues[j]);
+                                    //                     for(var k = 0; k < _valsObj[g].fieldUniqueValueArray.length; ++k)
+                                    //                     {
+                                    //                         if(selectVal == _valsObj[g].fieldUniqueValueArray[k])
+                                    //                         {
+                                    //                             Debug.log("Found pre-select value " + selectVal);
+                                    //                             MultiSelectBox.setSelectionElementByIndex(el, k, true /*selected*/);
+                                    //                         }
+                                    //                     }
+                                    //                 }
+                                    //                 break;
+                                    //             }
+                                    //         }
+                                    //     } //end group pre-selects search loop
                                     
-                                        //handle GroupID filter pre-selects
-                                        var groupIDSelects = _selectedGroupIDs.split(';');
-                                        Debug.log("groupIDSelects length " + groupIDSelects.length);
+                                    //     //handle GroupID filter pre-selects
+                                    //     var groupIDSelects = _selectedGroupIDs.split(';');
+                                    //     Debug.log("groupIDSelects length " + groupIDSelects.length);
 
-                                        for(var i = 0; i < groupIDSelects.length; ++i)
-                                        {
-                                            var fieldArr = groupIDSelects[i].split('=');
+                                    //     for(var i = 0; i < groupIDSelects.length; ++i)
+                                    //     {
+                                    //         var fieldArr = groupIDSelects[i].split('=');
 
-                                            if(fieldArr.length < 2) continue; //skip empty selects
+                                    //         if(fieldArr.length < 2) continue; //skip empty selects
 
-                                            //find group box
-                                            for(var g = 0; g < groups.length; ++g)
-                                            {
-                                                //match by child link index
-                                                if(_mapOfGroupFieldToLinkIndex[groups[g]] == fieldArr[0])
-                                                {
-                                                    Debug.log("Found pre-select groupID " + g);
+                                    //         //find group box
+                                    //         for(var g = 0; g < groups.length; ++g)
+                                    //         {
+                                    //             //match by child link index
+                                    //             if(_mapOfGroupFieldToLinkIndex[groups[g]] == fieldArr[0])
+                                    //             {
+                                    //                 Debug.log("Found pre-select groupID " + g);
 
-                                                    var el = document.getElementById("groupFilterMultiSelect-" + g);
+                                    //                 var el = document.getElementById("groupFilterMultiSelect-" + g);
 
-                                                    var selectValues = fieldArr[1].split(',');
-                                                    console.log("groupID selectValues",selectValues);
-                                                    for(var j=0;j<selectValues.length;++j)
-                                                    {
-                                                        //find select val in multi-select values
-                                                        var selectVal = decodeURIComponent(selectValues[j]);
-                                                        for(var k=0;k<_filterValsObj[g].fieldUniqueValueArray.length;++k)
-                                                        {
-                                                            if(selectVal == _filterValsObj[g].fieldUniqueValueArray[k])
-                                                            {
-                                                                Debug.log("Found pre-select groupID value " + selectVal);
-                                                                MultiSelectBox.setSelectionElementByIndex(el, k, true /*selected*/);
-                                                            }
-                                                        }
-                                                    }
-                                                    break;
-                                                }
-                                            }
-                                        } //end group pre-selects search loop
+                                    //                 var selectValues = fieldArr[1].split(',');
+                                    //                 console.log("groupID selectValues",selectValues);
+                                    //                 for(var j=0;j<selectValues.length;++j)
+                                    //                 {
+                                    //                     //find select val in multi-select values
+                                    //                     var selectVal = decodeURIComponent(selectValues[j]);
+                                    //                     for(var k=0;k<_valsObj[g].fieldUniqueValueArray.length;++k)
+                                    //                     {
+                                    //                         if(selectVal == _valsObj[g].fieldUniqueValueArray[k])
+                                    //                         {
+                                    //                             Debug.log("Found pre-select groupID value " + selectVal);
+                                    //                             MultiSelectBox.setSelectionElementByIndex(el, k, true /*selected*/);
+                                    //                         }
+                                    //                     }
+                                    //                 }
+                                    //                 break;
+                                    //             }
+                                    //         }
+                                    //     } //end group pre-selects search loop
                                     
                                     
-                                        //now consider record pre-selects 
-                                        var selectRecords = _selectedRecords.split(',');
-                                        Debug.log("selectRecords length " + selectRecords.length);
-                                        var loadSelectedRecord = true;
-                                        var selectFirstRecord = true;
+                                    //     //now consider record pre-selects 
+                                    //     var selectRecords = _selectedRecords.split(',');
+                                    //     Debug.log("selectRecords length " + selectRecords.length);
+                                    //     var loadSelectedRecord = true;
+                                    //     var selectFirstRecord = true;
                                     
-                                        el = document.getElementById("recordMultiSelect");
-                                        var currentSelectedRecordsCount = MultiSelectBox.getSelectedCount(el);
+                                    //     el = document.getElementById("recordMultiSelect");
+                                    //     var currentSelectedRecordsCount = MultiSelectBox.getSelectedCount(el);
 						
-                                        if(currentSelectedRecordsCount == 0 && selectRecords.length && selectRecords[0].length)
-                                        {
+                                    //     if(currentSelectedRecordsCount == 0 && selectRecords.length && selectRecords[0].length)
+                                    //     {
                                             
-                                            loadSelectedRecord = selectRecords.length == 1; //only load record if one chosen
+                                    //         loadSelectedRecord = selectRecords.length == 1; //only load record if one chosen
 
-                                            for(var j = 0; j < selectRecords.length; ++j)
-                                            {
-                                                //find select UID in multi-select values
-                                                for(var k = 0; k < _subsetUIDs.length; ++k)
-                                                {
-                                                    if(selectRecords[j] == _subsetUIDs[k])
-                                                    {
-                                                        Debug.log("Found pre-select record " + selectRecords[j]);
-                                                        MultiSelectBox.setSelectionElementByIndex(el,k,true /*selected*/);
-                                                        selectFirstRecord = false; //use record selection instead, and use as indication that a record was found in search
-                                                    }
-                                                }
-                                            } //end record search loop
+                                    //         for(var j = 0; j < selectRecords.length; ++j)
+                                    //         {
+                                    //             //find select UID in multi-select values
+                                    //             for(var k = 0; k < _subsetUIDs.length; ++k)
+                                    //             {
+                                    //                 if(selectRecords[j] == _subsetUIDs[k])
+                                    //                 {
+                                    //                     Debug.log("Found pre-select record " + selectRecords[j]);
+                                    //                     MultiSelectBox.setSelectionElementByIndex(el,k,true /*selected*/);
+                                    //                     selectFirstRecord = false; //use record selection instead, and use as indication that a record was found in search
+                                    //                 }
+                                    //             }
+                                    //         } //end record search loop
                                             
-                                            if(selectFirstRecord) //error! no record found, but parameter had data
-                                            {
-                                                Debug.log("Error! Parameter '_selectedRecords' was not empty, " +
-                                                        "but no records matched selection criteria '" + _selectedRecords,
-                                                        Debug.HIGH_PRIORITY);
-                                                selectFirstRecord = false; //force false anyway, to show more errors
-                                            }
+                                    //         if(selectFirstRecord) //error! no record found, but parameter had data
+                                    //         {
+                                    //             Debug.log("Error! Parameter '_selectedRecords' was not empty, " +
+                                    //                     "but no records matched selection criteria '" + _selectedRecords,
+                                    //                     Debug.HIGH_PRIORITY);
+                                    //             selectFirstRecord = false; //force false anyway, to show more errors
+                                    //         }
                                             
-                                        } //end record pre-select handling
-                                        else if(currentSelectedRecordsCount == 1) //leave and load currect selection
-                                            selectFirstRecord = false;
-                                        else if(currentSelectedRecordsCount > 1) //leave current selections
-                                        {
-                                            selectFirstRecord = false;
-                                            loadSelectedRecord = false;
-                                        }
+                                    //     } //end record pre-select handling
+                                    //     else if(currentSelectedRecordsCount == 1) //leave and load currect selection
+                                    //         selectFirstRecord = false;
+                                    //     else if(currentSelectedRecordsCount > 1) //leave current selections
+                                    //     {
+                                    //         selectFirstRecord = false;
+                                    //         loadSelectedRecord = false;
+                                    //     }
 
-                                        MultiSelectBox.initMySelectBoxes(); //update display of all multi-select boxes
+                                    //     MultiSelectBox.initMySelectBoxes(); //update display of all multi-select boxes
                                     
-                                        Debug.log("selectFirstRecord,loadSelectedRecord = " + 
-                                                selectFirstRecord + "," + loadSelectedRecord);
+                                    //     Debug.log("selectFirstRecord,loadSelectedRecord = " + 
+                                    //             selectFirstRecord + "," + loadSelectedRecord);
                                         
-                                        runFilter(selectFirstRecord, loadSelectedRecord);
-                                    } //end localApplyFilterPreSelections
+                                    //     runFilter(selectFirstRecord, loadSelectedRecord);
+                                    // } //end localApplyFilterPreSelections
 						
                                 }, //end getUniqueFieldValuesForRecords handler
                                 _modifiedTables);
 				
 					});
-			
+			console.warn("end initSubsetGlobalData()");
 		}	//end initSubsetGlobalData()
 		
 		//=====================================================================================
@@ -897,27 +886,17 @@
 			el.setAttribute("id", "topPane-header");
 			str = "Targeting ";
 			
-			if(_recordPreFilterList != "")
-				str += "<b>" + _recordsAlias + "</b> ";
-			else
-				str += "all <b>" + _recordsAlias + "</b> ";
+			// if(_recordPreFilterList != "")
+			// 	str += "<b>" + _recordsAlias + "</b> ";
+			// else
+			str += "<b>" + _recordsAlias + "</b> ";
 		
-			str += "at path '/" + _subsetBasePath + ",' ";
+			str += "at path '/" + _subsetBasePath + "'. ";
 			
-			if(_recordPreFilterList != "")
-				str += "matching '" + _recordPreFilterList + ",' ";
-			else
-				str += "";
-			
-			if(_groupingFieldList != "")
-				str += "filtered by '" + _groupingFieldList + "' ";
-			else
-				str += "";
-			
-			if(_selectedGroupFieldValues != "")
-				str += "and filter pre-selections '" + _selectedGroupFieldValues + "' ";
-			if(_selectedGroupIDs != "")
-				str += "and GroupID pre-selections '" + _selectedGroupIDs + "' ";
+			// if(_selectedGroupFieldValues != "")
+			// 	str += "and filter pre-selections '" + _selectedGroupFieldValues + "' ";
+			// if(_selectedGroupIDs != "")
+			// 	str += "and GroupID pre-selections '" + _selectedGroupIDs + "' ";
 
 			
 			el.innerHTML = str;
@@ -926,6 +905,13 @@
 			document.body.appendChild(_topPane);			
 		}	//end createTopPaneContent()
 		
+		//=====================================================================================
+		//createMainPaneContent ~~
+		function createMainPaneContent()
+		{
+			_mainPane = document.createElement("div");
+			
+		}
 		//=====================================================================================
 		//createLeftPaneContent ~~
 		function createLeftPaneContent(leftW) 
@@ -991,7 +977,7 @@
 				filterBoxesEl.style.display = defaultShowFilters?"block":"none";
 
 				var H = 150;
-				try //catch errors due to undefined _filterValsObj[i]
+				try //catch errors due to undefined _valsObj[i]
 				{					
 					for(var i=0;i<groups.length;++i)
 					{	
@@ -1012,7 +998,7 @@
 						var noMultiSelect = false; // true or false (false for multiselect functionality) 
 						var maintainPreviousSelections = false; //true or false (true means redraw select box using the js array selects left over from the last time this box was drawn using the same element id)
 	
-						var vals = _filterValsObj[i].fieldUniqueValueArray;//["One little piggy","two little piggies","three little piggies"];
+						var vals = _valsObj[i].fieldUniqueValueArray;//["One little piggy","two little piggies","three little piggies"];
 						var keys = [];
 						var types = [];
 						for(var j=0;j<vals.length;++j)
@@ -1036,7 +1022,7 @@
 				}
 				catch(err)
 				{
-					//likely this error is due to undefined _filterValsObj[i]
+					//likely this error is due to undefined _valsObj[i]
 					Debug.log("Error creating group filters.", Debug.HIGH_PRIORITY);
 				} 
 				
@@ -1087,8 +1073,8 @@
 			//	then change filter
 			if(el.id.indexOf("selbox-Filter") == 0)
 			{
-				window.clearTimeout(_filterTimer);
-				_filterTimer = window.setTimeout(runFilter,1000);
+				// window.clearTimeout(_filterTimer);
+				// _filterTimer = window.setTimeout(runFilter,1000);
 			}
 			
 		}	//end groupFilterSelectionHandler(el)
@@ -1117,12 +1103,12 @@
 					MultiSelectBox.dbg("filter " + i + 
 							" selected [" + s + "]: ",
 							selArr[s], 
-							_filterValsObj[i].fieldUniqueValueArray[s|0]);
+							_valsObj[i].fieldUniqueValueArray[s|0]);
 					
 					//if selected, add value to filter string
 					if(selArr[s])
 						subFilterStr += (subFilterStr.length?",":"") +
-							encodeURIComponent(_filterValsObj[i].fieldUniqueValueArray[s|0])
+							encodeURIComponent(_valsObj[i].fieldUniqueValueArray[s|0])
 				}
 				
 				//if any values selected then add to filter string				
@@ -1132,7 +1118,7 @@
 			}
 			
 			//append global filters 
-			filterStr += _recordPreFilterList;
+			// filterStr += _recordPreFilterList;
 			Debug.log("filterStr " + filterStr);
 			
 			ConfigurationAPI.getSubsetRecords(
@@ -1633,7 +1619,7 @@
 								Debug.INFO_PRIORITY);
 
 						_modifiedTables = undefined; //clear after save
-						_selectedRecords = ""; //clear after save
+						// _selectedRecords = ""; //clear after save
 
 						runFilter(); //updates records and fields, and applies filter
 
@@ -1766,7 +1752,7 @@
 							Debug.INFO_PRIORITY);
 
 					_modifiedTables = undefined; //clear after save
-					_selectedRecords = newRowUID; //select new record after init
+					// _selectedRecords = newRowUID; //select new record after init
 					
 					//runFilter(); //updates records and fields, and applies filter
 					initSubsetGlobalData();
@@ -1867,7 +1853,7 @@
 							Debug.INFO_PRIORITY);
 
 					_modifiedTables = undefined; //clear after save
-					_selectedRecords = ""; //clear after save
+					// _selectedRecords = ""; //clear after save
 
 					//runFilter(); //updates records and fields, and applies filter
 					initSubsetGlobalData();
@@ -1977,7 +1963,7 @@
 		} //end copyRecords()
 		
 		
-		</script> -->
+		</script> 
 </head>
 	
 

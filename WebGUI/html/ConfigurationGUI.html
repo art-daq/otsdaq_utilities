@@ -4235,8 +4235,6 @@
 			var newwindowJS = "";
 			var newtabJS = "";
 
-			console.warn("tableLinkName", tableLinkName)
-
 			var DEFAULT_treeNavContextMenuItems = [
 				"Go-to Table View",
 				"See Table Tooltip",
@@ -4456,22 +4454,22 @@
 							"&recordAlias=" + recordAlias +
 							"&editableFieldList=" + "!*CommentDescription";
 
-						if(isLink) //include special parameters to focus on link targets
-						{
-							if(isGroupLink)
-							{
-								//for group link, pre-select GroupID value							
-								newWindowStr += "&selectedGroupIDs=" +
-										encodeURIComponent(
-												childLinkIndex + "=" +
-												linkId);
-							}
-							else
-							{
-								//for unique link, presect UID record							
-								newWindowStr += "&selectedRecords=" + linkId;							
-							}
-						} //end special link parameter handling
+						// if(isLink) //include special parameters to focus on link targets
+						// {
+						// 	if(isGroupLink)
+						// 	{
+						// 		//for group link, pre-select GroupID value							
+						// 		newWindowStr += "&selectedGroupIDs=" +
+						// 				encodeURIComponent(
+						// 						childLinkIndex + "=" +
+						// 						linkId);
+						// 	}
+						// 	else
+						// 	{
+						// 		//for unique link, presect UID record							
+						// 		newWindowStr += "&selectedRecords=" + linkId;							
+						// 	}
+						// } //end special link parameter handling
 
 						newwindowJS = "DesktopContent.openNewWindow(" +
 							"\"" + treeMemberNames_[j] +
