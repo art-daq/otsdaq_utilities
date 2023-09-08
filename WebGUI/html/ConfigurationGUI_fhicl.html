@@ -32,26 +32,16 @@
 			overflow-y: auto;
 			overflow-x: hidden;
 		}
-		#leftPane {
+
+		#midPane {
 			/*background-color : rgb(241, 231, 231);*/
 			overflow-x: auto;
 			overflow-y: auto;
-			
+			margin-top: 40px;
 		    border-top: 1px solid rgb(224, 196, 196);
+			width: 100%;
 						
 		}
-		#rightPane {
-			background-color : rgb(241, 231, 231);
-			overflow: auto;
-
-			box-shadow: 		inset rgba(255,254,255,0.6) 0 0.3em .3em,
-					inset rgba(0,0,0,0.15) 0 -0.1em .3em, /* inner shadow */
-					rgba(200, 200, 200,0.6) 0 .1em 3px,
-					rgba(200, 200, 200,0.6) 0 .1em 1px,  /* color border */
-					rgba(0,0,0,0.2) 0 .5em 5px;	/* drop shadow */
-			border-radius: 3px;	
-		}
-		
 
     	/* for mouse over highlighting */
 		.myOption:hover 
@@ -148,6 +138,50 @@
 		}
 		#preloadImage-treeEditTrashIconHover {
 			background-image: 	url(/WebPath/images/windowContentImages/ConfigurationGUI-trashCanHover.png);
+		}
+
+		.formHeader * {
+			line-height: 40px;
+		}
+
+		.formHeader .label {
+			float: left;
+			font-size: 18px;
+			font-weight: bold;
+
+		}
+
+		/* expand button */
+		.expand {
+			background-image: 	url(/WebPath/images/windowContentImages/SlowControlsDashboardFileTree-toggle-small-expand.png);
+			background-size: contain;
+			width: 				48px;
+			height: 			40px;
+			float: right;
+		}
+
+		.expand:hover {
+			cursor: pointer;
+			opacity: 0.8;
+		}
+
+		/* collapse button */
+		.collapse {
+			background-image: 	url(/WebPath/images/windowContentImages/SlowControlsDashboardFileTree-toggle-small.png);
+			background-size: contain;
+			width: 				48px;
+			height: 			40px;
+			float: right;
+			display: none;
+		}
+
+		.collapse:hover {
+			cursor: pointer;
+			opacity: 0.8;
+		}
+
+		hr {
+			width: 100%;
 		}
 		
 	</style>
@@ -297,8 +331,7 @@
 			//extract get parameters
 			if(!extractGETParameters())
 			{
-				Debug.log("Illegal GET parameters. Aborting.",
-						Debug.HIGH_PRIORITY);
+				Debug.log("Illegal GET parameters. Aborting.", Debug.HIGH_PRIORITY);
 				return;
 			}
 
@@ -306,7 +339,8 @@
 			var windowTooltip = "Welcome to the Configuration-FHiCL GUI targeting " + _recordsAlias +
 				". Here you can manipulate the fields of a FHiCL file. \n\n" +
 				"The organization of the Configuration-FHiCL GUI is in the form where you can directly edit the fields.\n\n";
-			DesktopContent.tooltip("Configuration-Subset GUI Introduction", windowTooltip);
+
+			DesktopContent.tooltip("Configuration-FHiCL GUI Introduction", windowTooltip);
 			DesktopContent.setWindowTooltip(windowTooltip);
 
 			// get subset record uids and 
@@ -319,202 +353,159 @@
 		//paint ~~
 		//	positiong left and right panes based on window size
 		function paint() 
-		{	
-			var w = DesktopContent.getWindowWidth();
-			var h = DesktopContent.getWindowHeight();
-			//Debug.log("paint w,h=" + w + "," +h);
-
-            // set the window minimum sizes if needed
-			var MIN_H = 280;
-			var MIN_W = 580;
-			if(w < MIN_W)
-				w = MIN_W;
-			if(h < MIN_H)
-				h = MIN_H;
-			
-			Debug.log("paint w,h=" + w + "," +h);
-
-			var TOP_H = 56;
-			var LEFT_W = 400;
-			var BORDER_SZ = 0;			
-			var MARGIN = 5;
-			
+		{				
 			if(!_mainPane && !_topPane)
 			{
 				//first time create elements
 				createTopPaneContent();
-				// createLeftPaneContent(LEFT_W-2*BORDER_SZ);
-				// createRightPaneContent();
-				
+				createMainPaneContent();				
 				updateRecordsAndFields();
-			}
-
-			// TODO: check the sizes with the new layout
-			// var y = MARGIN;
-			// var x = MARGIN;
-			// w -= 2*MARGIN;
-			// h -= 2*MARGIN;
-			
-			// _topPane.style.left = x + "px";
-			// _topPane.style.top = y + "px";
-			// _topPane.style.width = (w - 2*BORDER_SZ) + "px";
-			// _topPane.style.height = (TOP_H - 2*BORDER_SZ) + "px";
-			
-			// y += TOP_H + MARGIN;
-			// h -= TOP_H + MARGIN;
-
-			// //set left pane sizes
-			// if(!_leftPaneHidden)
-			// {
-			// 	_leftPane.style.left = MARGIN + "px";
-			// 	_leftPane.style.top = y + "px";
-			// 	_leftPane.style.width = (LEFT_W-2*BORDER_SZ) + "px";
-			// 	_leftPane.style.height = (h - 2*BORDER_SZ) + "px";
-	
-			// 	x += LEFT_W + MARGIN;
-			// 	w -= LEFT_W + MARGIN;
-			// }
-
-			// //set right pane sizes
-			// h -= 2*BORDER_SZ + MARGIN;
-			// w -= 2*BORDER_SZ;
-			// _rightPane.style.left = x + "px";
-			// _rightPane.style.top = y + "px";
-			// _rightPane.style.width = w + "px";
-			// _rightPane.style.height = h + "px";
-
-			// //_rightPaneFields.style.width = (w - 2*BORDER_SZ - 2*MARGIN) + "px";
-			// _rightPaneFields.style.height = (h - 20 - //for left pane hide
-			// 		(_RIGHT_PANE_RW_BTN_HEIGHT*2) - //for top/bottom read/write buttons
-			// 		2*BORDER_SZ - 2*MARGIN) + "px";
-						
+			}						
 		}	//end paint()
 
 		//=====================================================================================
 		//updateRecordsAndFields ~~
 		//	update records selector display
 		//		based on _subsetUIDs
-		function updateRecordsAndFields(selectFirstRecord,loadSelectedRecord) 
+		function updateRecordsAndFields() 
 		{
-			var el = document.getElementById("recordMultiSelect");
-			if(!el) {Debug.log("Error: updateRecordsSelector null"); return; } 
+			var el = document.getElementById("mainForm");
+			if(!el) 
+			{
+				Debug.log("Error: updateRecordsSelector null"); 
+				return; 
+			} 
 			
-			var str;
 			
-			var noMultiSelect = false; // true or false (false for multiselect functionality) 
-			var maintainPreviousSelections = true; //true or false (true means redraw select box using the js array selects left over from the last time this box was drawn using the same element id)
-
-			var vals = _subsetUIDs;//["One little piggy","two little piggies","three little piggies"];
+			var vals = _subsetUIDs;
 			var keys = [];
 			var types = [];
 			for(var  j = 0; j < vals.length; ++j)
 			{
 				keys.push(j);
 				types.push("record");								
-			}				
-
-			str = "";
-
-			str += "<div id='recordsNameDiv'>";
-			str += _recordsAlias + ":";
-			str += "</div>";
-
-			//add record
-			str += "<div id='recordAddDiv'>";
-			str += "<a class='recordAdd' onclick='addRecord(); return false;' " +
-					"title='Create a new " + _recordsAlias + " record.'" +
-					">";
-			str += "+";
-			str += "</a>";
-			str += "</div>";
-			
-			//add copy boxes icon
-			str += "<div id='copyRecordsDiv' " +
-					" title='Copy one or more selected " + _recordsAlias + " records.'" +
-					" onclick='copyRecords(); return false;' " +
-					"><div id='copyRecordsSubdiv1'></div>" +
-					"<div id='copyRecordsSubdiv2'></div></div>";
-			
-			//add edit pencil icon
-			str += "<div id='editRecordNameDiv' class='editableFieldNode-Value-editIcon' " +
-					" title='Edit the name of the selected " + _recordsAlias + " record.'" +
-					" onclick='renameRecord(); return false;' " +
-					"></div>";
-			
-			//delete record
-			str += "<div id='recordDeleteDiv' class='treeNode-deleteIcon' ";
-			str += "onclick='deleteRecords(); return false;' " +
-					"title='Delete the selected one or more " + _recordsAlias + " records.'" +					
-					">";
-			str += "</div>";
-			
-			
-			
-
-			//write MultiSelectBox to a particular div
-			MultiSelectBox.createSelectBox(
-					el,
-					"RecordsGroupBox",
-					str,
-					vals,keys,types,groupFilterSelectionHandler,noMultiSelect,
-					0 /* mouseOverHandler */,
-					0 /* iconURLs */,
-					0 /* mouseDownHandler */,
-					0 /* mouseUpHandler */,
-					true /* requireCtrlMultiClick */);
-
-				
-			MultiSelectBox.initMySelectBoxes(!maintainPreviousSelections);
-
-			if(selectFirstRecord && vals.length)
-			{ //do after first init, otherwise does not seem to work
-				Debug.log("Selecting first record...");
-				MultiSelectBox.setSelectionElementByIndex(el,0,true);
-				MultiSelectBox.initMySelectBoxes(); //update display
 			}
-			else if(loadSelectedRecord) //apply selectRecords
+			
+			var str = "";
+			el.innerHTML = "";
+			for (const val of vals) 
 			{
-				var selectRecords = _selectedRecords.split(',');
-				Debug.log("selectRecords length " + selectRecords.length);
-				var selArr = MultiSelectBox.getSelectionArray(el);
-				if(selectRecords.length && selectRecords[0].length)
-				{
-					for(var j=0;j<selectRecords.length;++j)
-					{
-						//find select UID in multi-select values
+				var header = document.createElement("div");
+				header.setAttribute("class", "formHeader");
+				header.setAttribute("id", "recordsNameDiv-" + val);
 
-						for(var k=0;k<selArr.length;++k)
-						{
-							if(selectRecords[j] ==
-									MultiSelectBox.getSelectionElementByIndex(el,k).innerText)
-							{
-								Debug.log("Found pre-select record " + 
-										selectRecords[j]);
-								MultiSelectBox.setSelectionElementByIndex(el,k,true /*selected*/);								
-							}
-						}
-					} //end record search loop
-				}
-				
-				MultiSelectBox.initMySelectBoxes(); //update display of all multi-select boxes
-									
+				// label
+				var label = document.createElement("span");
+				label.setAttribute("class", "label");
+				label.textContent = val;
+				header.appendChild(label);
+
+				// expand button
+				var expand = document.createElement("span");
+				expand.setAttribute("class", "expand");
+				expand.onclick = () => handleExpand(val);
+				header.appendChild(expand);
+				// collapse button
+				var collapse = document.createElement("span");
+				collapse.setAttribute("class", "collapse");
+				collapse.onclick = () => handleCollapse(val);
+				header.appendChild(collapse);
+
+				// separator
+				header.appendChild(document.createElement("hr"));
+				el.appendChild(header);
 			}
+
+
+			// //write MultiSelectBox to a particular div
+			// MultiSelectBox.createSelectBox(
+			// 		el,
+			// 		"RecordsGroupBox",
+			// 		str,
+			// 		vals,keys,types,groupFilterSelectionHandler,noMultiSelect,
+			// 		0 /* mouseOverHandler */,
+			// 		0 /* iconURLs */,
+			// 		0 /* mouseDownHandler */,
+			// 		0 /* mouseUpHandler */,
+			// 		true /* requireCtrlMultiClick */);
+
+				
+			// MultiSelectBox.initMySelectBoxes(!maintainPreviousSelections);
+
+			// if(selectFirstRecord && vals.length)
+			// { //do after first init, otherwise does not seem to work
+			// 	Debug.log("Selecting first record...");
+			// 	MultiSelectBox.setSelectionElementByIndex(el,0,true);
+			// 	MultiSelectBox.initMySelectBoxes(); //update display
+			// }
+			// else if(loadSelectedRecord) //apply selectRecords
+			// {
+			// 	var selectRecords = _selectedRecords.split(',');
+			// 	Debug.log("selectRecords length " + selectRecords.length);
+			// 	var selArr = MultiSelectBox.getSelectionArray(el);
+			// 	if(selectRecords.length && selectRecords[0].length)
+			// 	{
+			// 		for(var j=0;j<selectRecords.length;++j)
+			// 		{
+			// 			//find select UID in multi-select values
+
+			// 			for(var k=0;k<selArr.length;++k)
+			// 			{
+			// 				if(selectRecords[j] ==
+			// 						MultiSelectBox.getSelectionElementByIndex(el,k).innerText)
+			// 				{
+			// 					Debug.log("Found pre-select record " + 
+			// 							selectRecords[j]);
+			// 					MultiSelectBox.setSelectionElementByIndex(el,k,true /*selected*/);								
+			// 				}
+			// 			}
+			// 		} //end record search loop
+			// 	}
+				
+			// 	MultiSelectBox.initMySelectBoxes(); //update display of all multi-select boxes
+									
+			// }
 			
 			//get grouping field values
 			//	for record list
-			_rightPaneFields.innerHTML = ""; //clear any existing fields
+			// _rightPaneFields.innerHTML = ""; //clear any existing fields
 			
-			if(!vals.length)
-			{
-				Debug.log("No records match filters, so not proceeding with field lookup.");
-				return;
+			// if(!vals.length)
+			// {
+			// 	Debug.log("No records match filters, so not proceeding with field lookup.");
+			// 	return;
+			// }
+			
+			
+
+		} //end updateRecordsAndFields()
+
+		//=====================================================================================
+		//hendleExpand ~~
+		function handleExpand(target) {
+			// get the target DOM object
+			var el = document.getElementById("recordsNameDiv-" + target);
+			// change the buttons
+			for (child of el.children){
+				if (child.className === "expand") {
+					child.style.display = "none";
+				} else if (child.className === "collapse") {
+					child.style.display = "block";
+				}
 			}
-			
-			ConfigurationAPI.getFieldsOfRecords(
+			// TODO: show the rlative form
+			var form = document.getElementById("form-" + target);
+			if (!form)	// we have to load it
+			{
+				form = document.createElement("div");
+				form.setAttribute("id", "form-" + target);
+				form.setAttribute("class", "field-form");
+
+				ConfigurationAPI.getFieldsOfRecords(
 					_subsetBasePath,
-					_subsetUIDs,
-					// _editableFieldList,
-					-1 /*maxDepth*/,
+					target,
+					_editableFieldList,
+					1 /*maxDepth*/,
 					function(recordFields)
 					{				
                         _fields = recordFields;
@@ -528,51 +519,42 @@
                                     Debug.HIGH_PRIORITY);
                             return;
                         }
-
-                        //		on success, the array will be an array of Field objects	
-                        //		Field := {}
-                        //			obj.fieldTableName 
-                        //			obj.fieldUID 
-                        //			obj.fieldColumnName
-                        //			obj.fieldRelativePath 
-                        //			obj.fieldColumnType
-                        //			obj.fieldColumnDataType
-                        //			obj.fieldColumnDataChoicesArr[]
-                        //			obj.fieldColumnDefaultValue
-
-                        //for each record,
-                        //	make an element that is "editable" and "selectable" (_selectedFieldIndex)
-                        //		- when clicked becomes selected element
-                        //	 	- when pencil is clicked is edit mode
-                        //		- tab should move from edit field to edit field
-                        for(var i=0;i<recordFields.length;++i)
-                        {
-                            //create field
-                            el = document.createElement("div");
-                            el.setAttribute("id", "cfg_subset_field-" + i);
-                            el.setAttribute("style", "white-space:nowrap;" +
-                                    "margin: 5px;");
-                            _rightPaneFields.appendChild(el); //add field to field container
-                                                
-                            el.appendChild(ConfigurationAPI.createEditableFieldElement(
-                                    recordFields[i],i));
-                            
-                            //add clear div
-                            el = document.createElement("div");
-                            el.setAttribute("id", "clearDiv");
-                            _rightPaneFields.appendChild(el);
-                        }
-
-                        if(loadSelectedRecord)
-                        { //do after first init, otherwise does not seem to work
-                            Debug.log("Loading selected record...");
-                            btnActionReadAllFields();
-                        }
-
 					}, //end getFieldsOfRecords handler
 					 _modifiedTables);
-		} //end updateRecordsAndFields()
-		
+				// // load the fields od the form
+				// ConfigurationAPI.getFieldValuesForRecords(
+				// 	_subsetBasePath,
+				// 	[target],
+				// 	_fields,
+				// 	function(fieldValues) {
+				// 		console.log(fieldValues);
+				// 	},
+				// 	_modifiedTables
+				// );
+			}
+
+			// show the hidden form
+			form.style.display = "block";
+		}
+
+		//=====================================================================================
+		//hendleCollapse ~~
+		function handleCollapse(target) {
+			// get the target DOM object
+			var el = document.getElementById("recordsNameDiv-" + target);
+			// change the buttons
+			for (child of el.children){
+				if (child.className === "expand") {
+					child.style.display = "block";
+				} else if (child.className === "collapse") {
+					child.style.display = "None";
+				}
+			}
+			// hide the view of the form
+			var form = document.getElementById("form-" + target);
+			form.style.display = "none";
+			
+		}
 		//=====================================================================================
 		//extractGETParameters ~~
 		//	return false, if illegal params
@@ -910,343 +892,83 @@
 		function createMainPaneContent()
 		{
 			_mainPane = document.createElement("div");
+			_mainPane.setAttribute("class", "pane");
+			_mainPane.setAttribute("id", "midPane");
 			
+			var el = document.createElement("div");
+			el.setAttribute("id", "mainForm");
+			// el.setAttribute("style", //"height:200px; width:250px;" +
+			// 		//);
+			// 		//"margin-bottom: 0px;" +
+			// 		"margin: -15px 0 -10px 0;" +
+			// 		"height:" + H + "px;" + 
+			// 		"width:" + (leftW-25) + "px;");
+
+			_mainPane.appendChild(el);
+
+			el = document.createElement("div");
+			el.setAttribute("id", "clearDiv");
+			_mainPane.appendChild(el);
+
+			document.body.appendChild(_mainPane);
 		}
-		//=====================================================================================
-		//createLeftPaneContent ~~
-		function createLeftPaneContent(leftW) 
-		{
-			_leftPane = document.createElement("div");
-			_leftPane.setAttribute("class", "pane");
-			_leftPane.setAttribute("id", "leftPane");
-			
-			//	- Left Pane:
-			//		* Fixed width, vertical auto scroll, hideable.
-			//		* Filter link that toggles display of multi-select boxes for each <subLevelGrouping>. 
-			//		* Filtering:
-			//		 	- AND/OR option if multiple sublevels
-			//			- multi-select for each <subLevelGrouping>
-			//		* Link to toggle record representation (Multi-select or Square Grid groupings)
-			//		* Record UID Selector:
-			//			- Multi-select box for selection of UID (based on sublevelgrouping filters)
-			//		* Alternatively can represent the detectors as squares (with mouse over UID names)
-			//			- Squares will be grouped by SubLevel using AND logic with a sublevel-label
-			
-			var el;
-			var str;
-						
-						
-						
-			//:::::::::::::::::::::::::::::
-			//localCreateGroupingFieldFilters ~~
-			function localCreateGroupingFieldFilters()
-			{
-				var groups = _groupingFieldList.split(',');
-				Debug.log("_groupingFieldList " + _groupingFieldList);
-				Debug.log("localCreateGroupingFieldFilters groups.length " + groups.length);
-				
-				var filterBoxesEl = document.createElement("div");
-				var defaultShowFilters = false;
-				
-				//create toggle icon
-				el = document.createElement("a");
-				el.setAttribute("style", "float:left;");
-				el.onclick = function() {
-					if(this.textContent == "Show Filters")
-					{
-						this.innerHTML = "Hide Filters";
-						filterBoxesEl.style.display = "block";
-					}
-					else
-					{
-						this.innerHTML = "Show Filters";
-						filterBoxesEl.style.display = "none";
-					}
-				};			
-				el.innerHTML = defaultShowFilters?"Hide Filters":"Show Filters";
-				_leftPane.appendChild(el); //add toggle icon
-
-				//clear floats
-				el = document.createElement("div");
-				el.setAttribute("id", "clearDiv");
-				_leftPane.appendChild(el);
-				
-				
-				//create multi-select filter boxes
-				filterBoxesEl.setAttribute("style", "float:left;position:relative;"); //background-color:red;
-				filterBoxesEl.style.display = defaultShowFilters?"block":"none";
-
-				var H = 150;
-				try //catch errors due to undefined _valsObj[i]
-				{					
-					for(var i=0;i<groups.length;++i)
-					{	
-						//get group values						
-						//create multiselect box
-	
-						el = document.createElement("div");
-						el.setAttribute("class", "groupFilterMultiSelect");
-						el.setAttribute("id", "groupFilterMultiSelect-" + i);
-						el.setAttribute("style", //"height:200px; width:250px;" +
-								//);
-										//"margin-bottom: 0px;" +
-								"margin: -15px 0 0 0;" +
-								"height:" + H + "px;" + 
-								"width:" + (leftW-25) + "px;");
-						filterBoxesEl.appendChild(el);			
-						
-						var noMultiSelect = false; // true or false (false for multiselect functionality) 
-						var maintainPreviousSelections = false; //true or false (true means redraw select box using the js array selects left over from the last time this box was drawn using the same element id)
-	
-						var vals = _valsObj[i].fieldUniqueValueArray;//["One little piggy","two little piggies","three little piggies"];
-						var keys = [];
-						var types = [];
-						for(var j=0;j<vals.length;++j)
-						{
-							keys.push(j);
-							types.push(groups[i]);								
-						}				
-	
-						//write MultiSelectBox to a particular div
-						MultiSelectBox.createSelectBox(el,
-								"FilterGroupBox" + i,
-								"'" + groups[i] + "' Filter:",
-								vals,keys,types,groupFilterSelectionHandler,noMultiSelect);
-	
-						MultiSelectBox.initMySelectBoxes();
-	
-						el = document.createElement("div");
-						el.setAttribute("id", "clearDiv");					
-						filterBoxesEl.appendChild(el);
-					}
-				}
-				catch(err)
-				{
-					//likely this error is due to undefined _valsObj[i]
-					Debug.log("Error creating group filters.", Debug.HIGH_PRIORITY);
-				} 
-				
-				_leftPane.appendChild(filterBoxesEl);
-
-								
-			} //end localCreateGroupingFieldFilters(leftW)
-			
-			//if grouping fields given then create
-			if(_groupingFieldList != "")
-				localCreateGroupingFieldFilters(); 
-			
-			
-			//add records
-			function localCreateRecordsSelector()
-			{
-				var H = 300;
-				//create multiselect box
-				el = document.createElement("div");
-				el.setAttribute("class", "recordMultiSelect");
-				el.setAttribute("id", "recordMultiSelect");
-				el.setAttribute("style", //"height:200px; width:250px;" +
-						//);
-						//"margin-bottom: 0px;" +
-						"margin: -15px 0 -10px 0;" +
-						"height:" + H + "px;" + 
-						"width:" + (leftW-25) + "px;");
-
-				_leftPane.appendChild(el);
-
-				el = document.createElement("div");
-				el.setAttribute("id", "clearDiv");
-				_leftPane.appendChild(el);
-				
-			} localCreateRecordsSelector ();
-						
-			document.body.appendChild(_leftPane);
-						
-		}	//end createLeftPaneContent()
-
-		//=====================================================================================
-		//groupFilterSelectionHandler ~~
-		function groupFilterSelectionHandler(el) 
-		{
-			Debug.log("multiselect for " + el.id);
-			
-			//if multi select target was a Filter
-			//	then change filter
-			if(el.id.indexOf("selbox-Filter") == 0)
-			{
-				// window.clearTimeout(_filterTimer);
-				// _filterTimer = window.setTimeout(runFilter,1000);
-			}
-			
-		}	//end groupFilterSelectionHandler(el)
 
 		//=====================================================================================
 		//runFilter ~~
-		function runFilter(selectFirstRecord,loadSelectedRecord) 
-		{
-			Debug.log("Run Filter");
+		// function runFilter(selectFirstRecord,loadSelectedRecord) 
+		// {
+		// 	Debug.log("Run Filter");
 			
-			var groups = _groupingFieldList.split(',');
-			Debug.log("groups length " + groups.length);
+		// 	var groups = _groupingFieldList.split(',');
+		// 	Debug.log("groups length " + groups.length);
 			
-			var selArr;
+		// 	var selArr;
 			
-			var filterStr = "";
-			var subFilterStr;
-			for(var i = 0; i < groups.length; ++i)
-			{
-				subFilterStr = "";
+		// 	var filterStr = "";
+		// 	var subFilterStr;
+		// 	for(var i = 0; i < groups.length; ++i)
+		// 	{
+		// 		subFilterStr = "";
 				
-				selArr = MultiSelectBox.getSelectionArray(
-						document.getElementById("groupFilterMultiSelect-" + i));
-				for(var s in selArr)
-				{
-					MultiSelectBox.dbg("filter " + i + 
-							" selected [" + s + "]: ",
-							selArr[s], 
-							_valsObj[i].fieldUniqueValueArray[s|0]);
+		// 		selArr = MultiSelectBox.getSelectionArray(
+		// 				document.getElementById("groupFilterMultiSelect-" + i));
+		// 		for(var s in selArr)
+		// 		{
+		// 			MultiSelectBox.dbg("filter " + i + 
+		// 					" selected [" + s + "]: ",
+		// 					selArr[s], 
+		// 					_valsObj[i].fieldUniqueValueArray[s|0]);
 					
-					//if selected, add value to filter string
-					if(selArr[s])
-						subFilterStr += (subFilterStr.length?",":"") +
-							encodeURIComponent(_valsObj[i].fieldUniqueValueArray[s|0])
-				}
+		// 			//if selected, add value to filter string
+		// 			if(selArr[s])
+		// 				subFilterStr += (subFilterStr.length?",":"") +
+		// 					encodeURIComponent(_valsObj[i].fieldUniqueValueArray[s|0])
+		// 		}
 				
-				//if any values selected then add to filter string				
-				if(subFilterStr.length)
-					filterStr += encodeURIComponent(groups[i]) + 
-						"=" + subFilterStr + ";";
-			}
+		// 		//if any values selected then add to filter string				
+		// 		if(subFilterStr.length)
+		// 			filterStr += encodeURIComponent(groups[i]) + 
+		// 				"=" + subFilterStr + ";";
+		// 	}
 			
-			//append global filters 
-			// filterStr += _recordPreFilterList;
-			Debug.log("filterStr " + filterStr);
+		// 	//append global filters 
+		// 	// filterStr += _recordPreFilterList;
+		// 	Debug.log("filterStr " + filterStr);
 			
-			ConfigurationAPI.getSubsetRecords(
-					_subsetBasePath,
-					filterStr,
-					function(records)
-					{
-                        _subsetUIDs = records;
-                        Debug.log("records found = " + records.length);
-                        console.log(records);
+		// 	ConfigurationAPI.getSubsetRecords(
+		// 			_subsetBasePath,
+		// 			filterStr,
+		// 			function(records)
+		// 			{
+        //                 _subsetUIDs = records;
+        //                 Debug.log("records found = " + records.length);
+        //                 console.log(records);
 				
-                        updateRecordsAndFields(selectFirstRecord,loadSelectedRecord);
-                    }, //end getSubsetRecords handler
-                    _modifiedTables);
-		} // end runFilter()
+        //                 updateRecordsAndFields(selectFirstRecord,loadSelectedRecord);
+        //             }, //end getSubsetRecords handler
+        //             _modifiedTables);
+		// } // end runFilter()
 		
-		//=====================================================================================
-		//createRightPaneContent ~~
-		function createRightPaneContent() 
-		{
-			_rightPane = document.createElement("div");
-			_rightPane.setAttribute("class", "pane");
-			_rightPane.setAttribute("id", "rightPane");
-			
-			//	- Right Pane:
-			//		* Show toggle Left Pane link
-			//		* Show fields that are common based on SubLevelGrouping filters
-			//			- E.g. if *,* then can only show SlowControls fields
-			//			- Challenge: show all common fields, even through links
-			//			- Allow editing the field (based on type) .. same as tree edit, but like already clicked
-			//			- A field becomes the "selected" field when clicked
-			//				= the selected field should survive resizing, and get reset on filtering
-			//			- A field enters edit mode when pencil is clicked
-			//			- TAB and SHIFT+TAB should jump to next field for editing
-			//		* Buttons at top and bottom: Read All, Write All, Read Selected, Write Selected.
-			//		
-			
-			var el;
-			var str;
-			
-			//create toggle left pane link
-			el = document.createElement("a");
-			el.setAttribute("style", "float:left;" +
-					"margin-left: 5px;");
-			el.onclick = function() {
-				_leftPaneHidden = !_leftPaneHidden;
-				this.innerHTML = (_leftPaneHidden?"Show":"Hide") +
-									" Left Pane";
-				paint();
-			};			
-			el.innerHTML = (_leftPaneHidden?"Show":"Hide") +
-					" Left Pane";
-			_rightPane.appendChild(el); //add toggle link
-			
-			//add clear div
-			el = document.createElement("div");
-			el.setAttribute("id", "clearDiv");
-			_rightPane.appendChild(el);
-
-
-			//create TOP read/write buttons			
-			el = document.createElement("div");
-			var readWriteContainerStyle = "height:" + _RIGHT_PANE_RW_BTN_HEIGHT + "px;" + 
-					"overflow-x:auto; " +
-					"white-space:nowrap;";
-			el.setAttribute("style", readWriteContainerStyle);
-			_rightPane.appendChild(el); //add field container link
-
-			//:::::::::::::::::::::::::::::
-			//localAddReadWriteButtons ~~
-			//	add four buttons to container element
-			function localAddReadWriteButtons(cel)
-			{
-				var btnText = ["Read All Fields",
-							   "Write All Fields",
-							   "Read Selected Field", 
-							   "Write Selected Field"];
-
-				var btnHelp = ["Read all fields for selected record in Left Pane.",
-							   "Write all fields for selected record(s) in Left Pane.",							   
-							   "Read selected field for selected record in Left Pane.",
-							   "Write Selected field for selected record(s) in Left Pane."];
-				
-				var btnAction = [btnActionReadAllFields,
-								 btnActionWriteAllFields,							   
-								 btnActionReadOneField,
-								 btnActionWriteOneField];
-				
-				for(var i=0;i<btnText.length;++i)
-				{
-					el = document.createElement("input");
-					el.setAttribute("style", "height:22px;" + 
-							"margin:5px; ");
-					el.setAttribute("type", "button");
-					el.value = btnText[i];
-					el.title = btnHelp[i];
-					el.onclick = btnAction[i];
-					cel.appendChild(el); //add field container link
-				}
-			} // end localAddReadWriteButtons(cel)
-			
-			localAddReadWriteButtons(el);
-			
-
-			//add clear div
-			el = document.createElement("div");
-			el.setAttribute("id", "clearDiv");
-			_rightPane.appendChild(el);
-			
-			//create field container with auto scroll
-			el = document.createElement("div");
-			el.setAttribute("style", "overflow:auto;" + 
-					"border: 1px solid rgb(224, 196, 196);" +
-					"margin: 5px;"
-					);
-			_rightPane.appendChild(el); //add field container link
-			_rightPaneFields = el;
-				
-			//create BOTTOM read/write buttons			
-			el = document.createElement("div");
-			el.setAttribute("style", readWriteContainerStyle);
-			_rightPane.appendChild(el); //add bottom buttons
-			localAddReadWriteButtons(el);
-			
-			
-			document.body.appendChild(_rightPane);			
-		}	//end createRightPaneContent()
-
 		//=====================================================================================
 		//getSelectedRecords ~~
 		//	returns index of selected records
@@ -1256,48 +978,48 @@
 		//	else if not forceOne
 		//		return array of selected records
 		//		else return empty array
-		function getSelectedRecords(forceOne) 
-		{
-			var selArr = 
-					MultiSelectBox.getSelectionArray(
-							document.getElementById("recordMultiSelect"));
-			var cntSelected = 0;
-			var selectedIndices = [];
-			for(var s in selArr)
-			{
-				//MultiSelectBox.dbg("record selected [" + s + "]: ",
-				//		selArr[s], 
-				//		_subsetUIDs[s|0]);
+		// function getSelectedRecords(forceOne) 
+		// {
+		// 	var selArr = 
+		// 			MultiSelectBox.getSelectionArray(
+		// 					document.getElementById("recordMultiSelect"));
+		// 	var cntSelected = 0;
+		// 	var selectedIndices = [];
+		// 	for(var s in selArr)
+		// 	{
+		// 		//MultiSelectBox.dbg("record selected [" + s + "]: ",
+		// 		//		selArr[s], 
+		// 		//		_subsetUIDs[s|0]);
 
-				if(selArr[s]) 
-				{
-					++cntSelected;
-					selectedIndices.push(s|0);
+		// 		if(selArr[s]) 
+		// 		{
+		// 			++cntSelected;
+		// 			selectedIndices.push(s|0);
 
-					if((s|0) < 0 || (s|0) >= _subsetUIDs.length)
-					{
-						Debug.log("Invalid record index '" + (s|0) + 
-								"' should be impossible. Please notify developers " +
-								"as to how you got here!", Debug.HIGH_PRIORITY);						
-						return forceOne?-1:[];
-					}
-				}
-			}
+		// 			if((s|0) < 0 || (s|0) >= _subsetUIDs.length)
+		// 			{
+		// 				Debug.log("Invalid record index '" + (s|0) + 
+		// 						"' should be impossible. Please notify developers " +
+		// 						"as to how you got here!", Debug.HIGH_PRIORITY);						
+		// 				return forceOne?-1:[];
+		// 			}
+		// 		}
+		// 	}
 
-			if(forceOne)
-			{
-				if(cntSelected != 1)
-				{
-					Debug.log("Error! Please choose one and only one target from the list of " +
-							_recordsAlias + " in the Left Pane.", Debug.HIGH_PRIORITY);						
-					return -1;
-				}
-				return selectedIndices[0];
-			}
-			else
-				return selectedIndices;
+		// 	if(forceOne)
+		// 	{
+		// 		if(cntSelected != 1)
+		// 		{
+		// 			Debug.log("Error! Please choose one and only one target from the list of " +
+		// 					_recordsAlias + " in the Left Pane.", Debug.HIGH_PRIORITY);						
+		// 			return -1;
+		// 		}
+		// 		return selectedIndices[0];
+		// 	}
+		// 	else
+		// 		return selectedIndices;
 			
-		}	//end getSelectedRecords()
+		// }	//end getSelectedRecords()
 
 		//=====================================================================================
 		//btnActionReadAllFields ~~
@@ -1315,16 +1037,16 @@
 					_fields,
 					function(recFieldValues)
 					{
-				console.log(recFieldValues);
-				
-				//for each field, set value
-				for(var i=0;i<recFieldValues.length;++i)
-				{
-					ConfigurationAPI.setEditableFieldValue(
-							_fields[i],
-							recFieldValues[i].fieldValue,
-							i);
-				}
+						console.log(recFieldValues);
+						
+						//for each field, set value
+						for(var i=0;i<recFieldValues.length;++i)
+						{
+							ConfigurationAPI.setEditableFieldValue(
+									_fields[i],
+									recFieldValues[i].fieldValue,
+									i);
+						}
 					}, //end getFieldValuesForRecord handler
 					 _modifiedTables);
 			
@@ -1358,17 +1080,17 @@
 					[_fields[selectedFieldIndex]], //array of size 1
 					function(recFieldValues)
 					{
-				console.log(recFieldValues);
+						console.log(recFieldValues);
 
-				//for each field, set value
-				//	SHOULD only be one field value returned
-				for(var i=0;i<recFieldValues.length;++i)
-				{
-					ConfigurationAPI.setEditableFieldValue(
-							_fields[selectedFieldIndex],
-							recFieldValues[i].fieldValue,
-							selectedFieldIndex);
-				}
+						//for each field, set value
+						//	SHOULD only be one field value returned
+						for(var i=0;i<recFieldValues.length;++i)
+						{
+							ConfigurationAPI.setEditableFieldValue(
+									_fields[selectedFieldIndex],
+									recFieldValues[i].fieldValue,
+									selectedFieldIndex);
+						}
 					}, //end getFieldValuesForRecord handler
 					 _modifiedTables);
 			

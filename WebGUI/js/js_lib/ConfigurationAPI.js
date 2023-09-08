@@ -721,8 +721,12 @@ ConfigurationAPI.getTreeLinkTable = function(link)
 //			obj.fieldColumnDefaultValue
 //			
 //
-ConfigurationAPI.getFieldsOfRecords = function(subsetBasePath,recordArr,fieldList,
-		maxDepth,responseHandler,modifiedTables)
+ConfigurationAPI.getFieldsOfRecords = function(subsetBasePath,
+											   recordArr,
+											   fieldList,
+											   maxDepth,
+											   responseHandler, 
+											   modifiedTables)
 {
 	var modifiedTablesListStr = "";
 	for(var i=0;modifiedTables && i<modifiedTables.length;++i)
