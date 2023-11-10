@@ -142,6 +142,9 @@ function updateUserData
 	echo -e "UpdateOTS.sh [${LINENO}]  \t cp $OTSDAQ_DIR/data-core/XDAQConfigurations/otsConfiguration_MacroMaker_CMake.xml $USER_DATA/XDAQConfigurations/"
 	cp $OTSDAQ_DIR/data-core/XDAQConfigurations/otsConfiguration_MacroMaker_CMake.xml $USER_DATA/XDAQConfigurations/
 
+	if ! [ -d $USER_DATA/MessageFacilityConfigurations ]; then
+		mkdir $USER_DATA/MessageFacilityConfigurations
+	fi
 	echo -e "UpdateOTS.sh [${LINENO}]  \t cp $OTSDAQ_DIR/data-core/MessageFacilityConfigurations/* $USER_DATA/MessageFacilityConfigurations/"
 	cp $OTSDAQ_DIR/data-core/MessageFacilityConfigurations/* $USER_DATA/MessageFacilityConfigurations/ # undo c++ style comment for Eclipse viewing*/
 		
@@ -175,64 +178,6 @@ SCRIPT_DIR="$(
 
 # get function from a single place (also used by UpdateOTS.sh, for example)
 source "${SCRIPT_DIR}"/displayVersionsAndQualifiers.sh
-
-# #############################
-# #############################
-# # function to display otsdaq versions and qualifiers
-# function displayVersionsAndQualifiers 
-# {	
-# 	echo
-# 	echo
-# 	echo -e "UpdateOTS.sh [${LINENO}]  \t Note: Here are your localProducts directories..."
-# 	echo
-# 	ls ${MRB_SOURCE}/../ | grep localProducts
-# 	echo
-# 	echo
-
-# 	echo -e "UpdateOTS.sh [${LINENO}]  \t Note: below are the available otsdaq releases..."
-# 	echo -e "UpdateOTS.sh [${LINENO}]  \t ----------------------------"
-# 	#-s for silent, sed to remove closing </a>
-# 	#curl -s https://scisoft.fnal.gov/scisoft/bundles/otsdaq/ | grep \<\/a\> | grep _ | grep v  | grep --invert-match href | sed -e 's/<.*//'
-# 	curl -s https://scisoft.fnal.gov/scisoft/bundles/otsdaq/ | grep \<\/a\> | grep _ | grep \>v | sed -e 's/<.*\">/\t\t\t\t\t\t\t/' | sed -e 's/<\/td><\/tr>.*//' | sed -e 's/<.*>/    /'
-# 	echo -e "UpdateOTS.sh [${LINENO}]  \t ----------------------------"
-# 	echo -e "UpdateOTS.sh [${LINENO}]  \t Note: above are the available otsdaq releases..."
-# 	echo
-
-# 	#ALL_RELEASES=( $(curl -s https://scisoft.fnal.gov/scisoft/bundles/otsdaq/ | grep \<\/a\> | grep _ | grep v  | grep --invert-match href | sed -e 's/<.*//') )
-# 	ALL_RELEASES=( $(curl -s https://scisoft.fnal.gov/scisoft/bundles/otsdaq/ | grep \<\/a\> | grep _ | grep \>v  | sed -e 's/<\/a.*//' | sed -e 's/.*v/v/') )
-# 	#the above should be a clean array of v##_##_##, as of April 2021, the latest release is now first (instead of last)
-# 	#LATEST_RELEASE=${ALL_RELEASES[${#ALL_RELEASES[@]}-1]}
-# 	LATEST_RELEASE=${ALL_RELEASES[0]}
-# 	echo -e "UpdateOTS.sh [${LINENO}]  \t The latest otsdaq release is $LATEST_RELEASE"	
-
-# 	echo
-# 	echo -e "UpdateOTS.sh [${LINENO}]  \t Note: below are the available qualifiers for $LATEST_RELEASE.."
-# 	echo -e "UpdateOTS.sh [${LINENO}]  \t ----------------------------"
-# 	#-s for silent, sed to remove closing </a>
-# 	curl -s https://scisoft.fnal.gov/scisoft/bundles/otsdaq/$LATEST_RELEASE/manifest/ | grep \<\/a\> | grep MANIFEST | sed -e 's/-d.*//' |  sed -e 's/-p.*//' |  sed -e 's/.*-s/                                                        s/' | sed -e 's/-/:/'
-# 	echo -e "UpdateOTS.sh [${LINENO}]  \t ----------------------------"
-# 	echo -e "UpdateOTS.sh [${LINENO}]  \t Note: above are the available qualifiers for $LATEST_RELEASE.."
-# 	echo
-# 	ALL_QUALS=( $(curl -s https://scisoft.fnal.gov/scisoft/bundles/otsdaq/$LATEST_RELEASE/manifest/ | grep \<\/a\> | grep MANIFEST | sed -e 's/-d.*//' |  sed -e 's/-p.*//' |  sed -e 's/.*-s/ s/' | sed -e 's/-/:/') )
-# 	LATEST_QUAL=${ALL_QUALS[${#ALL_QUALS[@]}-1]}
-# 	echo
-# 	echo -e "UpdateOTS.sh [${LINENO}]  \t To explore the available qualifiers go here in your browser:"
-# 	echo
-# 	echo -e "\t\t\t\t https://scisoft.fnal.gov/scisoft/bundles/otsdaq"
-# 	echo
-# 	echo -e "UpdateOTS.sh [${LINENO}]  \t ... then click the version, and manifest folder to view qualifiers."
-# 	echo
-# 	echo -e "UpdateOTS.sh [${LINENO}]  \t To switch qualifiers, do the following: \n\n\t\t\t\t mrb newDev -f -v $LATEST_RELEASE -q $LATEST_QUAL:prof"
-# 	echo
-# 	echo -e "UpdateOTS.sh [${LINENO}]  \t ...and replace '$LATEST_RELEASE' with your target version. and '$LATEST_QUAL:prof' with your qualifiers"
-# 	echo -e "UpdateOTS.sh [${LINENO}]  \t ...a new localProducts directory will be created, which you should use when you setup ots."
-# 	echo -e "UpdateOTS.sh [${LINENO}]  \t Note: Here are your localProducts directories..."
-# 	echo
-# 	ls ${MRB_SOURCE}/../ | grep localProducts
-# 	echo
-# 	echo
-	
-# } #end displayVersionsAndQualifiers
 
 
 #clear git comment to avoid push
@@ -429,16 +374,11 @@ if [[ "x$GIT_COMMENT" == "x" && $FETCH_ONLY = 0 ]]; then
 	rm $MRB_SOURCE/../reset_ots_tutorial.sh &>/dev/null 2>&1 #hide output
 	#echo -e "UpdateOTS.sh [${LINENO}]  \t cp $OTSDAQ_DIR/../otsdaq_demo/tools/reset_ots_tutorial.sh $OTSDAQ_DIR/../../reset_ots_tutorial.sh"
 	#cp $OTSDAQ_DIR/../otsdaq_demo/tools/reset_ots_tutorial.sh $OTSDAQ_DIR/../../reset_ots_tutorial.sh
-	wget https://cdcvs.fnal.gov/redmine/projects/otsdaq/repository/demo/revisions/develop/raw/tools/reset_ots_tutorial.sh -P $MRB_SOURCE/../ --no-check-certificate	 &>/dev/null 2>&1
+	wget https://github.com/art-daq/otsdaq_demo/raw/develop/tools/reset_ots_tutorial.sh -P $MRB_SOURCE/../ --no-check-certificate	 &>/dev/null 2>&1
 	chmod 644 $MRB_SOURCE/../reset_ots_tutorial.sh 
 	
 	rm $MRB_SOURCE/../reset_ots_artdaq_tutorial.sh &>/dev/null 2>&1 #hide output
-	#now there is only one reset_tutorial script (that includes the artdaq tutorial), so do not get script
-	#echo -e "UpdateOTS.sh [${LINENO}]  \t cp $OTSDAQ_DIR/../otsdaq_demo/tools/reset_ots_artdaq_tutorial.sh $OTSDAQ_DIR/../../reset_ots_artdaq_tutorial.sh"
-	#cp $OTSDAQ_DIR/../otsdaq_demo/tools/reset_ots_artdaq_tutorial.sh $OTSDAQ_DIR/../../reset_ots_artdaq_tutorial.sh
-	#wget https://cdcvs.fnal.gov/redmine/projects/otsdaq/repository/demo/revisions/develop/raw/tools/reset_ots_artdaq_tutorial.sh -P $OTSDAQ_DIR/../../ --no-check-certificate	
-	#chmod 755 $OTSDAQ_DIR/../../reset_ots_artdaq_tutorial.sh
-	
+	#now there is only one reset_tutorial script (that includes the artdaq tutorial), so cleanup old systems and do not download script
 	
 	
 
@@ -621,7 +561,7 @@ displayVersionsAndQualifiers
 
 echo -e "UpdateOTS.sh [${LINENO}]  \t =================="
 echo -e "UpdateOTS.sh [${LINENO}]  \t ots update script done"
-echo -e "UpdateOTS.sh [${LINENO}]  \t Note: if you have issues with this script, logging into redmine may fix access issues, otherwise please notify us by opening a ticket."
+echo -e "UpdateOTS.sh [${LINENO}]  \t Note: if you have issues with this script, please notify us by opening a ticket here:\n\t\t https://github.com/art-daq/otsdaq_utilities/issues/new/choose"
 echo -e "UpdateOTS.sh [${LINENO}]  \t *******************************"
 echo -e "UpdateOTS.sh [${LINENO}]  \t *******************************"
 

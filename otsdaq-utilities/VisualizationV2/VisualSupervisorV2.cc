@@ -274,6 +274,12 @@ void VisualSupervisorV2::request(const std::string&               requestType,
 		{
 			__SUP_COUT__ << "ERROR! Something went wrong trying to get raw data."
 			             << __E__;
+			try	{ throw; } //one more try to printout extra info
+			catch(const std::exception &e)
+			{
+				__SUP_COUT_ERR__ << "Exception message: " << e.what();
+			}
+			catch(...){}
 			__SUP_COUT_INFO__ << "ERROR! Something went wrong trying to get raw data."
 			                  << __E__;
 		}

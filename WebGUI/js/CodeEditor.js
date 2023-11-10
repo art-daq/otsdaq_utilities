@@ -267,6 +267,7 @@ CodeEditor.create = function(standAlone) {
 	var _fileLastSave = [0,0]; //file last save time for primary and secondary
 	var _fileWasModified = [false,false]; //file wasModified for primary and secondary
 	var _numberOfLines = [0,0];
+	var _fileLastLineNumberHighlight = [-1,-1];
 	
 	var _eel = [undefined,undefined]; //editor elements for primary and secondary 
 	
@@ -367,6 +368,35 @@ CodeEditor.create = function(standAlone) {
 			
 			
 		}
+		console.log("parameterStartFile",parameterStartFile);
+		console.log("parameterGotoLine",parameterGotoLine);
+		for(var ii=0;ii<2;++ii) //for both files, get goto line and cleanup leading :
+		{
+			var i;
+			if(parameterStartFile[ii] !== undefined)
+			{
+				if( parameterGotoLine[ii] === undefined && (i=parameterStartFile[ii].lastIndexOf(':')) > 4) //see if line number can be extracted from filename
+				{
+					//if all numbers, then treat as line number
+					var allNumbers = true;
+					for(var j=i+1;j<parameterStartFile[ii].length;++j)
+						if(parameterStartFile[ii][j] < '0' || parameterStartFile[ii][j] > '9')
+						{
+							allNumbers = false;
+							break;
+						}
+					if(allNumbers)
+					{
+						parameterGotoLine[ii] = parameterStartFile[ii].substr(i+1) | 0; 
+						parameterStartFile[ii] = parameterStartFile[ii].substr(0,i); 
+					}
+				} //end get line number
+
+				//now cleanup leading : (for example from Debug.js popup links)
+				i=parameterStartFile[ii].lastIndexOf(':');
+				parameterStartFile[ii] = parameterStartFile[ii].substr(i+1);
+			}
+		} //end goto line handling
 		console.log("parameterStartFile",parameterStartFile);
 		console.log("parameterGotoLine",parameterGotoLine);
 		console.log("parameterViewMode",parameterViewMode);
@@ -2103,14 +2133,18 @@ CodeEditor.create = function(standAlone) {
 					try
 					{
 						CodeEditor.editor.toggleDirectoryNav(forPrimary,0 /*set nav mode*/);
-						CodeEditor.editor.handleFileContent(forPrimary, req);	
+						CodeEditor.editor.handleFileContent(forPrimary, req, undefined /*fileObj*/,
+							function()
+							{
+								Debug.log("Goto line handler after file content loaded...");
+								if(gotoLine !== undefined)
+									CodeEditor.editor.gotoLine(forPrimary,gotoLine);
+							});	
 						
 						//if secondary and not shown, show
 						if(!forPrimary && _viewMode == 0)
 							CodeEditor.editor.toggleView();	
 						
-						if(gotoLine !== undefined)
-							CodeEditor.editor.gotoLine(forPrimary,gotoLine);
 					}
 					catch(e)
 					{
@@ -2251,6 +2285,20 @@ CodeEditor.create = function(standAlone) {
 					
 					Debug.log("Found line " + line);
 					found = true;
+					try // highlight line number
+					{
+						document.getElementsByName(forPrimary + "L" + line)[0].style.backgroundColor = "yellow";
+						document.getElementsByName(forPrimary + "L" + line)[0].style.color = "red";
+						if(_fileLastLineNumberHighlight[forPrimary] != -1) //unhighlight previous
+						{
+							Debug.log("Found line " + _fileLastLineNumberHighlight[forPrimary]);
+							document.getElementsByName(forPrimary + "L" + _fileLastLineNumberHighlight[forPrimary])[0].style.backgroundColor = "inherit";
+							document.getElementsByName(forPrimary + "L" + _fileLastLineNumberHighlight[forPrimary])[0].style.color = "black";
+							_fileLastLineNumberHighlight[forPrimary] = -1;
+						}
+					}
+					catch(e){} //ignore highlight errors
+					_fileLastLineNumberHighlight[forPrimary] = line;
 					break;
 				}
 				
@@ -2311,7 +2359,7 @@ CodeEditor.create = function(standAlone) {
 	//	
 	//	if req is undefined, attempts to use 
 	//		fileObj:={path, extension, text, fileWasModified, fileLastSave}
-	this.handleFileContent = function(forPrimary,req,fileObj)
+	this.handleFileContent = function(forPrimary,req,fileObj,handlerAfterLoading)
 	{
 		forPrimary = forPrimary?1:0;
 		
@@ -2364,6 +2412,8 @@ CodeEditor.create = function(standAlone) {
 					{	
 						el.textContent = text;
 						CodeEditor.editor.displayFileHeader(forPrimary);
+						if(handlerAfterLoading)
+							handlerAfterLoading();
 					}
 					catch(e)
 					{ Debug.log("Ignoring error:[" + DesktopContent.getExceptionLineNumber(e) + "]: " + e); }
@@ -4277,9 +4327,9 @@ CodeEditor.create = function(standAlone) {
 		str = "";
 		for(i=0;i<newLineCount;++i)
 		{
-			str += "<a name='" + forPrimary + "L" + (i+1) + "'></a>"; //add anchor tag
+			str += "<a name='" + forPrimary + "L" + (i+1) + "'>"; //add anchor tag
 			str += (i+1);
-			str += "<br>";
+			str += "</a><br>";
 		}
 		document.getElementById("editableBoxLeftMargin" + forPrimary).innerHTML = str;
 		
@@ -4320,7 +4370,7 @@ CodeEditor.create = function(standAlone) {
 		found = false;
 		for(i=0;i<outline.length;++i)
 		{
-			str += "<option value='" + (outline[i][0]-2) + "'>";
+			str += "<option value='" + (outline[i][0]) + "'>";
 			text = "#" + outline[i][0];
 			str += text;
 			

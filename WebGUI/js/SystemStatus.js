@@ -251,6 +251,7 @@ function getAppsArray()
 				}            	
 			}
 
+			var oldAppsArrayLength = (_allAppsArray?_allAppsArray.length:0);
 			_allAppsArray = new Array();
 			_allClassNames = {}; //reset and treat as count
 			_allHostNames = {}; //reset and treat as count
@@ -312,8 +313,11 @@ function getAppsArray()
 			//return _allAppsArray;
 			resolve(_allAppsArray);
 			
-        	
-        	_arrayOnDisplayTable = setIntersection(_allAppsArray, _arrayOnDisplayTable); 
+			
+        	if(oldAppsArrayLength == _allAppsArray.length)
+        		_arrayOnDisplayTable = setIntersection(_allAppsArray, _arrayOnDisplayTable); 
+			else //a context change was identified
+				_arrayOnDisplayTable = _allAppsArray; 
         	
 
         	ping_ = parseInt((new Date()).getTime()) - pingTime; //in ms
@@ -448,7 +452,7 @@ function displayTable(appsArray)
             	}
             	catch(e)
             	{
-            		str = "Unknown";
+            		str = "UNKNOWN";
             		Debug.log("What happened? " + e);
             	}
             	

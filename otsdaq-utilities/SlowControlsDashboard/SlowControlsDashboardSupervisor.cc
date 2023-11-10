@@ -12,7 +12,9 @@ using namespace ots;
 
 #define CONTROLS_SUPERVISOR_DATA_PATH \
 	std::string(__ENV__("SERVICE_DATA_PATH")) + "/ControlsDashboardData/"
-#define PAGES_DIRECTORY CONTROLS_SUPERVISOR_DATA_PATH + "pages/"
+#define PAGES_DIRECTORY 				CONTROLS_SUPERVISOR_DATA_PATH + "pages/"
+#define PAGES_PUBLIC_DIRECTORY 			CONTROLS_SUPERVISOR_DATA_PATH + "pages/public/"
+#define PAGES_PRIVATE_DIRECTORY 		CONTROLS_SUPERVISOR_DATA_PATH + "pages/private/"
 
 XDAQ_INSTANTIATOR_IMPL(SlowControlsDashboardSupervisor)
 
@@ -28,9 +30,14 @@ SlowControlsDashboardSupervisor::SlowControlsDashboardSupervisor(
 	// make controls dashboard supervisor directories in case they don't exist
 	mkdir(((std::string)(CONTROLS_SUPERVISOR_DATA_PATH)).c_str(), 0755);
 	mkdir(((std::string)(PAGES_DIRECTORY)).c_str(), 0755);
+	mkdir(((std::string)(PAGES_PUBLIC_DIRECTORY)).c_str(), 0755);
+	mkdir(((std::string)(PAGES_PRIVATE_DIRECTORY)).c_str(), 0755);
 
 	interface_              = NULL;
 	alarmNotifyRefreshRate_ = 60;  // seconds
+
+	readOnly_        		= getSupervisorProperty("ReadOnly","1") == "1"?true:false;
+    __SUP_COUTV__(readOnly_);
 
 	init();
 
@@ -192,6 +199,12 @@ void SlowControlsDashboardSupervisor::checkSlowControlsAlarms(
 		{
 			__SS__ << "checkSlowControlsAlarms() ERROR While sendin alarm messages"
 			       << __E__;
+			try	{ throw; } //one more try to printout extra info
+			catch(const std::exception &e)
+			{
+				ss << "Exception message: " << e.what();
+			}
+			catch(...){}
 			std::lock_guard<std::mutex> lock(cs->alarmCheckThreadErrorMutex_);
 			cs->alarmCheckThreadError_ = ss.str();
 			__COUT_ERR__ << ss.str();
@@ -284,7 +297,8 @@ void SlowControlsDashboardSupervisor::setSupervisorPropertyDefaults()
 {
 	CorePropertySupervisorBase::setSupervisorProperty(
 	    CorePropertySupervisorBase::SUPERVISOR_PROPERTIES.CheckUserLockRequestTypes, "*");
-}
+
+} // end setSupervisorPropertyDefaults()
 
 //==============================================================================
 // forceSupervisorPropertyValues
@@ -293,7 +307,15 @@ void SlowControlsDashboardSupervisor::forceSupervisorPropertyValues()
 {
 	CorePropertySupervisorBase::setSupervisorProperty(
 	    CorePropertySupervisorBase::SUPERVISOR_PROPERTIES.AutomatedRequestTypes, "poll");
-}
+
+	if(readOnly_)
+	{
+        CorePropertySupervisorBase::setSupervisorProperty(
+            CorePropertySupervisorBase::SUPERVISOR_PROPERTIES.UserPermissionsThreshold,
+            "*=0 | getPages=1 | loadPhoebusPage=1 | getList=1 | getPVSettings=1 | getPvArchiverData=1 | generateUID=1 | getUserPermissions=1 |\
+			 userActivityHeartbeat=1 | poll=1 | uid=1 | isUserAdmin=1");  // block users from writing if no write access
+	}
+} //end forceSupervisorPropertyValues()
 
 //==============================================================================
 void SlowControlsDashboardSupervisor::request(const std::string& requestType,
@@ -331,6 +353,12 @@ void SlowControlsDashboardSupervisor::request(const std::string& requestType,
 	{
 		__SS__ << "Unknown error occurred handling request '" << requestType << "!'"
 		       << __E__;
+		try	{ throw; } //one more try to printout extra info
+		catch(const std::exception &e)
+		{
+			ss << "Exception message: " << e.what();
+		}
+		catch(...){}
 		__SUP_COUT__ << ss.str();
 		xmlOut.addTextElementToData("Error", ss.str());
 	}
@@ -779,10 +807,20 @@ void SlowControlsDashboardSupervisor::GetList(cgicc::Cgicc& /*cgiIn*/,
 		__SUP_COUT__ << "Interface is defined! Attempting to get list!" << __E__;
 		//	__SUP_COUT__ << this->getApplicationDescriptor()->getLocalId() <<
 		// __E__;
-		__SUP_COUT__ << " " << interface_->getList("JSON") << __E__;
+		std::string list;
+		try
+		{
+			list = interface_->getList("JSON");
+		}
+		catch(std::runtime_error& e)
+		{
+			__SUP_SS__ << "Channel list request failed: " << e.what() << __E__;
+			__SUP_SS_THROW__;
+		}
+		
+		__SUP_COUT__ << " " << list << __E__;
 
-		xmlOut.addTextElementToData("JSON",
-		                            interface_->getList("JSON"));  // add to response
+		xmlOut.addTextElementToData("JSON", list);  // add to response
 	}
 	else
 	{
@@ -1003,9 +1041,9 @@ void SlowControlsDashboardSupervisor::SaveControlsPage(
 
 	std::string fullPath;
 	if(isControlsPagePublic == "true")
-		fullPath = (std::string)CONTROLS_SUPERVISOR_DATA_PATH + "public/";
+		fullPath = (std::string)PAGES_PUBLIC_DIRECTORY;
 	else
-		fullPath = (std::string)CONTROLS_SUPERVISOR_DATA_PATH + "private/";
+		fullPath = (std::string)PAGES_PRIVATE_DIRECTORY;
 
 	__SUP_COUTV__(fullPath);
 
@@ -1028,6 +1066,11 @@ void SlowControlsDashboardSupervisor::SaveControlsPage(
 
 	std::ofstream outputFile;
 	outputFile.open(file);
+	if(!outputFile.is_open())
+	{
+		__SUP_SS__ << "Failed to open file for writing: " << file << __E__;
+		__SUP_SS_THROW__;
+	}
 	outputFile << "Time: " << Time << "\n";
 	outputFile << "Notes: " << Notes << "\n";
 	outputFile << "Page: " << pageString;
@@ -1061,9 +1104,9 @@ void SlowControlsDashboardSupervisor::SavePhoebusControlsPage(
 
 	std::string fullPath;
 	if(isControlsPagePublic == "true")
-		fullPath = (std::string)CONTROLS_SUPERVISOR_DATA_PATH + "public/";
+		fullPath = (std::string)PAGES_PUBLIC_DIRECTORY;
 	else
-		fullPath = (std::string)CONTROLS_SUPERVISOR_DATA_PATH + "private/";
+		fullPath = (std::string)PAGES_PRIVATE_DIRECTORY;
 
 	__SUP_COUTV__(fullPath);
 
@@ -1086,6 +1129,11 @@ void SlowControlsDashboardSupervisor::SavePhoebusControlsPage(
 
 	std::ofstream outputFile;
 	outputFile.open(file);
+	if(!outputFile.is_open())
+	{
+		__SUP_SS__ << "Failed to open file for writing: " << file << __E__;
+		__SUP_SS_THROW__;
+	}
 	outputFile << pageString << "\n";
 	outputFile.close();
 

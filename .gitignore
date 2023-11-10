@@ -9,4 +9,4 @@ WebGUI/*Path
 *.bk
 *.tmp
 WebGUI/js/Debug.js
-
+*.code-workspace

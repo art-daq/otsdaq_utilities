@@ -646,7 +646,7 @@
 			if(hostnameVectorIndexString !== undefined)
 			{
 				var hostnameVectorIndexArr = []; //reset
-				var hostnameVectorIndexReverseMap = {}; //reset
+				var hostnameVectorIndexReverseMap = {}; //reset (array for each index, to allow multiple artdaq instances at each host)
 
 
 				hostnameIndices = hostnameVectorIndexString.split(',');
@@ -659,15 +659,10 @@
 					{
 						var index = hostnameSubindices[0].trim();
 
-						if(hostnameVectorIndexReverseMap[index])
-						{
-							Debug.log("Illegal Hostname Indices for node '" +
-									node.name + "' - repeat indices (i.e. '" +
-									index + "') are not allowed.",
-									Debug.HIGH_PRIORITY);
-							return false;								
-						}
-						hostnameVectorIndexReverseMap[index] = hostnameCount++;
+						if(hostnameVectorIndexReverseMap[index] === undefined) 
+							hostnameVectorIndexReverseMap[index] = []; //create array
+						
+						hostnameVectorIndexReverseMap[index].push(hostnameCount++);
 						hostnameVectorIndexArr.push(index);							
 					}
 					else if(hostnameSubindices.length == 2)
@@ -684,15 +679,10 @@
 
 						for(var k=lo;k<=hi;++k)
 						{
-							if(hostnameVectorIndexReverseMap[k])
-							{
-								Debug.log("Illegal Hostname Indices for node '" +
-										node.name + "' - repeat indices (i.e. '" +
-										k + "') are not allowed.",
-										Debug.HIGH_PRIORITY);
-								return false;								
-							}
-							hostnameVectorIndexReverseMap[k] = hostnameCount++;
+							if(hostnameVectorIndexReverseMap[k] === undefined) 
+								hostnameVectorIndexReverseMap[k] = []; //create array
+							
+							hostnameVectorIndexReverseMap[k].push(hostnameCount++);
 							hostnameVectorIndexArr.push(k);								
 						}
 					}

@@ -342,29 +342,24 @@ if (Debug.mode) //IF DEBUG MODE IS ON!
 			//	returns undefined if no change
 			function localCallOutDebugLocales(str)
 			{
-				var i = 0;
+				var i = 4;
 				var j,k,l;
 				var returnStr;
+				var fileStr;
 				try
 				{
-					while((j = str.indexOf('[',i)) > 0 && (k = str.indexOf(']',i)) > 0)
+					while((k = str.indexOf(' |',i)) > 0 && (j = str.lastIndexOf(':',k-3)) > 0)
 					{
-						if(j < 4)
-						{
-							i = k+1;
-							continue; //skip, too soon to be valid
-						}
-
 						//found new possible call out 
 						//console.log(str.substr(j,k-j+1));
 
 						if(!returnStr) //check if need to define for the first time
 							returnStr = "";
 
-						//look for icc, .cc and .h 
-						if((str[j-3] == '.' && str[j-2] == 'h') || 
-								((str[j-4] == '.' || str[j-4] == 'i') &&
-										str[j-3] == 'c' && str[j-2] == 'c'))
+						//look for icc, .cc, .cpp, .hh, and .h 
+						if((str[j-2] == '.' && str[j-1] == 'h') || 
+							(str[j-3] == '.' && (str[j-2] == 'h' || str[j-2] == 'c')) || 
+							(str[j-4] == '.' && (str[j-3] == 'c' || str[j-2] == 'i') && (str[j-2] == 'p' || str[j-2] == 'c')))
 						{
 							//find beginning of blob (first non-file/c++ character)
 							for(l = j-3; l >= i; --l)
@@ -384,17 +379,33 @@ if (Debug.mode) //IF DEBUG MODE IS ON!
 							//previous chunk								
 							returnStr += str.substr(i,l-i);
 
+							fileStr = str.substr(l,k-l);
+
 							//add label
-							returnStr += "<br><label class='" + 
-									Debug._errBoxId + "-localCallOut'>";								
+							returnStr += "<br>";
 
-							//add callout
-							returnStr += str.substr(l,k+1-l);
-
+							returnStr += //if filename, add link to CodeEditor
+								DesktopContent.htmlOpen("a", //start macro module table
+									{
+										"title":"Open file in a new browser tab: \n" +
+										fileStr,
+										"onclick":"DesktopContent.openNewBrowserTab(" +
+										"\"Code Editor\",undefined /*subname undefined for LID lookup*/," + 
+										"\"?" +
+										"startFilePrimary=" +
+										fileStr + "\",undefined /*unique undefined for LID lookup*/);' ", //end onclick
+									},
+									"<label class='" + 
+									Debug._errBoxId + "-localCallOut' style='cursor:pointer'>" + 
+									fileStr /*innerHTML*/ +
+									"</label>",
+									true /*doCloseTag*/);	
+							
 							//add end label
-							returnStr += "</label><br>";
+							returnStr += "<br>";
 
 							//skip any tabs and new lines (so that the next content is right below line #)
+							++k; //skip |
 							while(k+1 < str.length && 
 									(str[k+1] == '\n' || str[k+1] == '\t')) ++k;								
 
@@ -456,6 +467,7 @@ Debug._ERR_TRUNCATION_LENGTH = 10000;
 //=====================================================================================
 //Note: effectively doing this: str.replace(/\n/g , "<br>").replace(/\t/g,"&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;");
 //	...but str.replace() was really slowing down everything on big strings
+//	Use truncLenIn = -1 to avoid message truncation
 Debug.errorPopConditionString = function(str, truncLenIn) {
 	var rstr = "";
 
@@ -485,6 +497,7 @@ Debug.errorPopConditionString = function(str, truncLenIn) {
 //=====================================================================================
 //Show the error string err in the error popup on the window
 // create error div if not yet created
+Debug._errTruncLen = undefined; //temporarily change to -1 to avoid truncation
 Debug.errorPop = function(err,severity) 
 {
 			
@@ -530,8 +543,8 @@ Debug.errorPop = function(err,severity)
 				"<div id='downloadIconDiv' onclick='Debug.downloadMessages()' onmouseup='event.stopPropagation();' onmousedown='event.stopPropagation();' title='Download messages to text file.' style='float: right; margin: -10px 30px -100px -100px; cursor: pointer'>" +
 				//make download arrow
 					"<div style='display: block; margin-left: 3px; height:7px; width: 6px; background-color: white;'></div>" +
-					"<div style='display: block; width: 0; height: 0; border-left: 6px solid transparent; border-right: 6px solid transparent; border-top: 8px solid white;'></div>" +
-					"<div style='position: relative; top: 5px; width: 12px; height: 2px; display: block; background-color: white;'></div>" +				
+					"<div style='display: block; width: 0; height: 0; border-left: 7px solid transparent; border-right: 7px solid transparent; border-top: 8px solid white;'></div>" +
+					"<div style='position: relative; top: 5px; width: 13px; height: 2px; display: block; background-color: white;'></div>" +				
 				"</div>" +
 				"</div>" +
 				"<div id='" + 
@@ -760,7 +773,7 @@ Debug.errorPop = function(err,severity)
 			"<label style='color:white;font-size:16px;'>" + 
 			d.toLocaleDateString() +
 			" " + tstr + " (Tip) :</label><br>" +
-			Debug.errorPopConditionString(err);	
+			Debug.errorPopConditionString(err,-1 /* avoid truncation */);	
 	else //normally put newest at top since likely highest priority
 		str = "<label style='color:white;font-size:16px;'>" + 
 		    d.toLocaleDateString() +
@@ -768,7 +781,7 @@ Debug.errorPop = function(err,severity)
 		    (severity == Debug.INFO_PRIORITY.DEBUG_PRIORITY ? '(Info)':'')+
 		    (severity == Debug.WARN_PRIORITY.DEBUG_PRIORITY ? '(Warning)':'') +
 		    ":</label><br>" +
-		    Debug.errorPopConditionString(err) + 
+		    Debug.errorPopConditionString(err,Debug._errTruncLen) + 
 		    (wasAlreadyContent?"<br>...<br>":"") +
 		    str;
 

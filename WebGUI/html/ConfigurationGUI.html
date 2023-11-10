@@ -42,6 +42,7 @@
 		//uploadTableFromCSV()
 		//launchRecordCreationWizard(typeOfLaunch)
 		//launchRecordDeletionWizard(typeOfLaunch)
+		//toggleTreeDiffMode(setVal)
 
 		//tree-view focused =========
 		//setupTableGroupTreeView(tableGroupName,tableGroupKey,backLinkStr)
@@ -102,6 +103,8 @@
 		//popUpGroupViewAliasFormSubmit(groupName,groupKey)
 		//popUpSaveTreeForm()
 
+		//handlePopUpSetGroupAlias(affectedGroupNames,affectedGroupKeys)
+
 		//handleGroupCommentToggle(groupName,setHideVal)
 		//handlePopUpHeightToggle(h,gh)
 
@@ -159,6 +162,8 @@
 		//mergeGroups(groupANameContext, groupAKeyContext, groupBNameContext, groupBKeyContext,groupANameConfig, groupAKeyConfig, groupBNameConfig, groupBKeyConfig, mergeApproach)
 		//mergeGroupsDialog()
 		//popUpGroupUploadDownloadUpdateForm(groupName,groupKey,isUpload)
+		//diffWithActiveGroup(groupName, groupKey)
+		//popUpDiffWithAnotherKey(groupName, groupKey)
 
 		//tableLinkTooltip(prependString)
 
@@ -349,6 +354,10 @@
 			margin: -2px 0 -2px 10px;
 			cursor: pointer;
 		}
+		
+		.treeNode-Value-leafNode-fieldValue {
+			cursor: crosshair;
+		}
 
 		.treeNode-Children {
 			border-left: 1px solid rgb(181, 170, 210);
@@ -362,6 +371,18 @@
 		.treeNode-LinkDisconnectedLabel {
 			color: red;
 			font-weight: bold;
+		}
+
+		.diffTreeNode .treeNode-Value-leafNode-fieldValue {
+			color: rgb(207, 101, 0);
+			cursor: default;
+		}
+
+		.diffTreeValueNode {
+			color: rgb(207, 101, 0);
+			cursor: default;
+			white-space: nowrap;
+   			margin: 0 10px 0 0;
 		}
 
 		#activateConfigWithWarnings {
@@ -413,17 +434,24 @@
 		#groupAddRemoveTable {
 			margin-bottom: 		10px;
 		}
+		#subsystemViewActiveTable {
+			background-color: 	rgb(226, 216, 216);
+			padding: 			10px;
+		}
 		#groupAddRemoveTable tr:nth-child(even),
 		#systemViewActiveTable tr:nth-child(even),
+		#subsystemViewActiveTable tr:nth-child(even),
 		#systemAliasTable tr:nth-child(even),
 		#tableViewTable tr:nth-child(even) {
 			background-color: 	rgb(218, 194, 194);
 		}
 		#systemViewActiveTable tr,
+		#subsystemViewActiveTable tr,
 		#systemAliasTable tr {
 			height: 			18px;
 		}
 		#systemViewActiveTable td,
+		#subsystemViewActiveTable td,
  	 	#tableViewTable td {
 			padding: 			0 5px 0 5px;
 		}
@@ -561,6 +589,7 @@
 
 		var _activeTableGroups = []; //sz 8 (each 2) := holds the group name,key for currently active (could be none on failure) Context, Backbone, Iterator, Config
 		var _lastTableGroups = []; //sz 18 (each 3):= holds the group name,key,TIME for last successfully Configured, Started, activated-Config, activated-Context, activated-Backbone, activated-Iterator 
+		var _subsystemNames = []; //for multi subsystem systems, to explore and diff configurations among subsystems
 
 		var _versionTrackingIsOn = true;
 		var _firstTimeSilentActive = true;
@@ -589,15 +618,19 @@
 
 		//for tree view
 		var treeViewHandlerStr_; //used by recursive function to build html string
-		var fancyTreeViewHandlerStr_;
 		var treeNodeUID_;		//incrementing unique id for nodes
 		var treeMemberNames_, treeMemberVersions_, treeMemberComments_;
 		var treeViewBackLinkStr_;
 		var treeViewExpandedCapture_; //object to capture and load from on refresh
-		var treeGroupName_, treeGroupKey_;
+		var treeGroupName_, treeGroupKey_, treeGroupType_;
 		var treeViewHideStatus_ = false;
 		var treeFilterApplied_ = false;
 		var treeViewHideInfo_ = true;
+		var treeDiffModeApplied_ = false; 
+		var treeDiffModeGroupName_, treeDiffModeGroupKey_;
+		var treeDiffTablesWithDiff_; //map of tables with diff for quick lookup and display in tree diff
+		var treeDiff_COLOR_ = "rgb(207, 101, 0)";
+
 		var treeFilter_ = "";
 		var lastTreeFilter_ = "";
 		var lastTreeWarnStr_ = "";
@@ -681,7 +714,8 @@
 			//setupSpecificTable("XDAQContextTable","2","setupTableViewMode('anchorTag-XDAQContextTable');"); return;
 
 			//setupSpecificTableGroup("artdaqFclTest","46","","anchorTag-RawDataSaverConsumerTable"); return;			
-			//setupSpecificTableGroup("GroupAliasWizBackbone","0"); 
+			// setupSpecificTableGroup("CalVstSidetV2Config","15"); return;
+			// setupTableGroupTreeView("TDAQDevContext","11"); return;
 
 			//mergeGroups("GroupAliasWizBackbone","0","GroupAliasWizBackbone","3","rename");
 			//mergeGroups("  ","2","testContext","3","defaultConfig","1","defaultConfig","4","Rename");
@@ -825,6 +859,11 @@
 						
 					];
 					//console.log(_lastTableGroups);
+
+					_subsystemNames = [];
+					var subsystemNames = req.responseXML.getElementsByTagName("SubsystemName");					
+					for(var i=0;i<subsystemNames.length;++i)
+						_subsystemNames.push(subsystemNames[i].getAttribute("value"));
 
 					systemViewPreventInfiniteLoop_ = true;
 					DesktopContent.XMLHttpRequest("Request?RequestType=getGroupAliases&" +
@@ -1253,34 +1292,49 @@
 			} localShowActiveBackboneAndConfig();
 
 
-			//			str += "<a href='#' onclick='setupSpecificTable(\"" + 
-			//					groupAliasesName + "\",\"" +
-			//					groupAliasesVersion + "\",\"" + backLinkStr + "\"); return false;'>";
-			//			str += "Edit System Aliases</a>";
-			//
-			//			str += "<br>";
-			//			
-			//			str += "<a onclick='popUpGroupAliasForm(1); return false;' " +
-			//					"title='Automatically assign a new System Alias to a Group comprised of the latest table versions.'" +
-			//					">";
-			//			str += "Wiz-New System Alias-to-Latest</a>";
-			//
-			//			//str += "&nbsp;&nbsp;&nbsp;&nbsp;";
-			//			str += "<br>";
-			//
-			//			str += "<a onclick='popUpGroupAliasForm(0); return false;'  " +
-			//						"title='Automatically assign a new System Alias to an Active Group.'" +
-			//						">";
-			//			str += "Wiz-New System Alias-to-Active</a>";
+			if(_subsystemNames.length)
+			{			
+				Debug.log("CfgGUI subsystemNames subsystemNames.length " + _subsystemNames.length);
+
+				str += "<br><br><br>";
+				str += "<h3 style='margin: -10px 0 4px 16px;'><u>Subsystems</u></h3>";
+				str += DesktopContent.htmlOpen("div",
+					{
+						"id": "subsystemTable",	
+						"style" : "background-color: 	rgb(218, 194, 194)",
+					},
+					"" /*innerHTML*/,
+					false /*doCloseTag*/);
+				str += "</br>";
+				for(var i=0;i<_subsystemNames.length;++i)
+				{
+					str +=  "&nbsp;&nbsp; ";
+					str += DesktopContent.htmlOpen("a",
+						{
+							"onclick": "loadSubsystemFocus(\"" + _subsystemNames[i] + "\");",
+							"title": "Access the active, aliased, and recent table groups of the subsystem &apos;" + _subsystemNames[i] + ").&apos;",
+						},
+						_subsystemNames[i] /*innerHTML*/,
+						true /*doCloseTag*/);
+				}
+				str += "</br>";
+				str += "</br>";
+				str += DesktopContent.htmlOpen("div",
+					{
+						"id": "subsystemTableFocus",
+					},
+					"" /*innerHTML*/,
+					true /*doCloseTag*/);
+				str += "</div>"; //close subsystemTable tag
+			} //end subsystem handling
+
+			
 
 			str += "<br><br><br>";
 
 			Debug.log("CfgGUI groupAliasesRequestHandler groupAliases.length " + groupAliases.length);
 
-
-
 			str += "<table id='systemAliasTable' style='white-space:nowrap' cellpadding='0' cellspacing='0' border='0' >"; //open system aliases table
-
 			str += "<tr>";
 			str += "<th style='border-left: 0'>";
 			str += "<u>System Alias</u>";
@@ -1414,6 +1468,231 @@
 			var el = document.getElementById("display");
 			el.innerHTML = str;
 		} //end groupAliasesRequestHandler()
+
+		//==============================================================================
+		//loadSubsystemFocus ~
+		function loadSubsystemFocus(subsystemName) 
+		{
+			Debug.log("loadSubsystemFocus",subsystemName);
+
+			var el = document.getElementById("subsystemTableFocus");
+			el.innerHTML = DesktopContent.htmlOpen("div",
+							{
+								"id": "subsystemTableFocusDiv",
+								"style": "padding: 0 30px 30px 30px",
+							},
+							"Loading..." /*innerHTML*/,
+							true /*doCloseTag*/);
+
+			DesktopContent.XMLHttpRequest("Request?RequestType=getSubsytemTableGroups&subsystem=" + subsystemName,
+				"",
+				function (req) {
+
+					//extract subsystem table groups
+
+					var subsystemActiveTableGroups = [
+						DesktopContent.getXMLValue(req, "CurrentlyActiveContextGroupName"),
+						DesktopContent.getXMLValue(req, "CurrentlyActiveContextGroupKey"),
+						DesktopContent.getXMLValue(req, "CurrentlyActiveBackboneGroupName"),
+						DesktopContent.getXMLValue(req, "CurrentlyActiveBackboneGroupKey"),
+						DesktopContent.getXMLValue(req, "CurrentlyActiveIterateGroupName"),
+						DesktopContent.getXMLValue(req, "CurrentlyActiveIterateGroupKey"),
+						DesktopContent.getXMLValue(req, "CurrentlyActiveConfigurationGroupName"),
+						DesktopContent.getXMLValue(req, "CurrentlyActiveConfigurationGroupKey")
+					];
+
+					var subsystemLastTableGroups = [
+						DesktopContent.getXMLValue(req, "LastConfiguredGroupName"),
+						DesktopContent.getXMLValue(req, "LastConfiguredGroupKey"),
+						DesktopContent.getXMLValue(req, "LastConfiguredGroupTime"),
+						DesktopContent.getXMLValue(req, "LastStartedGroupName"),
+						DesktopContent.getXMLValue(req, "LastStartedGroupKey"),
+						DesktopContent.getXMLValue(req, "LastStartedGroupTime"),
+						
+						DesktopContent.getXMLValue(req, "LastActivatedConfigGroupName"),
+						DesktopContent.getXMLValue(req, "LastActivatedConfigGroupKey"),
+						DesktopContent.getXMLValue(req, "LastActivatedConfigGroupTime"),
+						DesktopContent.getXMLValue(req, "LastActivatedIteratorGroupName"),
+						DesktopContent.getXMLValue(req, "LastActivatedIteratorGroupKey"),
+						DesktopContent.getXMLValue(req, "LastActivatedIteratorGroupTime"),
+						DesktopContent.getXMLValue(req, "LastActivatedBackboneGroupName"),
+						DesktopContent.getXMLValue(req, "LastActivatedBackboneGroupKey"),
+						DesktopContent.getXMLValue(req, "LastActivatedBackboneGroupTime"),
+						DesktopContent.getXMLValue(req, "LastActivatedContextGroupName"),
+						DesktopContent.getXMLValue(req, "LastActivatedContextGroupKey"),
+						DesktopContent.getXMLValue(req, "LastActivatedContextGroupTime")
+					];
+					Debug.log(subsystemActiveTableGroups);
+					Debug.log(subsystemLastTableGroups);
+
+					var el = document.getElementById("subsystemTableFocusDiv");
+
+					var activeConfigHeaders = ["Context", "Backbone", "Iterate Group", "Configuration"];
+
+					var str = "";
+					str += "<table id='subsystemViewActiveTable' cellpadding='0' cellspacing='0' border='0' >"; //open active groups table
+
+					insertLocalLastConfigGroups();
+					
+					for (var i = activeConfigHeaders.length-1; i >= 0 && i < activeConfigHeaders.length; --i) 
+					{
+						str += "<tr><td style='text-align:left; white-space:nowrap;'>";
+
+						//if (i == activeConfigHeaders.length - 1) //for last configured 
+						//	str += "Last Activated " + activeConfigHeaders[i] + ": ";
+						//else	//for backbone, iterate
+						if(i != 3)
+							str += "Currently Active " + activeConfigHeaders[i] + ": ";
+						else
+							str += "Current Editor " + activeConfigHeaders[i] + ": ";
+
+						str += "</td><td style='text-align:left; padding-left:20px;'>";
+
+						if (!subsystemActiveTableGroups[i * 2] || subsystemActiveTableGroups[i * 2] == "")
+						{
+							str += "None";
+						}
+						else 
+						{
+							str += "<a href='#' onclick='setupSpecificTableGroup(\"" + subsystemActiveTableGroups[i * 2] +
+								"\",\"" + subsystemActiveTableGroups[i * 2 + 1] + "\"); return false;'>";
+							str += subsystemActiveTableGroups[i * 2] + "</a>(" + subsystemActiveTableGroups[i * 2 + 1] + ")";
+						}
+
+						str += "</td><td style='text-align:left; padding-left:20px;'>";
+						
+						if (!(!subsystemActiveTableGroups[i * 2] || subsystemActiveTableGroups[i * 2] == ""))
+							str += "<a href='#' onclick='setupTableGroupTreeView(\"" +
+								subsystemActiveTableGroups[i * 2] +
+								"\",\"" +
+								subsystemActiveTableGroups[i * 2 + 1] + "\"); return false;' " +
+								"title='Open the tree-view for " + subsystemActiveTableGroups[i * 2] + 
+								"(" + subsystemActiveTableGroups[i * 2 + 1] + ")'" +
+								">Tree-view</a>";
+
+						str += "</td></tr>";
+
+						//if (i == activeConfigHeaders.length - 1) //for last configured 
+							//insertLocalLastConfigGroups();
+					}
+
+					/////////////////////
+					function insertLocalLastConfigGroups()
+					{
+						//last config groups for "Configured" and "Started:
+						var extraPadding = "";
+						for (var i = 0; i < subsystemLastTableGroups.length; i += 3) 
+						{
+								
+	//						if(((i/3)|0) == 5) //add padding to last
+	//							extraPadding = "padding-bottom:10px;";
+	//						else
+	//							extraPadding = "";
+							
+							str += "<tr><td style='text-align:left;white-space:nowrap;" +
+									extraPadding + "'>";
+
+
+							if (!subsystemLastTableGroups[i] || subsystemLastTableGroups[i] == "") 
+							{
+								//no last group
+
+								switch((i/3)|0)
+								{
+								case 0:
+									str += "Last Configured by FSM: "; 
+									break;
+								case 1:
+									str += "Last Run Started by FSM: ";
+									break;
+								case 2:
+									str += "Last Editor Config: ";
+									break;
+								case 3:
+									str += "Last Activated Iterate Group: ";
+									break;
+								case 4:
+									str += "Last Activated Backbone: ";
+									break;
+								case 5:
+									str += "Last Activated Context: ";
+								default:; //impossible
+								}
+							}
+							else 
+							{
+								//there is a last group, so show time
+
+								switch((i/3)|0)
+								{
+								case 0:
+									str += "Last Configured by FSM ";
+									break;
+								case 1:
+									str += "Last Run Started by FSM ";
+									break;
+								case 2:
+									str += "Last Activated Config ";
+									break;
+								case 3:
+									str += "Last Activated Iterate ";
+									break;
+								case 4:
+									str += "Last Activated Backbone ";
+									break;
+								case 5:
+									str += "Last Activated Context ";
+								default:; //impossible
+								}
+
+								str += "<label style='font-size:10px;white-space:nowrap;'>[" +
+									subsystemLastTableGroups[i + 2] + "]</label>: ";
+							}
+
+							str += "</td><td style='text-align:left; padding-left:20px;" + extraPadding + "'>";
+
+							if (!subsystemLastTableGroups[i] || subsystemLastTableGroups[i] == "") 
+							{
+								str += "None";
+							}
+							else 
+							{
+								str += "<a href='#' onclick='setupSpecificTableGroup(\"" +
+								subsystemLastTableGroups[i] +
+										"\",\"" + subsystemLastTableGroups[i + 1] + "\"); return false;'>";
+								str += subsystemLastTableGroups[i] + "</a>(" + subsystemLastTableGroups[i + 1] + ")";
+							}
+
+							str += "</td><td style='text-align:left; padding-left:20px;" + extraPadding + "'>";
+						
+							if(!(!subsystemLastTableGroups[i] || subsystemLastTableGroups[i] == ""))
+								str += "<a href='#' onclick='setupTableGroupTreeView(\"" +
+									subsystemLastTableGroups[i] +
+									"\",\"" +
+									subsystemLastTableGroups[i + 1] + "\"); return false;' " +
+									"title='Open the tree-view for " + subsystemLastTableGroups[i] + 
+									"(" + subsystemLastTableGroups[i + 1] + ")'" +
+									">Tree-view</a>";
+
+							str += "</td></tr>";
+							
+							if(((i/3)|0) == 5 ||
+									((i/3)|0) == 1) //add extra rows for spacing
+								str += "<tr style='background-color: rgb(140, 86, 86);height:2px;'>" +
+									"<td colspan=3></td></tr>";
+							if(((i/3)|0) == 5 ||
+									((i/3)|0) == 1) //swap odd even coloring
+								str += "<tr style='background-color: rgb(140, 86, 86);height:0px;'>" +
+								"<td colspan=3></td></tr>";
+						}
+					}  //end insertLocalLastConfigGroups()
+
+
+					str += "</table>"; //close active groups table
+					el.innerHTML = str;
+
+				}); //end getSubsytemTableGroups
+		} //end loadSubsystemFocus()
 
 		//==============================================================================
 		//tableGroupsRequestHandler ~
@@ -2186,7 +2465,7 @@
 			}
 
 			if (historicalKeys.length) {
-				str += "Existing &quot;" + groupName + "&quot; group keys: ";
+				str += "Existing &quot;" + groupName + "&quot; group keys: <label id='existingGroupKeys'>";
 				//str += " " + groupKey;
 
 				for (var i = 0; i < historicalKeys.length; ++i) {
@@ -2198,6 +2477,7 @@
 					str += key;
 					str += "</a>";
 				}
+				str += "</label>";
 			}
 			else
 				str += "No Historical keys exist for " + groupName + ".<br>";
@@ -2262,9 +2542,29 @@
 				{
 					"onclick": "popUpGroupUploadDownloadUpdateForm(\"" + groupName +
 						"\",\"" + groupKey + "\", false /*isUpload*/, true /*isUpdate*/);",
-					"title": "Update a selection of member tables from the current group &apos;" + groupName + "(" + groupKey + ").&apos;",
+					"title": "Update a selection of member tables (e.g. to fix column mismatches) from the current group &apos;" + groupName + "(" + groupKey + ").&apos;",
 				},
 				"Update a selection of member tables" /*innerHTML*/,
+				true /*doCloseTag*/);
+			//add Active-diff link
+			str += "<br>";
+			str += DesktopContent.htmlOpen("a",
+				{
+					"onclick": "diffWithActiveGroup(\"" + groupName +
+						"\",\"" + groupKey + "\");",
+					"title": "Get a difference report between the active group and this group &apos;" + groupName + "(" + groupKey + ").&apos;",
+				},
+				"Diff with the Active table group" /*innerHTML*/,
+				true /*doCloseTag*/);
+			//add another-key-diff link
+			str += "<br>";
+			str += DesktopContent.htmlOpen("a",
+				{
+					"onclick": "popUpDiffWithAnotherKey(\"" + groupName +
+						"\",\"" + groupKey + "\");",
+					"title": "Get a difference report between the this group &apos;" + groupName + "(" + groupKey + ").&apos; and another key of this group.",
+				},
+				"Diff with another Key of this group" /*innerHTML*/,
 				true /*doCloseTag*/);
 
 			str += "<br><br>";
@@ -2307,8 +2607,8 @@
 
 				str += "</td><td style='background-color: rgb(218, 194, 194); width:10px;'>"; //open "curren version" link
 
-				str += "<div id='" + tableName + "-currentVersionLink' class='currentMemberVersionLink' " + 
-					"style='float:left;white-space:nowrap;'>";	//open name div
+				str += "<center><div id='" + tableName + "-currentVersionLink' class='currentMemberVersionLink' " + 
+					"style='float:left;white-space:nowrap; width:100%;'>";	//open name div
 				str += "<a  " +
 					// "href='javascript:" + replaceScreenJS + "'>"; //FIXME .. back to onclick, but L12808  changeMemberVersionForTableGroup()!!
 					"onclick='" + replaceScreenJS + "'>";
@@ -2320,7 +2620,7 @@
 
 				str += ")";
 				str += "</a>";
-				str += "</div>"; //close member current version link
+				str += "</div></center>"; //close member current version link
 
 				str += "</td><td style='width:20px;'>"; //open table nav link
 
@@ -2390,7 +2690,7 @@
 
 				str += "<div style='white-space:nowrap'>";
 				str += "Existing versions: ";
-				str += "<label id='" + tableName + "-existingVersions'>";
+				str += "<label id='" + tableName + "-existingVersions' style='white-space: normal;'>";
 				cfgVersionStr = ""; //keep CSV list of versions for use by changeMemberVersionForTableGroup
 
 				tableExistingVersions = tableVersions[i].getElementsByTagName("TableExistingVersion");
@@ -3067,6 +3367,284 @@
 		} //end launchRecordDeletionWizard()
 
 		//==============================================================================
+		//toggleTreeDiffMode ~~
+		function toggleTreeDiffMode(setVal) 
+		{
+			var tmpTreeDiffMode;
+			if (setVal !== undefined)
+				tmpTreeDiffMode = setVal;
+			else
+				tmpTreeDiffMode = !treeDiffModeApplied_; //invert
+
+			Debug.log("toggleTreeDiffMode " + tmpTreeDiffMode);
+
+			if(!tmpTreeDiffMode)
+			{
+				treeDiffModeApplied_ = tmpTreeDiffMode; //disable tree diff mode
+
+				Debug.log("Tree diff mode disabled.");
+				hardRefreshTreeView();
+			}
+			else
+			{
+				//pop up diff group selection
+				Debug.log("toggleTreeDiffModeDialog");
+
+				var el = document.getElementById("popUpDialog");
+				if (!el) 
+				{
+					el = document.createElement("div");
+					el.setAttribute("id", "popUpDialog");
+				}
+				el.style.display = "none";
+
+				//set position and size
+				var w = 500;
+				var h = 235;
+				ConfigurationAPI.setPopUpPosition(el, w /*w*/, h /*h*/);
+
+				//show choices for context and config groups
+
+				var str = "<a id='" +
+					"popUpDialog" +
+					"-header' onclick='var el = document.getElementById(" +
+					"\"popUpDialog\"); if(el) el.parentNode.removeChild(el); return false;'>Cancel</a><br><br>";
+
+				//get existing groups to merge	
+				///////////////////////////////////////////////////////////
+				DesktopContent.XMLHttpRequest("Request?RequestType=getTableGroups" +
+					"",
+					"",
+					function (req) 
+					{
+						var err = DesktopContent.getXMLValue(req, "Error");
+						if (err) 
+						{
+							Debug.log(err, Debug.HIGH_PRIORITY);
+							el.innerHTML = str;
+							return;
+						}
+
+						var groupNames = req.responseXML.getElementsByTagName("TableGroupName");
+						var keys = req.responseXML.getElementsByTagName("TableGroupKey");
+						var types = req.responseXML.getElementsByTagName("TableGroupType");
+
+						var groupName;
+
+						//Two group types here:	"Context" "Configuration"
+
+						str += "<div id='popUpDialog-div'>";
+						str += "Please select a " + treeGroupType_ + " group with which to compare to &apos;" + treeGroupName_ + 
+							"(" + treeGroupKey_ + ").&apos; <br>(Differences will appear in <b><label style='color:" + treeDiff_COLOR_ + ";'>ORANGE</label></b> in the Tree View.)" +
+							"<br><br>";
+						str += "<center>";
+
+						str += "Group Name to compare: " + DesktopContent.htmlOpen("select",
+							{
+								"id": "diffGroupName",
+								"title": "Select the group name to compare to &apos;" + 
+									treeGroupName_ + "(" + treeGroupKey_ + ").&apos;",						
+							},
+							"" /*innerHTML*/,
+							false /*doCloseTag*/);
+						var groupNameKeyCount = 0;
+						for (var j = 0; j < groupNames.length; ++j) 
+						{
+							if (types[j].getAttribute("value") == treeGroupType_) 
+							{
+								var tmpGroupName = groupNames[j].getAttribute("value");
+								if(tmpGroupName == groupName) 
+								{
+									++groupNameKeyCount;
+									continue; //only add new group names
+								}
+								
+								if(groupNameKeyCount == 0)  //skip first change
+								{
+									groupNameKeyCount = 1; 
+									continue;
+								}
+
+								str += "<option value='" + groupName + "' " + 
+									(groupName == treeGroupName_?"selected":"") + 
+									">";
+								str += groupName + " (" + groupNameKeyCount + " keys)";	//can display however
+								str += "</option>";
+								groupName = tmpGroupName;
+								groupNameKeyCount = 1;
+							}
+						}
+						str += "</select><br><br>";
+
+						str += "Group Key to compare: " + DesktopContent.htmlOpen("select",
+							{
+								"id": "diffGroupKey",
+								"title": "Select the group key to compare to &apos;" + 
+									treeGroupName_ + "(" + treeGroupKey_ + ").&apos;",						
+							},
+							"" /*innerHTML*/,
+							true /*doCloseTag*/);		
+						str += "<br><br>";
+						
+
+						str += DesktopContent.htmlOpen("input",
+							{
+								"type": "button",
+								"id": "diffButton",
+								"value": "Generate Diff Report and Enable Tree-view Diff Mode",
+								"title": "Generate difference report for the selected group and &apos;" + 
+									treeGroupName_ + "(" + treeGroupKey_ + ")&apos;, and enable tree-view differencing mode.",						
+							},
+							"" /*innerHTML*/,
+							true /*doCloseTag*/);
+				
+						str += "</div><br><br>";
+
+						el.innerHTML = str;
+
+						document.getElementById("display").appendChild(el); //add element to display div
+						el.style.display = "block";									
+
+						function localHandleDiffGroupNameChange(event)
+						{
+							var groupName;
+							if(event)
+								groupName = this.value;
+							else
+								groupName = treeGroupName_;
+							
+
+							Debug.log("localHandleDiffGroupNameChange",groupName);
+
+							var el = document.getElementById("diffGroupKey");
+							var str = "";
+							var groupKey;
+							var groupKeyCount = 0;
+							var firstGroupKey = -1;
+							var firstKeyAdded = false;
+							var foundSelected = false;
+
+							for (var j = 0; j < groupNames.length; ++j) 
+							{
+								if (groupNames[j].getAttribute("value") == groupName) 
+								{									
+									groupKey = keys[j].getAttribute("value");
+									if(firstGroupKey == -1) //save the first key because the last key comes first
+									{
+										firstGroupKey = groupKey|0;
+										Debug.logv({firstGroupKey});
+										continue;
+									}
+									else if(firstGroupKey < (groupKey|0)) //somehow first key is not actually the last key
+									{
+										Debug.log("Note the first key in the xml response was not the last key!");
+										str += "<option value='" + groupKey + "' " + 
+											((!event && ((groupKey|0)+1) == (treeGroupKey_|0))?"selected":"") + 
+											">";
+										str += groupKey;	//can display however
+										str += "</option>";
+										++groupKeyCount;
+										firstKeyAdded = true;
+									}
+
+									if((!event && ((groupKey|0)+1) == (treeGroupKey_|0)))
+										foundSelected = true;
+
+									str += "<option value='" + groupKey + "' " + 
+										((!event && ((groupKey|0)+1) == (treeGroupKey_|0))?"selected":"") + 
+										">";
+									str += groupKey;	//can display however
+									str += "</option>";
+									++groupKeyCount;
+								}
+							}
+							if(firstGroupKey != -1 && !firstKeyAdded) //then add the last key
+							{
+								str += "<option value='" + firstGroupKey + "' " +  
+									">";
+								str += firstGroupKey;	//can display however
+								str += "</option>";
+								++groupKeyCount;
+							}
+							el.innerHTML = str;
+							if(event || !foundSelected)
+								el.selectedIndex = groupKeyCount-1;
+
+						} //end localHandleDiffGroupNameChange()
+
+						document.getElementById("diffGroupName").onchange = localHandleDiffGroupNameChange;
+						localHandleDiffGroupNameChange(); //initialize diff key select
+
+						document.getElementById("diffButton").onmouseup = 
+							function () 
+							{
+								var selectedKey = document.getElementById("diffGroupKey").value;
+								var selectedGroupName = document.getElementById("diffGroupName").value;
+								Debug.log("treeDiffButton onmouseup", selectedGroupName,selectedKey);
+
+								DesktopContent.XMLHttpRequest("Request?RequestType=diffWithGroupKey&groupName=" + treeGroupName_ +
+									"&groupKey=" + treeGroupKey_ + 
+									"&diffKey=" + selectedKey + 
+									"&diffGroupName=" + selectedGroupName,
+									"",
+									function (req) {
+										var noDifference = DesktopContent.getXMLValue(req, "NoDifference") == "1";
+										var diffReport = DesktopContent.getXMLValue(req, "DiffReport");
+										var tablesWithDiff = [];
+										treeDiffTablesWithDiff_ = {}; //clear map of tables with diff for quick lookup and display in tree diff
+										Debug._errTruncLen = -1; //avoid truncation of Debug message
+										if(noDifference)
+											Debug.info(DesktopContent.tooltipConditionString(diffReport));
+										else
+										{
+											Debug.warn(DesktopContent.tooltipConditionString(diffReport));
+
+											var tablesWithDiff = req.responseXML.getElementsByTagName("TableWithDiff");	
+											var tableWithDiffName;
+											var recordsWithDiffName;
+											for(var i=0;i<tablesWithDiff.length;++i)
+											{
+												tableWithDiffName = tablesWithDiff[i].getAttribute("value");
+												treeDiffTablesWithDiff_[tableWithDiffName] = {};
+												var recordsWithDiff = tablesWithDiff[i].getElementsByTagName("RecordWithDiff");												
+												for(var j=0;j<recordsWithDiff.length;++j) //come in UID/colName pairs
+												{ 
+													recordsWithDiffName = recordsWithDiff[j].getAttribute("value");
+													treeDiffTablesWithDiff_[tableWithDiffName][recordsWithDiffName] = [];
+													var colNameWithDiff = recordsWithDiff[j].getElementsByTagName("ColNameWithDiff");										
+													for(var k=0;k<colNameWithDiff.length;++k) 
+														treeDiffTablesWithDiff_[tableWithDiffName][recordsWithDiffName].push(
+															colNameWithDiff[k].getAttribute("value"));
+												}
+											}
+											Debug.log("treeDiffTablesWithDiff_",treeDiffTablesWithDiff_);
+										}
+										Debug._errTruncLen = undefined; //return truncation
+														
+										//kill popup dialog
+										var el = document.getElementById("popUpDialog");
+										if (el) el.parentNode.removeChild(el);
+
+										treeDiffModeGroupName_ = selectedGroupName;
+										treeDiffModeGroupKey_ = selectedKey;
+										treeDiffModeApplied_ = true;
+
+										Debug.log("Tree diff mode enabled.");
+										hardRefreshTreeView();
+									}); //end diffWithActiveGroup
+							}; // end diffButton onmouseup
+
+					}, 0, 0, true //reqParam, progressHandler, callHandlerOnErr
+				); //end of getTableGroups handler
+
+
+				document.getElementById("display").appendChild(el); //add element to display div
+				el.style.display = "block";
+			}
+
+		} //end toggleTreeDiffMode()
+
+		//==============================================================================
 		//isTemporary
 		function isTemporary(version) { return version < -1;} 
 
@@ -3112,6 +3690,7 @@
 
 			var tableGroupName = DesktopContent.getXMLValue(req, "tableGroup");
 			var tableGroupKey = DesktopContent.getXMLValue(req, "tableGroupKey");
+			var tableGroupType = DesktopContent.getXMLValue(req, "tableGroupType");
 
 
 			//always update tree names
@@ -3203,6 +3782,8 @@
 
 			treeGroupName_ = tableGroupName;
 			treeGroupKey_ = tableGroupKey;
+			if(tableGroupType !== undefined) //assume the groupType stays correct (only defined for the root request)
+				treeGroupType_ = tableGroupType;
 
 
 			Debug.log("treeEditingNodeParentIdString_ " + treeEditingNodeParentIdString_);
@@ -3385,7 +3966,7 @@
 
 			//add tree
 			var tree = DesktopContent.getXMLNode(req, "tree");
-			var childrenLength = tree.children.length;
+			var childrenLength = (tree && tree.children)?tree.children.length:0;
 
 			if (childrenLength)
 				recursiveDrawTree(tree, depth, tree.getAttribute("value"), parentId);
@@ -3432,7 +4013,8 @@
 
 			//consider offering to delete the parent of last deleted child
 			if (parentId == treeEditingNodeParentIdString_ &&
-				treeEditingNodeType_ == "delete-uid") {
+				treeEditingNodeType_ == "delete-uid") 
+			{
 				treeEditingNodeType_ = ""; //clear so parent not get considered again
 
 				Debug.log("parentId " + parentId + " treeEditingNodeParentIdString_ " +
@@ -3625,6 +4207,7 @@
 			} //end localHandleEmptyParent
 			
 		} //end treeViewHandler()
+
 		//==============================================================================
 		//doCaptureTreeViewExpand ~		
 		function doCaptureTreeViewExpand() 
@@ -3726,14 +4309,18 @@
 			var nodeEditType, nodeEditTypeDisplay;
 			var isLink, isDisconnected, isGroupLink;
 			var choices;
+			var isDiffNode;
 
 			var pathHTML = path;
 			//make path html safe
 			pathHTML = pathHTML.replace(/</g, "&lt");
 			pathHTML = pathHTML.replace(/>/g, "&gt");
 
-			for (i = 0; i < nodes.length; ++i) {
+			for (i = 0; i < nodes.length; ++i) 
+			{
 				uid = treeNodeUID_++;
+				isDiffNode = (nodes[i].tagName == "diffNodeMissing");
+
 				nodeName = nodes[i].getAttribute("value");
 
 				//make nodeName html safe
@@ -3745,13 +4332,47 @@
 				childrenLength = nodes[i].children.length;
 				//Debug.log("child's childrenLength=" + childrenLength);
 
-				//handle value nodes
-				if (childrenLength &&
-					(value = nodes[i].children[0]).nodeName == "value"
-				)//&& (valueType = nodes[i].children[1]).nodeName != "Disconnected")
+
+				var offset = 0;
+
+				//node diff should always be first child
+				var diffValueStr = "";
+				if (childrenLength && 
+					(value = nodes[i].children[offset]).nodeName == "nodeDiff") 
 				{
-					value = value.getAttribute("value");
-					valueType = nodes[i].children[1].getAttribute("value"); //dataType
+					--childrenLength; //subtract the nodeDiff xml node from children length
+
+					Debug.log("Diff for",nodeName,":",value);
+					
+					//make diff value html safe
+					value = value.getAttribute("value").
+						replace(/</g, "&lt").replace(/>/g, "&gt");
+					diffValueStr += "<div class='diffTreeValueNode' " +
+						"title='The content of " + 
+						(treeHasChanged_?"the modified ":"") +
+						"&apos;" + treeGroupName_ + "(" +
+						treeGroupKey_ + ")&apos; is different:\n\n" + 
+						value.replaceAll("'","&apos;").replaceAll('"',"&quot;") + "' " +
+						">" + value +
+						"</div>";
+					++offset; //skip to next child
+				}
+
+				//handle value nodes
+				if (isDiffNode || (childrenLength &&
+					(value = nodes[i].children[offset]).nodeName == "value"
+				)) //&& (valueType = nodes[i].children[1]).nodeName != "Disconnected")
+				{
+					if(isDiffNode)
+					{
+						value = nodes[i].getAttribute("value");
+						valueType = "diffNode";
+					}
+					else
+					{
+						value = value.getAttribute("value");
+						valueType = nodes[i].children[1].getAttribute("value"); //dataType
+					}
 
 					//make value html safe
 					value = value.replace(/</g, "&lt");
@@ -3760,7 +4381,8 @@
 					//this is a value node!	
 					//////////=======================
 					treeViewHandlerStr_ +=
-						"<div class='treeNode' id='treeNode-" +
+						"<div class='treeNode" + (isDiffNode?" diffTreeNode":"") + 
+						"' id='treeNode-" +
 						(depth + "-" + uid) + "' >" +
 						"<div class='treeNode-Path' style='display:none' id='treeNode-path-" +
 						(depth + "-" + uid) + "'>" + // end path id
@@ -3806,6 +4428,7 @@
 					}
 
 					//normal value node and edit icon
+					if(!isDiffNode)
 					{
 						//start value node
 						treeViewHandlerStr_ +=
@@ -3844,12 +4467,34 @@
 							"title='Edit the value of this node.' " +
 							"></div>";
 					}
+					else //isDiffNode diff mode handling
+					{
+						//start value node (with no mouse over nor click)
+						treeViewHandlerStr_ +=
+							"<div class='treeNode-Value treeNode-ValueType-" + valueType +
+							"' " +
+							"id='treeNode-Value-" +
+							(depth + "-" + uid) + "' " +
+							">";
+						titleStr = "The content of " + 
+							(treeHasChanged_?"the modified ":"") +
+							"&apos;" + treeGroupName_ + "(" +
+							treeGroupKey_ + ")&apos; is different:\n\n" + value;
 
-					treeViewHandlerStr_ += "<div style='float:left; margin-left:9px;' id='treeNode-Value-leafNode-" +
+						//left side of value
+						treeViewHandlerStr_ +=
+							"<div style='float:left' title='" + titleStr + "'>" +
+							// "<b class='treeNode-Value-leafNode-fieldName bold-header'>" +
+							// "Diff-mode Missing" + "</b>" +
+							"</div><div style='float:left'></div>";
+					}
+
+					treeViewHandlerStr_ += "<div style='float:left; margin-left:" + 
+						(isDiffNode?0:9) + "px;' id='treeNode-Value-leafNode-" +
 						(depth + "-" + uid) +
-						"' class='" +
+						"' class='treeNode-Value-leafNode-fieldValue " +
 						"treeNode-Value-leafNode-ColumnName-" + nodeName +
-						"' " +
+						"' title='" + titleStr + "'" +						
 						">";
 
 					if (valueType == "OnOff" ||
@@ -3880,7 +4525,14 @@
 						"</div>" + //end treeNode Value value side div
 
 						"</div>" + //end treeNode Value div		
-						"</div>" + //end treeNode div							
+						"</div>"; //end treeNode div		
+						
+					//add diff value div if difference
+					if(diffValueStr != "")
+						treeViewHandlerStr_ += "<div style='float:left; margin-left:20px;'>" +
+					 		diffValueStr + "</div>";
+								
+					treeViewHandlerStr_ +=			
 						"<div id='clearDiv'></div>";
 					//////////=======================
 
@@ -3895,14 +4547,16 @@
 				tableLinkName = "";
 
 				//get value and table link name for this parent
-				if (childrenLength && (value = nodes[i].children[0]).nodeName != "value") {
+				if (childrenLength && (value = nodes[i].children[offset]).nodeName != "value") 
+				{
 					--childrenLength; //subtract the link ID node from children length
 
 					//this is a link node!	
 					
-					var offset = 1;
+					++offset; //move on to next child
 
-					if (value.getAttribute("value") == "Disconnected") {
+					if (value.getAttribute("value") == "Disconnected") 
+					{
 						//this is a disconnected link node!						
 						value = nodes[i].children[offset++]; //get link ID node
 						--childrenLength; //subtract the link ID node from children length
@@ -3943,7 +4597,8 @@
 					isLink = true;
 
 				}
-				else {
+				else
+				{
 					value = nodeName;
 					tableLinkName = nodeName;
 
@@ -3984,6 +4639,65 @@
 					(depth == 0 ? "table" : "link"));
 				nodeEditTypeDisplay = ((treeNavContextMenuItemHandlers.length == 0 && !isLink) ? "UID" :
 					(depth == 0 ? "Table" : "Link"));
+
+				//if in diff mode, check if there are known differences
+				if(treeDiffModeApplied_)
+				{
+					Debug.log("Diff check",tableLinkName,nodeName,path);
+					if(//in diff mode and is table node, check if table is known to have a difference
+						nodeEditType == "table" && treeDiffTablesWithDiff_[tableLinkName] !== undefined) 
+					{
+						Debug.log("Found table with difference", tableLinkName);
+						
+						var childDifferences = Object.keys(treeDiffTablesWithDiff_[tableLinkName]).length;
+						var diffValue = "";
+
+						if(childDifferences)
+							diffValue = "&lt&lt&lt Table has " + 
+								childDifferences + " record difference" +  (childDifferences > 1?"s":"") + " vs " + 
+								treeDiffModeGroupName_ + "(" + treeDiffModeGroupKey_ + ") &gt&gt&gt";
+						else //missing or added records is likely the culprit, which are hard to count
+							diffValue = "&lt&lt&lt Table has " + 
+								"record differences vs " + 
+								treeDiffModeGroupName_ + "(" + treeDiffModeGroupKey_ + ") &gt&gt&gt";
+						
+						diffValueStr += "<div class='diffTreeValueNode' " +
+							"title='The content of " + 
+							(treeHasChanged_?"the modified ":"") +
+							"&apos;" + treeGroupName_ + "(" +
+							treeGroupKey_ + ")&apos; is different:\n\n" + diffValue + "' " +
+							">" + diffValue +
+							"</div>";
+					}
+					else if(nodeEditType == "uid")
+					{
+						// extract / table / from path
+						var recordTable = path.substr(path.substr(0,path.length-1).lastIndexOf('/')+1);
+						recordTable = recordTable.substr(0,recordTable.length-1);
+						Debug.log("Looking at record in table", recordTable);
+
+						if(treeDiffTablesWithDiff_[recordTable] &&
+							treeDiffTablesWithDiff_[recordTable][nodeName] !== undefined) 
+						{
+							Debug.log("Found record with difference", recordTable, nodeName);
+
+							var colDifferences = Object.keys(treeDiffTablesWithDiff_[recordTable][nodeName]).length;
+							
+							var diffValue = "&lt&lt&lt Record has " + 
+								colDifferences + " difference" + (colDifferences>1?"s":"") + 
+								" vs " + 
+								treeDiffModeGroupName_ + "(" + treeDiffModeGroupKey_ + ") &gt&gt&gt";
+							
+							diffValueStr += "<div class='diffTreeValueNode' " +
+								"title='The content of " + 
+								(treeHasChanged_?"the modified ":"") +
+								"&apos;" + treeGroupName_ + "(" +
+								treeGroupKey_ + ")&apos; is different:\n\n" + diffValue + "' " +
+								">" + diffValue +
+								"</div>";
+						}
+					}
+				} //end tree diff mode checks
 
 				treeViewHandlerStr_ +=
 					"<div class='treeNode' id='treeNode-" +
@@ -4161,6 +4875,10 @@
 				treeViewHandlerStr_ += "</td></tr></table>"; //close tree node name/link table row
 
 				treeViewHandlerStr_ += "</div></td>"; //close pre-comment div and td
+
+				//add diff td if difference
+				if(diffValueStr != "")
+					treeViewHandlerStr_ += "<td>" + diffValueStr + "</td>";
 
 				if (nodeEditType == "table")
 					treeViewHandlerStr_ +=
@@ -4639,7 +5357,7 @@
 			//params:
 			//	(el,depth,uid,path,editClick,type,delayed)
 
-			if (editClick)	//2x click
+			if (editClick || type == "value")	//clicked pencil, or help user on leaf "value" nodes by going into edit mode immediately on any click
 			{
 				if (type == "table" || type == "link-comment") {
 					//edit table comment
@@ -4742,6 +5460,7 @@
 			{
 				if (type == "table" || type == "uid" || type == "link") {
 					toggleTreeChildren(depth, uid);
+					applySearchNode();
 				}
 				else if (type == "value") {
 					//N/A
@@ -4757,18 +5476,22 @@
 
 		//==============================================================================
 		//applySearchNode ~
-		function applySearchNode(event)
+		function applySearchNode(event = null)
 		{
 			var fields = document.getElementsByClassName("treeNode-Value");
 			var text = document.getElementById("tree-view-searchbar").value; 
 
-			// problem with keydown
-			if (event.keyCode >= 48 && event.keyCode <= 90)
+			if (event)
+			{
+				// problem with keydown
+				if (event.keyCode >= 48 && event.keyCode <= 90)
 				text = text + event.key;
 
-			if (event.keyCode === 8)
-				text = text.slice(0, -1);
+				if (event.keyCode === 8)
+					text = text.slice(0, -1);
+			}
 
+			// color the proper target
 			for (var i = 0; i < fields.length; i++)
 			{
 				if (text !== "" && fields[i].innerText.toLowerCase().includes(text.toLowerCase()))
@@ -4780,7 +5503,8 @@
 					fields[i].style.color = "inherit";
 				}
 			}
-			event.stopPropagation();
+			if (event)
+				event.stopPropagation();
 		}
 
 		//==============================================================================
@@ -5169,10 +5893,24 @@
 
 				if(doNext)
 					Debug.log("Do Next",idString);
-				
+
 				DesktopContent.XMLHttpRequest("Request?RequestType=getTreeView" +
 					"&tableGroup=" + tableGroupEls[0].innerHTML +
 					"&tableGroupKey=" + tableGroupEls[1].innerHTML +
+					(treeDiffModeApplied_?
+						(
+						"&diffGroup=" + treeDiffModeGroupName_ +
+						"&diffGroupKey=" + treeDiffModeGroupKey_
+						):""
+					) +
+					((!treeDiffModeApplied_ && treeHasChanged_ &&  //highlight modified values during editing
+					(treeDiffModeGroupName_ = tableGroupEls[0].innerHTML) &&
+					(treeDiffModeGroupKey_ = tableGroupEls[1].innerHTML))?
+						(
+						"&diffGroup=" + treeDiffModeGroupName_ +
+						"&diffGroupKey=" + treeDiffModeGroupKey_
+						):""
+					) +					
 					"&hideStatusFalse=" + (treeViewHideStatus_ ? 1 : 0) +
 					"&depth=1",
 					"startPath=" + path + nodeName + "/" +
@@ -5196,6 +5934,20 @@
 			DesktopContent.XMLHttpRequest("Request?RequestType=getTreeView" +
 				"&tableGroup=" + tableGroupName +
 				"&tableGroupKey=" + tableGroupKey +
+				(treeDiffModeApplied_?
+					(
+					"&diffGroup=" + treeDiffModeGroupName_+
+					"&diffGroupKey=" + treeDiffModeGroupKey_
+					):""
+				) +
+				((!treeDiffModeApplied_ && treeHasChanged_ &&  //highlight modified values during editing
+				(treeDiffModeGroupName_ = tableGroupName) &&
+				(treeDiffModeGroupKey_ = tableGroupKey))?
+					(
+					"&diffGroup=" + treeDiffModeGroupName_ +
+					"&diffGroupKey=" + treeDiffModeGroupKey_
+					):""
+				) +	
 				"&hideStatusFalse=" + (treeViewHideStatus_ ? 1 : 0) +
 				"&depth=1",
 				"startPath=/", treeViewHandler,
@@ -5434,7 +6186,10 @@
 				//if flag from server that an activation was attempted..)
 				if (DesktopContent.getXMLValue(req, "AttemptedGroupActivation") == "1")
 				{
-					Debug.log("Note: There was a successful activation of the group '" +
+					var type = DesktopContent.getXMLValue(req, "AttemptedGroupActivationType");
+					
+					Debug.log("Note: There was a successful activation of the " + 
+						((type && type != "")?(type + " "):"") + "group '" +
 						DesktopContent.getXMLValue(req, "AttemptedGroupActivationName") +
 						" (" +
 						DesktopContent.getXMLValue(req, "AttemptedGroupActivationKey") +
@@ -5442,13 +6197,16 @@
 						Debug.INFO_PRIORITY);
 				}
 				else if (!_firstTimeSilentActive && //only popup after the first time
-					str != oldStr)  //if change							  
+					// str != oldStr)  //if change		
+					_activeTableGroups.length >= 8 && 					  
+					(oldStr.indexOf(_activeTableGroups[0]+"</a>("+_activeTableGroups[1] + ")") < 0 || //active context group
+					 oldStr.indexOf(_activeTableGroups[6]+"</a>("+_activeTableGroups[7] + ")") < 0))  //active config group
 				{
-					if (thereIsAnEmpty) //may have been a deactivationg (due to error?)
+					if (thereIsAnEmpty) //may have been a deactivating (due to error?)
 						Debug.log("Note: There was a change to the active Context group (check the top of the page)!",
 							Debug.INFO_PRIORITY);
 					else //must have been an activation
-						Debug.log("Note: There was a successful activation of a group (likely from a different GUI, check the System View for changes)!",
+						Debug.log("Note: There was a successful activation of a group (check the System View for changes)!",
 							Debug.INFO_PRIORITY);
 
 					//Debug.log(_OTS_RELAUNCH_STR,Debug.INFO_PRIORITY);
@@ -6303,138 +7061,22 @@
 			
 			Debug.log("tableVersionDiff vA=" + vA + " vB=" + vB);
 
-			var allowIllegalColumns = false;
-
-			DesktopContent.XMLHttpRequest("Request?RequestType=getSpecificTable" +
-				"&dataOffset=0&chunkSize=" + _MAX_CHUNK_SIZE +
-				(allowIllegalColumns?"&allowIllegalColumns=1":"") +
-				"&tableName=" + _currentTableName +
-				"&version=" + vA,
+			// var allowIllegalColumns = false;
+			DesktopContent.XMLHttpRequest("Request?RequestType=diffTableVersions" +
+				"&tableName=" + _currentTableName + 
+				"&vA=" + vA +
+				"&vB=" + vB,
 				"",
-				function(reqA)
-				{
-					
-					DesktopContent.XMLHttpRequest("Request?RequestType=getSpecificTable" +
-						"&dataOffset=0&chunkSize=" + _MAX_CHUNK_SIZE +
-						(allowIllegalColumns?"&allowIllegalColumns=1":"") +
-						"&tableName=" + _currentTableName +
-						"&version=" + vB,
-						"",
-						function(reqB)
-						{
-
-							var errA = DesktopContent.getXMLValue(reqA, "Error");
-							var errB = DesktopContent.getXMLValue(reqB, "Error");
-							
-							if (errA) 
-							{
-								Debug.log("Error A:",errA, Debug.HIGH_PRIORITY);
-
-								Debug.log("There were errors loading version A='" + vA + 
-									"'.\n\n(You may want to try loading this version again " +
-									"to see what was partially loaded into the cache before failure. " +
-									"If you think, the failure is due to a column name change, " +
-									"you can also try to Copy the failing view to the new column names using the " +
-									"'Copy and Move' functionality.) " +
-									"\n\nPlease see the detailed Errors below:", Debug.HIGH_PRIORITY);
-								//try to power through
-							}
-
-							if (errB) 
-							{
-								Debug.log("Error B:",errB, Debug.HIGH_PRIORITY);
-
-								Debug.log("There were errors loading version B='" + vB + 
-									"'.\n\n(You may want to try loading this version again " +
-									"to see what was partially loaded into the cache before failure. " +
-									"If you think, the failure is due to a column name change, " +
-									"you can also try to Copy the failing view to the new column names using the " +
-									"'Copy and Move' functionality.) " +
-									"\n\nPlease see the detailed Errors below:", Debug.HIGH_PRIORITY);
-								//try to power through
-							}
-
-
-							var rowsA = reqA.responseXML.getElementsByTagName(
-								"CurrentVersionRows")[0].getElementsByTagName("Row");
-							var rowsB = reqB.responseXML.getElementsByTagName(
-								"CurrentVersionRows")[0].getElementsByTagName("Row");
-							
-							var displayTableRow = 0;
-							var firstRowValueDifference = true;
-							var rowEntriesA;
-							var rowEntriesB;
-							var diffStr = "";
-							if(rowsA.length != rowsB.length)
-								diffStr += "<tr" + 
-									(displayTableRow++ % 2?" style='background-color:rgb(95 27 27);' ":"") +
-									"><td colspan='2'>Row count mismatch in vA v" + vA + " = " + rowsA.length + 
-									"</td><td colspan='2'>Row count mismatch in vB" + vB + " = " + rowsB.length + 
-									"</td></tr>";
-
-							for (var rA = 0, rB = 0; rA < rowsA.length && rB < rowsB.length; ++rA, ++rB) 
-							{
-								rowEntriesA = rowsA[rA].getElementsByTagName("Entry");
-								rowEntriesB = rowsB[rB].getElementsByTagName("Entry");
-
-								Debug.log("r" + " " + rA + " " + rB,rowEntriesA.length,rowEntriesB.length);
-
-								if(rA == 0 && rB == 0 && rowEntriesA.length != rowEntriesB.length)
-									diffStr += "<tr" + 
-										(displayTableRow++ % 2?" style='background-color:rgb(95 27 27);' ":"") +
-										"><td colspan='2'>Column count mismatch in vA v" + vA + " = " + columns.A.length + 
-										"</td><td colspan='2'>Column count mismatch in vB" + vB + " = " + rowEntriesB.length + 
-										"</td></tr>";
-										
-								for (var cA = 0, cB = 0; cA < rowEntriesA.length && cB < rowEntriesB.length; ++cA, ++cB)
-								{
-									Debug.log("rc",rA,cA,rowEntriesA[cA].getAttribute("value"),
-										"vs",rB,cB,rowEntriesB[cB].getAttribute("value"));
-									if(rowEntriesA[cA].getAttribute("value") != rowEntriesB[cB].getAttribute("value"))
-									{
-										if(firstRowValueDifference)
-										{
-											//first time give header columns
-											firstRowValueDifference = false;
-											diffStr += "<tr" + 
-												" style='background-color:rgb(82 0 0);' " + 
-												"><th>v" + vA + " [row,col]</th><th>v" + vA + " value" +
-												"</th><th>v" + vB + " [row,col]</th><th>v" + vB + " value" +
-												"</th></tr>";									
-										}
-										diffStr += "<tr" + 
-											(displayTableRow++ % 2?" style='background-color:rgb(95 27 27);' ":"") +
-											"><td style='text-align:center'>[" + rA + "," + cA + "]:</td><td style='white-space: nowrap'>" + rowEntriesA[cA].getAttribute("value") +
-											"</td><td style='text-align:center'>[" + rB + "," + cB + "]:</td><td style='white-space: nowrap'>" + rowEntriesB[cB].getAttribute("value") +
-											"</td></tr>";
-									}
-								} //end vA-vB col loop
-							} //end vA-vB row loop
-
-							if(diffStr != "")
-							{
-								var tmp = Debug._ERR_TRUNCATION_LENGTH;
-								Debug._ERR_TRUNCATION_LENGTH = diffStr.length + 200;
-								Debug.log("Differences were found between tables v" + vA + 
-									" and v" + vB + ". Here are the results:\n" + 
-									"<table>" +
-									diffStr + "</table>", Debug.WARN_PRIORITY);
-								Debug._ERR_TRUNCATION_LENGTH = tmp; //replace original truncation value
-							}
-							else if(rowsA.length == 0 && rowsB.length == 0)
-								Debug.log("Both tables v" + vA + " and v" + vB + " were empty!", Debug.WARN_PRIORITY);
-							else
-								Debug.log("This should be impossible? No differences found between v" + 
-									vA + " and v" + vB,Debug.INFO_PRIORITY);
-						}, 
-						0, //parameter 
-						0, true  //progressHandler, callHandlerOnErr
-					);
-
-				}, 
-				0, //parameter 
-				0, true  //progressHandler, callHandlerOnErr
-			);
+				function (req) {
+					var noDifference = DesktopContent.getXMLValue(req, "NoDifference") == "1";
+					var diffReport = DesktopContent.getXMLValue(req, "DiffReport");
+					Debug._errTruncLen = -1; //avoid truncation of Debug message
+					if(noDifference)
+						Debug.info(DesktopContent.tooltipConditionString(diffReport));
+					else
+						Debug.warn(DesktopContent.tooltipConditionString(diffReport));
+					Debug._errTruncLen = undefined;
+				}); //end diffWithActiveGroup
 
 		} //end tableVersionDiff()
 
@@ -7121,6 +7763,20 @@
 			DesktopContent.XMLHttpRequest("Request?RequestType=getTreeView" +
 				"&tableGroup=" + treeGroupName_ +
 				"&tableGroupKey=" + treeGroupKey_ +
+				(treeDiffModeApplied_?
+					(
+					"&diffGroup=" + treeDiffModeGroupName_+
+					"&diffGroupKey=" + treeDiffModeGroupKey_
+					):""
+				) +
+				((!treeDiffModeApplied_ && treeHasChanged_ &&  //highlight modified values during editing
+					(treeDiffModeGroupName_ = treeGroupName_) &&
+					(treeDiffModeGroupKey_ = treeGroupKey_))?
+					(
+					"&diffGroup=" + treeDiffModeGroupName_ +
+					"&diffGroupKey=" + treeDiffModeGroupKey_
+					):""
+				) +	
 				"&hideStatusFalse=" + 1 +
 				"&depth=1",
 				"startPath=" + "/" +
@@ -7927,6 +8583,20 @@
 							DesktopContent.XMLHttpRequest("Request?RequestType=getTreeView" +
 								"&tableGroup=" + treeGroupName_ +
 								"&tableGroupKey=" + treeGroupKey_ +
+								(treeDiffModeApplied_?
+									(
+									"&diffGroup=" + treeDiffModeGroupName_+
+									"&diffGroupKey=" + treeDiffModeGroupKey_
+									):""
+								) +
+								((!treeDiffModeApplied_ && treeHasChanged_ &&  //highlight modified values during editing
+									(treeDiffModeGroupName_ = treeGroupName_) &&
+									(treeDiffModeGroupKey_ = treeGroupKey_))?
+									(
+									"&diffGroup=" + treeDiffModeGroupName_ +
+									"&diffGroupKey=" + treeDiffModeGroupKey_
+									):""
+								) +	
 								"&hideStatusFalse=" + 1 +
 								"&depth=1",
 								"startPath=" + "/" +
@@ -9761,6 +10431,143 @@
 			el.style.display = "block";
 		} //end popUpSaveTreeForm()
 
+
+
+		//==============================================================================
+		//handlePopUpSetGroupAlias ~~
+		function handlePopUpSetGroupAlias(affectedGroupNames,affectedGroupKeys) 
+		{
+			Debug.log("CfgGUI handlePopUpSetGroupAlias",affectedGroupNames,affectedGroupKeys);
+
+			//check each alias checkbox
+			//	for each alias that is checked
+			//		set alias for new group
+			//if any aliases modified, save and activate backbone
+
+			//get checkboxes
+			var setAliasCheckboxes =
+				document.getElementsByClassName("popUpDialog-setGroupAlias");
+
+			var groupAlias = "", groupName = "", groupKey = "";
+			var setAliasCheckboxIndex = 0;
+
+			//in order to set alias, we need:
+			//	groupAlias
+			//	groupName
+			//	groupKey				
+
+			//for each set alias checkbox that is checked
+			//	modify the active group alias table one after the other
+
+			//get next affected group index			
+			while (setAliasCheckboxIndex < setAliasCheckboxes.length)
+			{
+				if(!setAliasCheckboxes[setAliasCheckboxIndex].checked)
+				{
+					Debug.log("Skipping checkbox " + (++setAliasCheckboxIndex));
+					continue;
+				}
+
+				//get next alias
+				{
+					var el = document.getElementById("popUpDialog-editAliasSelect-" +
+						setAliasCheckboxIndex);
+					if (el.style.display == "none")
+					{
+						//get value from text box
+						el = document.getElementById("popUpDialog-editAliasTextBox-" +
+							setAliasCheckboxIndex);
+					}
+
+					if (!el.value || el.value.trim() == "")
+					{
+						Debug.log("Process interrupted. Invalid empty alias given!", Debug.HIGH_PRIORITY);
+
+						//kill popup dialog
+						var el = document.getElementById("popUpDialog");
+						if (el) el.parentNode.removeChild(el);
+						return;
+					}
+					groupAlias += (groupAlias.length?",":"") + el.value;
+					hasAnAliasChange = true;
+				} //end get next alias
+
+				groupName += (groupName.length?",":"") + affectedGroupNames[setAliasCheckboxIndex];
+				groupKey += (groupKey.length?",":"") + affectedGroupKeys[setAliasCheckboxIndex];
+
+				Debug.log("groupAlias = " + groupAlias);
+				Debug.log("groupName = " + groupName);
+				Debug.log("groupKey = " + groupKey);
+
+				++setAliasCheckboxIndex;
+			} //end alias CSV retrieval loop
+
+			if(groupAlias.length)
+			{
+				ConfigurationAPI.setGroupAliasInActiveBackbone(groupAlias, groupName, groupKey,
+					0,
+					function(retParams)
+					{										
+						if (retParams) 
+						{
+							if (retParams.newGroupCreated)
+								Debug.log("Successfully modified the active Backbone group " +
+									" to set the System Alias '" + groupAlias + "' to " +
+									" refer to the current group '" + groupName +
+									" (" + groupKey + ").'" +
+									"\n\n" +
+									"Backbone group '" + retParams.groupName + " (" +
+									retParams.groupKey + ")' was created and activated.",
+									Debug.INFO_PRIORITY);
+							else
+								Debug.log("Success, but no need to create a new Backbone group. " +
+									"An existing Backbone group " +
+									" already has the System Alias '" + groupAlias + "' " +
+									" referring to the current group '" + groupName +
+									" (" + groupKey + ").'" +
+									"\n\n" +
+									"Backbone group '" + retParams.groupName + " (" +
+									retParams.groupKey + ")' was activated.",
+									Debug.INFO_PRIORITY);
+						}
+						else 
+						{
+							Debug.log("Process interrupted. Failed to modify the currently active Backbone!", Debug.HIGH_PRIORITY);
+
+							//kill popup dialog
+							var el = document.getElementById("popUpDialog");
+							if (el) el.parentNode.removeChild(el);
+							return;
+						}
+
+						Debug.log("Saving and activating Backbone done.");
+
+						//kill popup dialog
+						var el = document.getElementById("popUpDialog");
+						if (el) el.parentNode.removeChild(el);
+
+						Debug.log("Saving operations complete.", Debug.INFO_PRIORITY);
+						treeHasChanged(true); // reset
+						return;
+
+					}, //end setGroupAliasInActiveBackbone return handler
+					true); //request return parameters	
+				Debug.log("Aliases set in motion"); //so done with this thread	
+			}
+			else
+			{
+				Debug.log("No System Aliases were changed, so Backbone was not modified. Done.");
+
+				//kill popup dialog
+				var el = document.getElementById("popUpDialog");
+				if (el) el.parentNode.removeChild(el);
+
+				Debug.log("Saving operations complete.", Debug.INFO_PRIORITY);
+				treeHasChanged(true); // reset
+				return;
+			}
+		} //end handlePopUpSetGroupAlias()
+
 		//==============================================================================
 		//saveModifiedTree ~~
 		//	ignoreWarnings = true will ignore warnings when saving groups
@@ -10100,136 +10907,7 @@
 							}
 
 							Debug.log("Moving on to Alias creation...");
-
-							//check each alias checkbox
-							//	for each alias that is checked
-							//		set alias for new group
-							//if any aliases modified, save and activate backbone
-
-							//get checkboxes
-							var setAliasCheckboxes =
-								document.getElementsByClassName("popUpDialog-setGroupAlias");
-
-							var groupAlias, groupName, groupKey;
-							var setAliasCheckboxIndex = -1;
-							var groupAliasName, groupAliasVersion;
-
-							//in order to set alias, we need:
-							//	groupAlias
-							//	groupName
-							//	groupKey				
-
-							//for each set alias checkbox that is checked
-							//	modify the active group alias table one after the other
-
-
-							localNextAliasHandler(); //set in motion
-
-							//=============================
-							//localNextAliasHandler ~ //////////////////////////////////
-							//	uses setAliasCheckboxIndex to iterate through setAliasCheckboxes
-							//	and send the next request to modify the activegroupAlias table
-							//	sequentially
-							function localNextAliasHandler(retParams)
-							{
-								//first time there is no setAliasCheckboxIndex, it is -1
-								if (setAliasCheckboxIndex >= 0) 
-								{
-									if (retParams) 
-									{
-										if (retParams.newGroupCreated)
-											Debug.log("Successfully modified the active Backbone group " +
-												" to set the System Alias '" + groupAlias + "' to " +
-												" refer to the current group '" + groupName +
-												" (" + groupKey + ").'" +
-												"\n\n" +
-												"Backbone group '" + retParams.groupName + " (" +
-												retParams.groupKey + ")' was created and activated.",
-												Debug.INFO_PRIORITY);
-										else
-											Debug.log("Success, but no need to create a new Backbone group. " +
-												"An existing Backbone group " +
-												" already has the System Alias '" + groupAlias + "' " +
-												" referring to the current group '" + groupName +
-												" (" + groupKey + ").'" +
-												"\n\n" +
-												"Backbone group '" + retParams.groupName + " (" +
-												retParams.groupKey + ")' was activated.",
-												Debug.INFO_PRIORITY);
-									}
-									else 
-									{
-										Debug.log("Process interrupted. Failed to modify the currently active Backbone!", Debug.HIGH_PRIORITY);
-
-										//kill popup dialog
-										var el = document.getElementById("popUpDialog");
-										if (el) el.parentNode.removeChild(el);
-										return;
-									}
-
-									++setAliasCheckboxIndex; //req back, so ready for next index
-								}
-								else
-									setAliasCheckboxIndex = 0; //ready for first checkbox
-
-								//get next affected group index			
-								while (setAliasCheckboxIndex < setAliasCheckboxes.length &&
-									!setAliasCheckboxes[setAliasCheckboxIndex].checked)
-									Debug.log("Skipping checkbox " + (++setAliasCheckboxIndex));
-
-								if (setAliasCheckboxIndex >= setAliasCheckboxes.length)
-								{
-									Debug.log("Done with alias checkboxes ");
-
-									if (!retParams)//req) 
-									{
-										Debug.log("No System Aliases were changed, so Backbone was not modified. Done.");
-
-										//kill popup dialog
-										var el = document.getElementById("popUpDialog");
-										if (el) el.parentNode.removeChild(el);
-
-										Debug.log("Tree saving operations complete.", Debug.INFO_PRIORITY);
-										treeHasChanged(true); // reset
-										return;
-									}
-
-									Debug.log("Saving and activating Backbone done.");
-
-									//kill popup dialog
-									var el = document.getElementById("popUpDialog");
-									if (el) el.parentNode.removeChild(el);
-
-									Debug.log("Tree saving operations complete.", Debug.INFO_PRIORITY);
-									treeHasChanged(true); // reset
-									return;
-								}
-
-								//get next alias
-								{
-									var el = document.getElementById("popUpDialog-editAliasSelect-" +
-										setAliasCheckboxIndex);
-									if (el.style.display == "none")
-									{
-										//get value from text box
-										el = document.getElementById("popUpDialog-editAliasTextBox-" +
-											setAliasCheckboxIndex);
-									}
-									groupAlias = el.value;
-								}
-
-								groupName = affectedGroupNames[setAliasCheckboxIndex];
-								groupKey = affectedGroupKeys[setAliasCheckboxIndex];
-
-								Debug.log("groupAlias = " + groupAlias);
-								Debug.log("groupName = " + groupName);
-								Debug.log("groupKey = " + groupKey);
-
-								ConfigurationAPI.setGroupAliasInActiveBackbone(groupAlias, groupName, groupKey,
-									0,
-									localNextAliasHandler,
-									true); //request return parameters		
-							}
+							handlePopUpSetGroupAlias(affectedGroupNames,affectedGroupKeys);			
 
 							Debug.log("Aliases set in motion"); //so done with this thread						
 							return;
@@ -10937,6 +11615,7 @@
 					{
 						treeMemberComments_[tableIndex] = newValue;
 						_editingCellEl.appendChild(document.createTextNode("//" + decodeURIComponent(newValue)));
+						_editingCellEl.style.color = treeDiff_COLOR_;
 					}
 					else if (treeEditingNodeType_ == "link-comment") 
 					{
@@ -10944,11 +11623,13 @@
 						var el = el = document.getElementById("treeNode-TableComment-" + treeEditingNodeIdString_);
 						el.innerHTML = "";
 						el.appendChild(document.createTextNode("//" + decodeURIComponent(newValue)));
+						el.style.color = treeDiff_COLOR_;
 					}
 					else if (treeEditingNodeType_ == "table-newRow") 
 					{
 						//replace the value that was erased with table name
 						_editingCellEl.appendChild(document.createTextNode(treeEditingTargetTable_));
+						_editingCellEl.style.color = treeDiff_COLOR_;
 
 						//reset children
 						toggleTreeChildren(treeEditingNodeIdString_.split('-')[0],
@@ -10962,6 +11643,7 @@
 					{
 						//modify display and nodename with new value
 						_editingCellEl.appendChild(document.createTextNode(decodeURIComponent(newValue)));
+						_editingCellEl.style.color = treeDiff_COLOR_;
 
 						var el = document.getElementById("treeNode-nodeName-" +
 							treeEditingNodeIdString_);
@@ -11042,7 +11724,7 @@
 						//normal data
 						//bitmap data (do nothing would be ok, value already set)
 						_editingCellEl.appendChild(document.createTextNode(decodeURIComponent(newValue)));
-
+						_editingCellEl.style.color = treeDiff_COLOR_;
 					}
 					else if (treeEditingNodeType_ == "value-bool") 
 					{
@@ -11063,6 +11745,7 @@
 							"margin: 2px 0 0 6px;" +
 							"'></div>";
 						_editingCellEl.innerHTML = str;
+						_editingCellEl.style.color = treeDiff_COLOR_;
 					}
 					else if (treeEditingNodeType_ == "value-groupid") 
 					{
@@ -11117,6 +11800,7 @@
 								{
 									//just change value (still in group) and done	
 									_editingCellEl.appendChild(document.createTextNode(newValue));
+									_editingCellEl.style.color = treeDiff_COLOR_;
 								}
 								else //matching link ids
 								{
@@ -11131,7 +11815,10 @@
 										}
 
 									if (stillInGroup)
+									{
 										_editingCellEl.appendChild(document.createTextNode(newValue));
+										_editingCellEl.style.color = treeDiff_COLOR_;
+									}
 									else // remove from group
 									{
 										//need to remove parent 'treeNode' from 
@@ -11157,6 +11844,7 @@
 												"</div>" + //end treeNode div							
 												"<div id='clearDiv'></div>";
 											popChildrenNode.innerHTML = str;
+											popChildrenNode.style.color = treeDiff_COLOR_;
 										}
 									}
 								}
@@ -11167,10 +11855,14 @@
 								//finish edit
 								Debug.log("Assuming new value is not relevant to position in tree - here is the error: " + e);
 								_editingCellEl.appendChild(document.createTextNode(newValue));
+								_editingCellEl.style.color = treeDiff_COLOR_;
 							}
 						}
 						else
+						{
 							_editingCellEl.appendChild(document.createTextNode(newValue));
+							_editingCellEl.style.color = treeDiff_COLOR_;
+						}
 					}
 					else	//unrecognized type!?
 					{
@@ -11329,8 +12021,9 @@
 			//add type/ID as text node first in case not html safe
 			var newValue = "-(" + linkType + " = " + linkId + ")";
 			targetEl.appendChild(document.createTextNode(newValue));
+			targetEl.style.color = treeDiff_COLOR_;
 
-			//then add html piece to tartget node (acquire html version of type/ID
+			//then add html piece to target node (acquire html version of type/ID
 			newValue = targetEl.innerHTML;
 			newValue = "<label class='treeNode-LinkColumnNameLabel'>" +
 				LinkColumnNameLabel +
@@ -13493,6 +14186,127 @@
 		} //end popUpGroupUploadDownloadUpdateForm()
 
 		//==============================================================================
+		//diffWithActiveGroup
+		function diffWithActiveGroup(groupName, groupKey) 
+		{
+			Debug.log("CfgGUI diffWithActiveGroup",groupName,groupKey);
+
+			DesktopContent.XMLHttpRequest("Request?RequestType=diffWithActiveGroup&groupName=" + groupName +
+				"&groupKey=" + groupKey,
+				"",
+				function (req) {
+					var noDifference = DesktopContent.getXMLValue(req, "NoDifference") == "1";
+					var diffReport = DesktopContent.getXMLValue(req, "DiffReport");
+					if(noDifference)
+						Debug.info(DesktopContent.tooltipConditionString(diffReport));
+					else
+						Debug.warn(DesktopContent.tooltipConditionString(diffReport));
+				}); //end diffWithActiveGroup
+		} //end diffWithActiveGroup()
+
+		//==============================================================================
+		//popUpDiffWithAnotherKey
+		function popUpDiffWithAnotherKey(groupName, groupKey) 
+		{
+			Debug.log("CfgGUI popUpDiffWithAnotherKey ",groupName,groupKey);
+			var el = document.getElementById("existingGroupKeys");
+			if(!el)
+			{
+				Debug.err("No historical group keys to select!");
+				return;
+			}
+			var keys = el.innerText.split(' ');
+			if(!keys.length)
+			{
+				Debug.err("No historical group keys to select!");
+				return;
+			}
+
+			Debug.logv({keys});
+			
+			var el = document.getElementById("popUpDialog");
+			if (!el) 
+			{
+				el = document.createElement("div");
+				el.setAttribute("id", "popUpDialog");
+			}
+			el.style.display = "none";
+
+			//set position and size
+			var w = 460;
+			var h = 192;
+			ConfigurationAPI.setPopUpPosition(el, w /*w*/, h /*h*/);
+
+			var str = "<a id='" +
+				"popUpDialog" +
+				"-header' onclick='var el = document.getElementById(" +
+				"\"popUpDialog\"); if(el) el.parentNode.removeChild(el); return false;'>Cancel</a><br><br>";
+
+			str += "<div id='popUpDialog-div'>";
+			str += "Please select the group key of &apos;" + groupName + 
+				"&apos; for which you would like to compare to key (" + groupKey + ") and generate a difference report"
+				+ ":<br><br>";
+
+			str += "Group Key to compare: " + DesktopContent.htmlOpen("select",
+				{
+					"id": "diffSelect",
+					"title": "Select the group key to compare to &apos;" + 
+						groupName + "(" + groupKey + ").&apos;",						
+				},
+				"" /*innerHTML*/,
+				false /*doCloseTag*/);
+			for(var i=0;i<keys.length;++i)
+				str += "<option value='" + keys[i] + "' " +
+					//default to previous key
+					(((groupKey|0)-1) == (keys[i]|0)?"selected":"") + ">" + 
+					keys[i] + //can display however
+					"</option>";
+			str += "</select><br><br>";
+
+			str += DesktopContent.htmlOpen("input",
+					{
+						"type": "button",
+						"id": "diffButton",
+						"value": "Diff Group Keys",
+						"title": "Generate difference report for the two selected &apos;" + 
+							groupName + "&apos; group keys.",						
+					},
+					"" /*innerHTML*/,
+					true /*doCloseTag*/);
+		
+			str += "</div><br><br>";
+
+			el.innerHTML = str;
+
+			document.getElementById("display").appendChild(el); //add element to display div
+			el.style.display = "block";
+						
+			document.getElementById("diffButton").onmouseup = 
+				function () 
+				{
+					var selectedKey = document.getElementById("diffSelect").value;
+					Debug.log("diffButton onmouseup", selectedKey);
+
+					DesktopContent.XMLHttpRequest("Request?RequestType=diffWithGroupKey&groupName=" + groupName +
+						"&groupKey=" + groupKey + 
+						"&diffKey=" + selectedKey,
+						"",
+						function (req) {
+							var noDifference = DesktopContent.getXMLValue(req, "NoDifference") == "1";
+							var diffReport = DesktopContent.getXMLValue(req, "DiffReport");
+							Debug._errTruncLen = -1; //avoid truncation of Debug message
+							if(noDifference)
+								Debug.info(DesktopContent.tooltipConditionString(diffReport));
+							else
+								Debug.warn(DesktopContent.tooltipConditionString(diffReport));
+							Debug._errTruncLen = undefined;
+						}); //end diffWithActiveGroup
+				};
+
+
+		} //end popUpDiffWithAnotherKey()
+
+		//==============================================================================
 		//popUpVersionAliasSpecificGroupForm
 		function popUpVersionAliasSpecificGroupForm(groupName, groupKey) 
 		{
@@ -15418,15 +16232,16 @@
 							++numberOfReturns;
 
 							var newGroupKey = DesktopContent.getXMLValue(req, "TableGroupKey");
+							var newGroupType = DesktopContent.getXMLValue(req, "TableGroupType");
 							affectedGroupKeys.push(newGroupKey); //can only be index 0, since affectedArr[0] was used for request
 
 							var foundEquivalentKey = DesktopContent.getXMLValue(req, "foundEquivalentKey") | 0; //as int
 
 							if (foundEquivalentKey)
-								Debug.log("Found equivalent group '" + attemptedNewGroupName +
+								Debug.log("Found equivalent " + (newGroupType?(newGroupType + " "):"") + "group '" + attemptedNewGroupName +
 									" (" + newGroupKey + ")'", Debug.INFO_PRIORITY);
 							else
-								Debug.log("Successfully created new group '" + attemptedNewGroupName +
+								Debug.log("Successfully created new " + (newGroupType?(newGroupType + " "):"") + "group '" + attemptedNewGroupName +
 									" (" + newGroupKey + ")'", Debug.INFO_PRIORITY);
 
 							//need to modify root group name if changed
@@ -15442,183 +16257,7 @@
 								Debug.log("Done with group saving.");
 
 								Debug.log("Moving on to Alias creation...");
-
-								//check each alias checkbox
-								//	for each alias that is checked
-								//		set alias for new group
-								//if any aliases modified, save and activate backbone
-
-								//get checkboxes
-								var setAliasCheckboxes =
-									document.getElementsByClassName("popUpDialog-setGroupAlias");
-
-								var groupAlias, groupName, groupKey;
-								var setAliasCheckboxIndex = 0;
-								var groupAliasName, groupAliasVersion;
-
-								//in order to set alias, we need:
-								//	groupAlias
-								//	groupName
-								//	groupKey				
-
-								//for each set alias checkbox that is checked
-								//	modify the active group alias table one after the other
-
-								//localNextAliasHandler
-								//	uses setAliasCheckboxIndex to iterate through setAliasCheckboxes
-								//	and send the next request to modify the activegroupAlias table
-								//	sequentially
-								function localNextAliasHandler(req) 
-								{
-									//first time there is no req
-									if (req)
-									{
-										var err = DesktopContent.getXMLValue(req, "Error");
-										if (err) 
-										{
-											Debug.log(err, Debug.HIGH_PRIORITY);
-											Debug.log("Process interrupted. Failed to modify the currently active Backbone!", Debug.HIGH_PRIORITY);
-
-											//kill popup dialog
-											var el = document.getElementById("popUpDialog");
-											if (el) el.parentNode.removeChild(el);
-											return;
-										}
-
-										groupAliasName = DesktopContent.getXMLValue(req, "savedName");
-										groupAliasVersion = DesktopContent.getXMLValue(req, "savedVersion");
-
-										Debug.log("Successfully added the system alias '" + groupAlias +
-											"' reference to group '" + groupName + " (" + groupKey + ")' " +
-											" in table '" + groupAliasName + "-v" + groupAliasVersion +
-											"'.",
-											Debug.INFO_PRIORITY);
-										++setAliasCheckboxIndex; //req back, so ready for next index
-									}
-
-									//get next affected group index			
-									while (setAliasCheckboxIndex < setAliasCheckboxes.length &&
-										!setAliasCheckboxes[setAliasCheckboxIndex].checked)
-										Debug.log("Skipping checkbox " + (++setAliasCheckboxIndex));
-
-									if (setAliasCheckboxIndex >= setAliasCheckboxes.length) 
-									{
-										Debug.log("Done with alias checkboxes ");
-
-										if (!req) 
-										{
-											Debug.log("Backbone was not modified, so no need to save.");
-
-											//kill popup dialog
-											var el = document.getElementById("popUpDialog");
-											if (el) el.parentNode.removeChild(el);
-
-											Debug.log("Tree saving operations complete.", Debug.INFO_PRIORITY);
-											treeHasChanged(true); // reset
-											return;
-										}
-										Debug.log("Saving and activating modified Backbone");
-
-
-										Debug.log("groupAliasName=" + groupAliasName);
-										Debug.log("groupAliasVersion=" + groupAliasVersion);
-										var tableNames = req.responseXML.getElementsByTagName("oldBackboneName");
-										var tableVersions = req.responseXML.getElementsByTagName("oldBackboneVersion");
-
-										//make a new backbone with old versions of everything except Group Alias 
-										var tableMap = "tableList=";
-										var name;
-										for (var i = 0; i < tableNames.length; ++i)
-										{
-											name = tableNames[i].getAttribute("value");
-
-											if (name == groupAliasName)
-											{
-												tableMap += name + "," +
-													groupAliasVersion + ",";
-												continue;
-											}
-											//else use old member
-											tableMap += name + "," +
-												tableVersions[i].getAttribute("value") + ",";
-										}
-										Debug.log(tableMap);
-
-
-										var newBackboneName = ConfigurationAPI._activeGroups.Backbone.groupName;
-										if(ConfigurationAPI._activeGroups.Backbone.groupName == "")
-											newBackboneName = "WizBackbone";
-										
-										ConfigurationAPI.saveGroupAndActivate(newBackboneName, tableMap,
-											function (retParams) 
-											{
-												Debug.log("Save and activate is done.");
-
-												if (retParams) 
-												{
-													Debug.log("Successfully modified the active Backbone group.\n" +
-														"Backbone group '" + retParams.groupName + " (" +
-														retParams.groupKey + ")' was activated.",
-														Debug.INFO_PRIORITY);
-												}
-
-												//kill popup dialog
-												var el = document.getElementById("popUpDialog");
-												if (el) el.parentNode.removeChild(el);
-
-												Debug.log("Tree saving operations complete.", Debug.INFO_PRIORITY);
-												treeHasChanged(true); // reset
-												return;
-											},	//end of done handler for saveGroupAndActivate
-											true, //request return parameters
-											true  //lookForEquivalent
-										);
-										return;
-									}
-
-									//get next alias
-									{
-										var el = document.getElementById("popUpDialog-editAliasSelect-" +
-											setAliasCheckboxIndex);
-										if (el.style.display == "none")
-										{
-											//get value from text box
-											el = document.getElementById("popUpDialog-editAliasTextBox-" +
-												setAliasCheckboxIndex);
-										}
-										groupAlias = el.value;
-									}
-
-									groupName = affectedGroupNames[setAliasCheckboxIndex];
-									groupKey = affectedGroupKeys[setAliasCheckboxIndex];
-
-									Debug.log("groupAlias = " + groupAlias);
-									Debug.log("groupName = " + groupName);
-									Debug.log("groupKey = " + groupKey);
-
-									if (!groupAlias || groupAlias.trim() == "")
-									{
-										Debug.log("Process interrupted. Invalid empty alias given!", Debug.HIGH_PRIORITY);
-
-										//kill popup dialog
-										var el = document.getElementById("popUpDialog");
-										if (el) el.parentNode.removeChild(el);
-
-										return;
-									}
-
-									DesktopContent.XMLHttpRequest("Request?RequestType=setGroupAliasInActiveBackbone" +
-										"&groupAlias=" + groupAlias +
-										"&groupName=" + groupName +
-										"&groupKey=" + groupKey, "",
-										localNextAliasHandler,
-										0, 0, true  //reqParam, progressHandler, callHandlerOnErr
-									);
-								} //end localNextAliasHandler()
-
-								localNextAliasHandler();
-
-								Debug.log("Aliases set in motion");
+								handlePopUpSetGroupAlias(affectedGroupNames,affectedGroupKeys);
 
 								return;
 							}
@@ -15805,7 +16444,7 @@
 				var i = memberTableVersion.indexOf(needle);
 				var j = memberTableVersion.indexOf("&quot;,&quot;",i + needle.length);
 				memberTableVersion = memberTableVersion.substr(i + needle.length,j - i - needle.length);				
-				memberTableVersion |= 0;
+				//memberTableVersion |= 0; // do not convert to int, because aliases are represented as strings!
 				// Debug.logv({memberTableVersion});
 
 				var backLinkStr = "setupSpecificTableGroup(\\\"" + groupName + "\\\",\\\"" +
@@ -16181,183 +16820,8 @@
 								Debug.log("Done with group saving.");
 
 								Debug.log("Moving on to Alias creation...");
-
-								var newBackboneName = ConfigurationAPI._activeGroups.Backbone.groupName;
-								if(ConfigurationAPI._activeGroups.Backbone.groupName == "")
-									newBackboneName = "WizBackbone";
-
-								//check each alias checkbox
-								//	for each alias that is checked
-								//		set alias for new group
-								//if any aliases modified, save and activate backbone
-
-								//get checkboxes
-								var setAliasCheckboxes =
-									document.getElementsByClassName("popUpDialog-setGroupAlias");
-
-								var groupAlias, groupName, groupKey;
-								var setAliasCheckboxIndex = 0;
-								var groupAliasName, groupAliasVersion;
-
-								//in order to set alias, we need:
-								//	groupAlias
-								//	groupName
-								//	groupKey				
-
-								//for each set alias checkbox that is checked
-								//	modify the active group alias table one after the other
-
-								//localNextAliasHandler
-								//	uses setAliasCheckboxIndex to iterate through setAliasCheckboxes
-								//	and send the next request to modify the activegroupAlias table
-								//	sequentially
-								function localNextAliasHandler(req)
-								{
-									//first time there is no req
-									if (req) 
-									{
-										var err = DesktopContent.getXMLValue(req, "Error");
-										if (err) 
-										{
-											Debug.log(err, Debug.HIGH_PRIORITY);
-											Debug.log("Process interrupted. Failed to modify the currently active Backbone!", Debug.HIGH_PRIORITY);
-
-											//kill popup dialog
-											var el = document.getElementById("popUpDialog");
-											if (el) el.parentNode.removeChild(el);
-											return;
-										}
-
-										groupAliasName = DesktopContent.getXMLValue(req, "savedName");
-										groupAliasVersion = DesktopContent.getXMLValue(req, "savedVersion");
-
-										Debug.log("Successfully added the system alias '" + groupAlias +
-											"' reference to group '" + groupName + " (" + groupKey + ")' " +
-											" in table '" + groupAliasName + "-v" + groupAliasVersion +
-											"'.",
-											Debug.INFO_PRIORITY);
-										++setAliasCheckboxIndex; //req back, so ready for next index
-									}
-
-									//get next affected group index			
-									while (setAliasCheckboxIndex < setAliasCheckboxes.length &&
-										!setAliasCheckboxes[setAliasCheckboxIndex].checked)
-										Debug.log("Skipping checkbox " + (++setAliasCheckboxIndex));
-
-									if (setAliasCheckboxIndex >= setAliasCheckboxes.length) 
-									{
-										Debug.log("Done with alias checkboxes ");
-
-										if (!req) 
-										{
-											Debug.log("Backbone was not modified, so no need to save.");
-
-											//kill popup dialog
-											var el = document.getElementById("popUpDialog");
-											if (el) el.parentNode.removeChild(el);
-
-											Debug.log("Tree saving operations complete.", Debug.INFO_PRIORITY);
-											treeHasChanged(true); // reset
-											return;
-										}
-										Debug.log("Saving and activating modified Backbone");
-
-
-										Debug.log("groupAliasName=" + groupAliasName);
-										Debug.log("groupAliasVersion=" + groupAliasVersion);
-										var tableNames = req.responseXML.getElementsByTagName("oldBackboneName");
-										var tableVersions = req.responseXML.getElementsByTagName("oldBackboneVersion");
-
-										//make a new backbone with old versions of everything except Group Alias 
-										var tableMap = "tableList=";
-										var name;
-										for (var i = 0; i < tableNames.length; ++i) 
-										{
-											name = tableNames[i].getAttribute("value");
-
-											if (name == groupAliasName)
-											{
-												tableMap += name + "," +
-													groupAliasVersion + ",";
-												continue;
-											}
-											//else use old member
-											tableMap += name + "," +
-												tableVersions[i].getAttribute("value") + ",";
-										}
-										Debug.log(tableMap);
-										
-
-										ConfigurationAPI.saveGroupAndActivate(newBackboneName, tableMap,
-											function (retParams) 
-											{
-												Debug.log("Save and activate is done.");
-
-												if (retParams)
-												{
-													Debug.log("Successfully modified the active Backbone group.\n" +
-														"Backbone group '" + retParams.groupName + " (" +
-														retParams.groupKey + ")' was activated.",
-														Debug.INFO_PRIORITY);
-												}
-
-												//kill popup dialog
-												var el = document.getElementById("popUpDialog");
-												if (el) el.parentNode.removeChild(el);
-
-												Debug.log("Tree saving operations complete.", Debug.INFO_PRIORITY);
-												treeHasChanged(true); // reset
-												return;
-											},	//end of done handler for saveGroupAndActivate
-											true, //request return parameters
-											true /*lookForEquivalent*/);
-										return;
-									}
-
-									//get next alias
-									{
-										var el = document.getElementById("popUpDialog-editAliasSelect-" +
-											setAliasCheckboxIndex);
-										if (el.style.display == "none") 
-										{
-											//get value from text box
-											el = document.getElementById("popUpDialog-editAliasTextBox-" +
-												setAliasCheckboxIndex);
-										}
-										groupAlias = el.value;
-									}
-
-									groupName = affectedGroupNames[setAliasCheckboxIndex];
-									groupKey = affectedGroupKeys[setAliasCheckboxIndex];
-
-									Debug.log("groupAlias = " + groupAlias);
-									Debug.log("groupName = " + groupName);
-									Debug.log("groupKey = " + groupKey);
-
-									if (!groupAlias || groupAlias.trim() == "") 
-									{
-										Debug.log("Process interrupted. Invalid empty alias given!", Debug.HIGH_PRIORITY);
-
-										//kill popup dialog
-										var el = document.getElementById("popUpDialog");
-										if (el) el.parentNode.removeChild(el);
-
-										return;
-									}
-
-									DesktopContent.XMLHttpRequest("Request?RequestType=setGroupAliasInActiveBackbone" +
-										"&groupAlias=" + groupAlias +
-										"&groupName=" + groupName +
-										"&groupKey=" + groupKey, "",
-										localNextAliasHandler,
-										0, 0, true  //reqParam, progressHandler, callHandlerOnErr
-									);
-								} //end localNextAliasHandler()
-
-								localNextAliasHandler();
-
-								Debug.log("Aliases set in motion");
-
+								handlePopUpSetGroupAlias(affectedGroupNames,affectedGroupKeys);
+								
 								return;
 							}
 
@@ -16672,7 +17136,7 @@
 				"\"popUpDialog\"); if(el) el.parentNode.removeChild(el); return false;'>Cancel</a><br><br>";
 
 
-			//get existing group aliases	
+			//get existing groups to merge	
 			///////////////////////////////////////////////////////////
 			DesktopContent.XMLHttpRequest("Request?RequestType=getTableGroups" +
 				"",
@@ -17115,7 +17579,10 @@
 					"Show Info Fields" :
 					"Hide Info Fields",
 				"Record Creation Wizard",
-				"Record Deletion Wizard"
+				"Record Deletion Wizard",
+				treeDiffModeApplied_ ? 
+					"Disable Diff Mode" :
+					"Enable Diff Mode"
 			];
 
 			var refreshLinkStr = "refreshTreeView();";
@@ -17134,12 +17601,13 @@
 				refreshWrapper,
 				"toggleGroupDetails()",
 				"treeViewHideStatus_ = !treeViewHideStatus_;" +
-				refreshLinkStr,
+					refreshLinkStr,
 				"treeFilterApplied_?applyTreeFilter():popUpFilterTreeForm()",
 				"treeViewHideInfo_ = !treeViewHideInfo_; " +
-				"applyTreeFilter('',0,1)",
+					"applyTreeFilter('',0,1)",
 				"launchRecordCreationWizard(\"tree\")",
-				"launchRecordDeletionWizard(\"tree\")"
+				"launchRecordDeletionWizard(\"tree\")",
+				"toggleTreeDiffMode()"
 			];
 			Debug.log("createEditTableMenu()");
 			SimpleContextMenu.createMenu(

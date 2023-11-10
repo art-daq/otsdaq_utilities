@@ -2474,6 +2474,26 @@ Desktop.handleWindowHelp = function (mouseEvent)
 } //end handleWindowHelp()
 
 //==============================================================================
+Desktop.handleDashboardHelp = function (mouseEvent) 
+{
+	// Check if window exists 
+	if(Desktop.desktop.getForeWindow() == 0)
+	{
+		window.open("https://github.com/art-daq/otsdaq#readme", "_blank")
+	}
+	else if(Desktop.desktop.getForeWindow().isMaximized())
+	{
+		Debug.log("Help " + Desktop.desktop.getForeWindow());
+		Desktop.desktop.windowHelpById(Desktop.desktop.getForeWindow().getWindowId());
+	}
+	else 
+	{
+		window.open("https://github.com/art-daq/otsdaq#readme", "_blank")
+	}
+	return false;
+} //end handleWindowHelp()
+
+//==============================================================================
 Desktop.handleFullScreenWindowRefresh = function(mouseEvent)
 {
         Debug.log("Refresh Full Screen Window");
@@ -2641,7 +2661,12 @@ Desktop.XMLHttpRequest = function(requestURL, data, returnHandler, reqIndex)
 				//check if failed due to cookieCode and go to login prompt
 				if(req.responseText == Globals.REQ_NO_PERMISSION_RESPONSE)
 				{
-					errStr = "Request failed do to insufficient account permissions.";
+					var requestType = requestURL.indexOf("RequestType=");
+					if(requestType > 0)
+						requestType = " '" + requestURL.substr(requestType + ("RequestType=").length) + "'";
+					else
+						requestType = "";
+					errStr = "Request " + requestType + " failed due to insufficient account permissions."; 
 					//return;
 				}
 				else if(req.responseText == Globals.REQ_NO_LOGIN_RESPONSE) 

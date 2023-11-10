@@ -84,6 +84,7 @@ class SlowControlsDashboardSupervisor : public CoreSupervisorBase
 	int                                  alarmNotifyRefreshRate_;
 	std::mutex                           alarmCheckThreadErrorMutex_;
 	std::string                          alarmCheckThreadError_;
+	int									 readOnly_;
 
   public:
 	SlowControlsVInterface* interface_;

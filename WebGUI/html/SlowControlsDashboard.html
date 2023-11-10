@@ -10,6 +10,7 @@
 		<script type="text/JavaScript" src="/WebPath/js/DesktopContent.js"></script>
 		<script type="text/JavaScript" src="/WebPath/js/widgetLibrary.js"></script>
 		<script type="text/JavaScript" src="/WebPath/js/js_lib/ConfigurationAPI.js"></script>
+		<script type="text/JavaScript" src="/WebPath/js/js_lib/SlowControlsAPI.js"></script>
 
 		<!-- MultiSelectBox: Must include .css style sheet and .js functionality -->
 		<link rel="stylesheet" type="text/css" href="/WebPath/css/MultiSelectBox.css">
@@ -270,6 +271,8 @@
 			var previousPage_ = "";
 			var actualPage_ = "";
 
+			var READ_ONLY_ = false;
+
 			/////////////////////////////////////////////////////////////////////////////////////////
 			/////////////////////////////////////////////////////////////////////////////////////////
 
@@ -279,6 +282,16 @@
 			function init() 
 			{
 				Debug.log("init() was called");
+
+				var readOnlyMode = DesktopContent.getParameter(0, "readOnlyMode"); // for &readOnlyMode=1
+				if (readOnlyMode !== undefined) //set read mode if parameter
+				{
+					Debug.log("Launching readonly mode to true!");
+					READ_ONLY_ = true; //readOnlyMode | 0;     
+				}
+
+				//to make an icon on desktop -- DesktopContent.addDesktopIcon(iconName)
+
 
 				window.onkeyup = handleKeys;
 				window.onkeydown = makeHandlerWithID(true/*isKeyDown*/,handleKeys);
@@ -3853,9 +3866,9 @@
 
 				// make widget tabledata
 				var counter = 0;
-				for (var i = 0; i < ySize; i++)
+				for (var i = 0; i < _ySize; i++)
 				{
-					for (var j = 0; j < xSize; j++)
+					for (var j = 0; j < _xSize; j++)
 					{
 						//var pv = "x"+j + ",y" + i;
 						var pv = src[i][j];

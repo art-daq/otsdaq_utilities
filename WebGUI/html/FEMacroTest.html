@@ -70,7 +70,7 @@
 		h1{
 			font-size: 			40px;
 		}
-		
+
 		.goodValue {
 			color:				darkgreen; 
 			font-size:			inherit;
@@ -83,8 +83,8 @@
 		}
 
 		.smallPopup {
-			width:					225px;
-			height:					112px;
+			width:					300px;
+			height:					120px;
 			background-color: 		#002540;
 			z-index:				9;
 			position: 				fixed;
@@ -104,22 +104,44 @@
 			height: 80vh;
 			max-height: fit-content;
 			overflow-y: auto;
+			resize: horizontal;
 		}
 
-		.record {
+		.record .component {
 			text-align: left;
 			padding: 2px;
 			font-weight: bold;
 			cursor: pointer;
-
+			/* white-space: initial; */
+			text-overflow: clip;
 		}
 
-		.light {
+		.component {
+			height: fit-content;
+			display: grid;
+			grid-template-columns: 4fr 1fr;
+			height: auto;
+		}
+
+		.component button {
+			float: right;
+			margin-left: 2px;
+		}
+		
+		.record.light {
 			background-color: lightskyblue;
 		}
 
-		.dark {
+		.record.dark {
 			background-color: lightsteelblue;
+		}
+
+		.component.light {
+			background-color: lavender;
+		}
+
+		.component.dark {
+			background-color: lightgrey;
 		}
 
 		.macroInfo {
@@ -128,6 +150,23 @@
 			background-size: cover;
 			height: 24px;
 			width: 24px;
+		}
+
+		#macroModule-sequence {
+			display: none;
+		}
+
+		#sequence-builder, #show-sequence {
+			max-height: 500px;
+			overflow-y: auto;
+			resize: horizontal;
+		}
+
+		.vbox
+		{
+			display: grid;
+			grid-template-columns: 1fr;
+			float: right;
 		}
 		
 	</style>
@@ -159,6 +198,7 @@
 			//setCaretPosition(el, caretPos, endPos)
 
 		var verticalOrientation_ = true;
+		var sequenceMode_ = false;
 
 		var feClassToFEsMap_; 	//map of FE Classes to FE UIDs
 		var feToMacrosMap_;		//map of FE UIDs to FE Macro structure 
@@ -211,6 +251,12 @@
 		var focusedMacroCell = [-1,-1]; //when enter is pressed which macro to run
 
 		var firstTime = true;
+
+		var liveViewActive = false;
+
+		var intervalTime;
+
+		var currentLiveViewTimeout = null;
 		
 		/////////////////////////////////////////////////////////////////////////////////////////
 		/////////////////////////////////////////////////////////////////////////////////////////
@@ -575,7 +621,10 @@
 					"macroResults-row-" + r + "-col-" + c);
 			el.innerHTML = str;
 
-			DesktopContent.XMLHttpRequest("Request?RequestType=runFEMacro" +					
+			// if I am building a sequence I do not have to run
+			if (!sequenceBuilding_)
+			{
+				DesktopContent.XMLHttpRequest("Request?RequestType=runFEMacro" +					
 					//"&feSupervisorID=" + feSupervisorID +
 					"&feClassSelected=" + feClassSelected +
 					"&feUIDSelected=" + feUIDSelected +
@@ -587,7 +636,19 @@
 					0 /*reqParam*/, 0 /*progressHandler*/, 
 					true /*callHandlerOnErr*/
 					);
+			}
 
+			if (currentLiveViewTimeout !== null)
+			{
+        		clearTimeout(currentLiveViewTimeout);
+       			currentLiveViewTimeout = null;
+   			}
+
+			if (liveViewActive)
+			{
+        		currentLiveViewTimeout = setTimeout(function() { runMacro(r, c); }, intervalTime); 
+    		}
+			
 			var command = {
 				"feClass": feClassSelected,
 				"feUID": feUIDSelected,
@@ -597,10 +658,17 @@
 				"outputArgs": outputData,
 				"saveOutputs": saveOutputs,
 			}
+			// add to the sequence
+			if (verticalOrientation_ && sequenceBuilding_)
+			{
+				appendMacroToSequence(JSON.stringify(command));
+				return;
+			}
+				
 			if (verticalOrientation_)
 				appendHistoryRecord(JSON.stringify(command));
 		} //end runMacro()
-
+		
 		function handleMacroResponse(req, reqParam, errStr) 
 		{
 			var el;
@@ -869,7 +937,21 @@
 							"rowspan": maxRow,
 							"width":"400px",
 						},
-						"<h3>Command history</h3>",
+						"<div style='display: flex; justify-content: space-between; align-items: center; width: 100%;'>" +
+							"<h3>Command history</h3>" +
+							"<button id='liveViewBtn' onClick='toggleLiveView()'>Live View</button>",
+						true);
+					
+					// add sequence builder
+					str += DesktopContent.htmlOpen(
+						"td",
+						{
+							"id": "macroModule-sequence",
+							"class":"macroModule",
+							"rowspan": maxRow,
+							"width":"500px",
+						},
+						"<h3>Sequence Mode</h3>",
 						true);
 				}
 
@@ -1056,7 +1138,8 @@
 			// fill the history module
 			if (verticalOrientation_)
 			{
-				loadHistory()
+				loadHistory();
+				loadSequnces();
 			}
 			
 		} //end redraw()
@@ -1742,10 +1825,11 @@
 				runMacro(focusedMacroCell[0],focusedMacroCell[1]);
 			}
 		} //end handleKeyInput()
-		
 		//=====================================================================================				
 		//loadHistory ~~
 		var numRecords = 0;
+		var lastMacro = "";
+
 		function loadHistory()
 		{
 			var historyModule = document.getElementById("macroModule-history");
@@ -1764,8 +1848,7 @@
 				},
 				"",
 				true);
-			
-			// add the clear history button
+
 			str += DesktopContent.htmlOpen(
 				"button",
 				{
@@ -1804,6 +1887,16 @@
 		{
 			var historyContent = document.getElementById("historyContent");
 			var command = JSON.parse(record);
+			var counter = document.getElementById(numRecords + "-counter");
+			if (counter && lastMacro === record)
+			{
+				// increment the number
+				if (counter.innerText === "") counter.innerText = 1;
+				counter.innerText = String(parseInt(counter.innerText) + 1);
+				counter.innerText += "x";
+				return;
+			}
+			lastMacro = record;
 			// check the i to alternate the colors
 			var className = "record ";
 			if (numRecords % 2 == 0)
@@ -1818,8 +1911,10 @@
 			for (var j = 0; j < inputArgs.length; j++)
 			{
 				var tuple = inputArgs[j].split(",");
+				if (j)
+					recordName += "<br>&nbsp;&nbsp;&nbsp;&nbsp;"
 				if (tuple[0] !== "")
-					recordName += decodeURIComponent(tuple[0]) + "=" + decodeURIComponent(tuple[1]) + "; ";
+					recordName += decodeURIComponent(tuple[0]) + "=" + decodeURIComponent(tuple[1]) + ";";
 			}
 
 			// build the record text
@@ -1834,19 +1929,29 @@
 			}
 			recordText += command["macroName"] + ": ";
 
-			historyContent.innerHTML += DesktopContent.htmlOpen(
+ 			// put the new history in head
+			historyContent.innerHTML = DesktopContent.htmlOpen(
 					"div",
 					{
 						"id": "historyRecord" + numRecords,
 						"class": className,
 						"onClick": "onClickHistoryRecord(" + record + ")"
 					},
-					"<span>" + recordText + "<br>&nbsp;&nbsp;&nbsp;&nbsp;" + (recordName === "" ? "No arguments": recordName) + "</span>",
-					true);
+					"<span><i id='" + numRecords + "-counter'></i> " + recordText + "<br>&nbsp;&nbsp;&nbsp;&nbsp;" + (recordName === "" ? "No arguments": recordName) + "</span>",
+					true) + historyContent.innerHTML;
 		}
 
 		// call the function when we click on the history
-		function onClickHistoryRecord(recordObj) {
+		function onClickHistoryRecord(recordObj)
+		{
+
+			// in bulding sequence mode add the macro to the sequence
+			if (sequenceBuilding_)
+			{
+				appendMacroToSequence(JSON.stringify(recordObj));
+				return;
+			}
+			
 			var postData = "inputArgs=" + recordObj["inputArgs"] + "&outputArgs=" + recordObj["outputArgs"];
 			DesktopContent.XMLHttpRequest("Request?RequestType=runFEMacro" +					
 					//"&feSupervisorID=" + feSupervisorID +
@@ -1860,8 +1965,19 @@
 					0 /*reqParam*/, 0 /*progressHandler*/, 
 					true /*callHandlerOnErr*/
 					);
+			
+			if (currentLiveViewTimeout !== null) 
+			{
+        		clearTimeout(currentLiveViewTimeout);
+       		 	currentLiveViewTimeout = null;
+   			}
+
 			// show the command in the interface
 			appendHistoryRecord(JSON.stringify(recordObj));
+
+			if (liveViewActive) {
+				currentLiveViewTimeout = setTimeout(function() { onClickHistoryRecord(recordObj); }, intervalTime); 
+    		}
 		}
 
 		// ask confirm before clearing the history
@@ -1874,8 +1990,25 @@
 		// hide the popup
 		function hideSmallPopup(el)
 		{
+			var sequenceNameInput = document.getElementById("sequenceName");
+			sequenceNameInput.value = "";
+
+			var errorMessage = document.getElementById("sequenceName-error");
+			errorMessage.innerText = "";
+
 			var wholeDiv = el.parentNode.parentNode.parentNode;
 			wholeDiv.style.display = "none";
+
+		}
+
+		// hide the popup for live view
+		function hideSmallPopupLiveView(el)
+		{
+			var wholeDiv = el.parentNode.parentNode.parentNode;
+			wholeDiv.style.display = "none";
+			liveViewActive = false;
+			document.getElementById('intervalTime').value = '2';
+
 		}
 
 		// clear the history
@@ -1886,8 +2019,664 @@
 			contentEl.innerHTML = "";
 			hideSmallPopup(el);
 		}
+		//=====================================================================================				
+		// live view
+		function toggleLiveView()
+		{
+
+			liveViewActive = !liveViewActive;
+
+			if (liveViewActive) 
+			{
+				document.getElementById('popupSetInterval').style.display = 'block';
+				var inputField = document.getElementById("intervalTime");
+				inputField.focus();
+				inputField.select();
+
+			}
+			else
+			{
+
+				if (currentLiveViewTimeout !== null)
+				{
+            		clearTimeout(currentLiveViewTimeout);
+            		currentLiveViewTimeout = null;
+       			}
+
+				liveViewActive = false;
+				document.getElementById('intervalTime').value = '2';
+			
+				var liveViewBtn = document.getElementById('liveViewBtn');
+				liveViewBtn.textContent = 'Live View';
+				liveViewBtn.style.backgroundColor = '';
+				liveViewBtn.style.color = '';			
+			}
+
+		}
+	
+		function setIntervalAndStart() 
+		{
+			var intervalTimeInput = document.getElementById('intervalTime').value*1000;
+			intervalTime = parseInt(intervalTimeInput);
+
+			if (isNaN(intervalTime) || intervalTime <= 0)
+			{
+				alert("Please enter a valid number greater than 0");
+				return;
+			}
+
+			document.getElementById('popupSetInterval').style.display = 'none';
+
+			var liveViewBtn = document.getElementById('liveViewBtn');
+			liveViewBtn.textContent = 'Stop Live View';
+			liveViewBtn.style.backgroundColor = 'red';
+			liveViewBtn.style.color = 'white';
+			
+
+			if (!liveViewActive)
+			{
+				liveViewActive = true;
+			}
+		}
+
+		function handleEnterPress(event) 
+		{
+        	if (event.key === "Enter" || event.keyCode === 13)
+			{
+            	event.preventDefault();
+            
+            	setIntervalAndStart();
+
+           		return false;
+        	}
+        return true;
+    	}    
 
 		//=====================================================================================	
+		//loadSequence
+
+		var sequenceBuilding_ = false;
+		var selectedSequence_ = {};
+		var tempSequence_ = {}
+
+		// UTILS
+
+		function statusActionButtons(status)
+		{
+			var runBtn = document.getElementById("runSequenceBtn");
+			var editBtn = document.getElementById("editSequenceBtn");
+			var deleteBtn = document.getElementById("deleteSequenceBtn");
+			var newBtn = document.getElementById("newSequenceBtn");
+			runBtn.disabled = status;
+			editBtn.disabled = status;
+			deleteBtn.disabled = status;
+			newBtn.disabled = !status;
+		}
+
+		function statusEditButtons(status)
+		{
+			var testBtn = document.getElementById("testSequenceBtn");
+			var saveBtn = document.getElementById("saveSequenceBtn");
+			var resetBtn = document.getElementById("resetSequenceBtn");
+			resetBtn.disabled = status;
+			testBtn.disabled = status;
+			saveBtn.disabled = status;
+		}
+
+		function showSequence(target, seq)
+		{
+			console.log(target, seq);
+			var container = document.getElementById(target);
+			container.innerHTML = "";
+			var GUIIndex = 0;
+			for (const entry of Object.entries(seq))
+			{
+				var index = entry[0];
+				var command = JSON.parse(entry[1]);
+				// alternate the color
+				var className = "component ";
+				if (GUIIndex % 2 == 0)
+					className += "light";
+				else 
+					className += "dark";
+
+				// create the record name
+				var recordName = "";
+				var inputArgs = command["inputArgs"].split(";");
+				for (var j = 0; j < inputArgs.length; j++)
+				{
+					var tuple = inputArgs[j].split(",");
+					if (j)
+						recordName += "<br>&nbsp;&nbsp;&nbsp;&nbsp;"
+					if (tuple[0] !== "")
+						recordName += decodeURIComponent(tuple[0]) + "=" + decodeURIComponent(tuple[1]) + ";";
+				}
+
+				// build the record text
+				var recordText = ""
+				if (command["feUID"] === "*" && command["feClass"] !== "*")
+					recordText = "(all " + command["feClass"] + ") ";
+				else
+					recordText = "(" + command["feUID"] + ") ";
+
+				recordText += command["macroName"] + ": ";
+
+				container.innerHTML += DesktopContent.htmlOpen(
+					"div",
+					{
+						"id": "sequenceComponent-" + index,
+						"class": className,
+					},
+					"<span><i>#" + (GUIIndex + 1) + "</i> " + recordText + "<br>&nbsp;&nbsp;&nbsp;&nbsp;" + (recordName === "" ? "No arguments": recordName) + "</span>",
+					true);
+
+				GUIIndex++;
+				if (target === "sequence-builder") 
+				{
+					// append control sequence buttons
+					var sequence = document.getElementById("sequenceComponent-" + index);
+					var sequenceAction = document.createElement("div");
+					sequenceAction.setAttribute("class", "vbox");
+					// up button
+					var upBtn = document.createElement("button");
+					upBtn.innerText = "Up";
+					upBtn.setAttribute("onClick", "moveUpSequence(" + index + ")");
+					// down button
+					var downBtn = document.createElement("button");
+					downBtn.innerText = "Down";
+					downBtn.setAttribute("onClick", "moveDownSequence(" + index + ")");
+					// up button
+					const removeBtn = document.createElement("button");
+					removeBtn.innerText = "X";
+					removeBtn.setAttribute("onClick", "removeFromSequence(" + index + ")");
+
+					sequenceAction.appendChild(upBtn);
+					sequenceAction.appendChild(downBtn);
+					sequenceAction.appendChild(removeBtn);
+					sequence.appendChild(sequenceAction);
+				}
+			}
+		}
+
+		function showPopupSaveSequence()
+		{
+			var popup = document.getElementById("popupSaveSequence");
+			var sequenceNameInput = document.getElementById("sequenceName");
+			popup.style.display = "grid";
+			popup.style.gridTemplateColumns = "1fr";
+			sequenceNameInput.value = "";
+			sequenceNameInput.focus();
+		}
+
+		function hidePopupSaveSequence()
+		{
+			var popup = document.getElementById("popupSaveSequence");
+			popup.style.display = "none";
+		}
+
+		// END UTILS
+
+		function toggleSequenceMode()
+		{
+			sequenceMode_ = !sequenceMode_;
+			var sequenceModule = document.getElementById("macroModule-sequence");
+			if (sequenceMode_)
+			{
+				sequenceModule.style.display = "block";
+			}
+			else
+			{
+				sequenceModule.style.display = "none";
+			}
+		}	
+
+		function loadSequnces()
+		{
+			var sequenceModule = document.getElementById("macroModule-sequence");
+			// dropdown menu to select the stored sequences
+			var select = DesktopContent.htmlOpen(
+				"select",
+				{
+					"id": "select-sequence",
+					"style": "width: 150px;",
+					"onChange": "selectSequence(this.value)"
+				},
+				"<option value='undefined'>None</option>",
+				true,
+			)
+			var str = DesktopContent.htmlOpen(
+				"div",
+				{
+					"id": "sequnce-selector",
+					"style": "margin:10px; display: inline-flex; gap: 15px;"
+				},
+				"<p><strong>Select sequence: </strong></p>" + select,
+				true);
+			// space used to show the steps of each sequence
+			str += DesktopContent.htmlOpen(
+				"div",
+				{
+					"id": "show-sequence",
+				},
+				"",
+				true);
+			// action buttons (8)
+			var runButton = DesktopContent.htmlOpen(
+				"button",
+				{
+					"id": "runSequenceBtn",
+					"onClick": "runSequence()",
+					"disabled": "true",
+				},
+				"Run",
+				true);
+			var editButton = DesktopContent.htmlOpen(
+				"button",
+				{
+					"id": "editSequenceBtn",
+					"onClick": "editSequence()",
+					"disabled": "true",
+				},
+				"Edit",
+				true);
+			var deleteButton = DesktopContent.htmlOpen(
+				"button",
+				{
+					"id": "deleteSequenceBtn",
+					"style": "background-color: Red; color: white;",
+					"onClick": "deleteSequence()",
+					"disabled": "true",
+				},
+				"Delete",
+				true);
+			var newButton = DesktopContent.htmlOpen(
+				"button",
+				{
+					"id": "newSequenceBtn",
+					"style": "background-color: green; color: white;",
+					"onClick": "newSequence()",
+				},
+				"New",
+				true);
+			var saveButton = DesktopContent.htmlOpen(
+				"button",
+				{
+					"id": "saveSequenceBtn",
+					"disabled": true,
+					"onClick": "showPopupSaveSequence()",
+				},
+				"Save",
+				true);
+			var testButton = DesktopContent.htmlOpen(
+				"button",
+				{
+					"id": "testSequenceBtn",
+					"disabled": true,
+					"onClick": "testSequence()",
+				},
+				"Test",
+				true);
+			var resetButton = DesktopContent.htmlOpen(
+				"button",
+				{
+					"id": "resetSequenceBtn",
+					"disabled": true,
+					"onClick": "resetSequence()",
+				},
+				"Reset",
+				true);
+			var closeButton = DesktopContent.htmlOpen(
+				"button",
+				{
+					"id": "closeSequenceBtn",
+					"onClick": "closeSequence()",
+				},
+				"Close",
+				true);
+			
+			str += DesktopContent.htmlOpen(
+				"div",
+				{
+					"id": "sequence-buttons",
+					"style": "margin-top:10px; display: flex; gap: 20px"
+				},
+				runButton + editButton + deleteButton + newButton,
+				true);
+
+			// area to build the sequence
+			str += DesktopContent.htmlOpen(
+				"div",
+				{
+					"id": "sequence-builder",
+					"style": "margin-top:10px;"
+				},
+				"",
+				true);
+			str += DesktopContent.htmlOpen(
+				"div",
+				{
+					"id": "sequence-builder-buttons",
+					"style": "margin-top:10px; display: none; gap: 20px"
+				},
+				testButton + saveButton + resetButton + closeButton,
+				true);
+			
+			
+			sequenceModule.innerHTML += str;
+			// load saved sequences
+			DesktopContent.XMLHttpRequest("Request?RequestType=loadMacroSequences",
+				"",
+				function(req) {
+					// request hendler
+					Debug.log("loadMacroSequences() was called.");
+
+					var sequenceString = DesktopContent.getXMLValue(req, "sequences");
+					if (!sequenceString) 
+					{
+						Debug.log("Sequence is empty!");
+						return;
+					}
+					var sequenceSelector = document.getElementById("select-sequence");
+					// split the commands
+					var sequenceNameList = sequenceString.split(";")
+												.filter((seqName) => seqName.includes(".dat"))
+												.map((seqName) => seqName.slice(0, -4));
+
+					for (var seq of sequenceNameList)
+					{
+						var option = document.createElement("option");
+						option.text = seq;
+						option.value = seq;
+						sequenceSelector.add(option);
+					}
+				}
+			);
+		}
+
+		// ACTIONS
+
+		// TODO
+		function runSequence()
+		{
+			// call the API
+			var selector = document.getElementById("select-sequence");
+
+			DesktopContent.XMLHttpRequest("Request?RequestType=runSequence" +
+				"&name=" + selector.value,
+				"",
+				function() {
+					// request hendler
+					Debug.log("runFEMacroSequence() was called.");
+					// TODO: show the results
+				}
+			);
+			console.log("run", selectedSequence_);
+		}
+
+		function newSequence() 
+		{
+			// disable action buttons
+			statusActionButtons(false);
+			// clean selected sequence
+			selectSequence();
+			// allow editing
+			sequenceBuilding_ = true;
+			// empty builder
+			tempSequence_ = {};
+			showSequence("sequence-builder", tempSequence_);
+			// show edit buttons
+			var builderActions = document.getElementById("sequence-builder-buttons");			
+			builderActions.style.display = "flex";
+		}
+
+		function deleteSequence()
+		{
+			// call the API
+			var selector = document.getElementById("select-sequence");
+
+			DesktopContent.XMLHttpRequest("Request?RequestType=deleteSequence" +
+				"&name=" + selector.value,
+				"",
+				function() {
+					// request hendler
+					Debug.log("deleteSequences() was called.");
+					
+					// remove the option
+					for (var index = 0; selector.options.length; index++)
+					{
+						if (selector.options[index].value === selector.value)
+						{
+							selector.remove(index);
+							break;
+						}
+					}
+
+					// clean the list
+					selectedSequence_ = {};
+					showSequence("show-sequence", selectedSequence_);
+					// deactive buttons
+					statusActionButtons(true);
+				}
+			);
+			console.log("delete", selectedSequence_);
+		}
+
+		
+		function editSequence()
+		{
+			// disable action buttons
+			statusActionButtons(false);
+			sequenceBuilding_ = true;
+			// close active view
+			tempSequence_ = selectedSequence_;
+			selectSequence();
+			showSequence("sequence-builder", tempSequence_);
+			var builderActions = document.getElementById("sequence-builder-buttons");			
+			builderActions.style.display = "flex";
+			document.getElementById("sequenceName").value = document.getElementById("select-sequence").value;
+		}
+
+		function selectSequence(elem = "undefined")
+		{
+			var container = document.getElementById("show-sequence");
+			
+			// no sequence selected
+			if (elem === "undefined")
+			{
+				// reset the list
+				selectedSequence_ = {};
+				showSequence("show-sequence", selectedSequence_)
+				statusActionButtons(true);
+				return;
+			}
+
+			// call the API
+			DesktopContent.XMLHttpRequest("Request?RequestType=getSequence" +
+				"&name=" + elem,
+				"",
+				function(req) {
+					// request hendler
+					Debug.log("loadMacroSequences() was called.");
+					var sequenceString = DesktopContent.getXMLValue(req, "sequence");
+					if (!sequenceString) 
+					{
+						Debug.log("Sequence is empty!");
+						return;
+					}
+					selectedSequence_ = JSON.parse(decodeURI(sequenceString));
+
+					// close the building if it is open
+					closeSequence();
+					// fill the list
+					showSequence("show-sequence", selectedSequence_);
+					// active buttons
+					statusActionButtons(false);
+				}
+			);
+		}
+			
+		function saveSequence()
+		{
+			var sequenceSelector = document.getElementById("select-sequence");
+			var sequenceName = document.getElementById("sequenceName");
+			var errorMessage = document.getElementById("sequenceName-error");
+
+			// check if name is empty
+			if (sequenceName.value === "")
+			{
+				errorMessage.innerText = "Sequence name cannot be empty!";
+				return;
+			}
+
+			var invalidCharacters = /[<>:"/\\|?*]/;
+			if (invalidCharacters.test(sequenceName.value))
+			{
+				errorMessage.innerText = "Sequence name contains invalid characters!";
+				return;
+			}
+
+			// check if the name is unique 
+			for (var i = 0; i < sequenceSelector.options.length; i++)
+			{
+				if (sequenceSelector.options[i].value === sequenceName.value)
+				{
+					errorMessage.innerText = "Name already in use!";
+					return;
+				}
+			}
+
+			// prepare the payload of the API call
+			var postData = "sequence=" + encodeURI(JSON.stringify(tempSequence_)) + 
+						   "&sequenceName=" + sequenceName.value;
+
+			// API call
+			DesktopContent.XMLHttpRequest("Request?RequestType=saveSequence",				
+				postData, 
+				function () {
+					// update the select
+					var option = document.createElement("option");
+					option.text = sequenceName.value;
+					option.value = sequenceName.value;
+					sequenceSelector.add(option);
+					selectSequence(sequenceName.value);
+				},
+				0 /*reqParam*/, 
+				0 /*progressHandler*/, 
+				true /*callHandlerOnErr*/
+				
+			);
+			var sequenceNameInput = document.getElementById("sequenceName");
+			sequenceNameInput.value = "";
+
+			var errorMessage = document.getElementById("sequenceName-error");
+			errorMessage.innerText = "";
+			hidePopupSaveSequence()
+			closeSequence();
+		}
+
+		function resetSequence()
+		{
+			// reset the container
+			tempSequence_ = {};
+			showSequence("sequence-builder", tempSequence_);
+			
+			// disable edit buttons
+			statusEditButtons(false);
+			
+			console.log("reset", tempSequence_);
+		}
+
+		function closeSequence()
+		{
+			// reset the container
+			tempSequence_ = {};
+			showSequence("sequence-builder", tempSequence_);
+			statusActionButtons(false);
+			statusEditButtons(false);
+			// hide the edit buttons
+			var builderActions = document.getElementById("sequence-builder-buttons");			
+			builderActions.style.display = "none";
+			// stop building 
+			sequenceBuilding_ = false;
+			console.log("close", tempSequence_);
+		}
+		
+		// TODO
+		function testSequence()
+		{
+			console.log("test", tempSequence_);
+		}
+		
+		// END ACTIONS
+
+		// SEQUENCE CONTROL
+		function appendMacroToSequence(macro)
+		{			
+			var index = Object.keys(tempSequence_).length;
+			// activate buttons
+			statusEditButtons(false);
+			tempSequence_[index] = macro;
+			showSequence("sequence-builder", tempSequence_);
+			console.log("add", tempSequence_);
+		}
+
+		function moveUpSequence(index)
+		{
+			if (index === 0)
+				return;
+			var tempValue = tempSequence_[index];
+			tempSequence_[index] = tempSequence_[index-1];
+			tempSequence_[index-1] = tempValue;
+			showSequence("sequence-builder", tempSequence_);
+			console.log("up", tempSequence_);
+			return;
+		}
+		
+		function removeFromSequence(index)
+		{
+			delete tempSequence_[index]
+			var i = 0;
+			for (var key of Object.keys(tempSequence_))
+			{
+				if (i != key)
+				{
+					tempSequence_[i] = tempSequence_[key];
+					
+					delete tempSequence_[key];
+				}
+				i++;
+			}
+			showSequence("sequence-builder", tempSequence_);
+			console.log("remove", tempSequence_);
+			return
+		}
+
+		function moveDownSequence(index)
+		{
+			if (index === (Object.keys(tempSequence_).length-1))
+				return;
+			var tempValue = tempSequence_[index];
+			tempSequence_[index] = tempSequence_[index+1];
+			tempSequence_[index+1] = tempValue;
+			showSequence("sequence-builder", tempSequence_);
+			console.log("down", tempSequence_);
+			return
+		}
+		
+		function handleEnterPressSequence(event) 
+		{
+        if (event.key === "Enter" || event.keyCode === 13) {
+            event.preventDefault();
+            
+            saveSequence();
+
+            return false;
+        }
+        return true;
+    	}    
+
+		// END SEQUENCE CONTROL
+		//=====================================================================================		
 	</script>
 		
 </head>
@@ -1897,7 +2686,8 @@
 		
 	<!-- <center> -->
 	
-		<a href="#" onclick="toggleView()">Toggle View</a><br>
+		<a href="#" onclick="toggleView()">Toggle View</a>
+		<a href="#" onclick="toggleSequenceMode()">Sequence Mode</a><br>
 		<div style='width:550px'></div>		
 
 	<!--<a onclick='init();'>Refresh</a>
@@ -1913,8 +2703,32 @@
 		</div>
 	</div>
 
+	<div id="popupSetInterval" class="smallPopup">
+			<center>
+		<h4>Please enter the interval time (sec):</h4>
+		<input type="number" id="intervalTime" value="2" onkeypress="return handleEnterPress(event)">
+		<div class="buttongroup" style="margin-top: 20px;">
+				<button onclick="setIntervalAndStart()">Set Interval</button>
+				<button onclick="hideSmallPopupLiveView(this)">Cancel</button>
+		</div>
+	</center>
+	</div>
+
+	<div id="popupSaveSequence" class="smallPopup">
+		<center>
+	    <h4>Type a name for the sequence</h4>
+		<input type="text" id="sequenceName" maxlength="30" onkeypress="return handleEnterPressSequence(event)"></input>
+		<span id="sequenceName-error" style="color: red; display: block;"></span>
+	    <div class="buttongroup" style="margin-top: 20px;">
+			<button onclick="saveSequence()">Confirm</button>
+			<button onclick="hideSmallPopup(this)">Cancel</button>
+		</center>
+		</div>
+	</div>
+
 	<div id='display'></div>
 	<!-- </center> -->
 </body>
 	
 </html>
+

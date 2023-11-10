@@ -347,7 +347,7 @@
 				Debug.log("max array = ",_maxArray);
 
 
-				DesktopContent.XMLHttpRequest("Request?RequestType=getTables&refresh=1&allowIllegalColumns=1", "",
+				DesktopContent.XMLHttpRequest("Request?RequestType=getTables&refresh=1", "",
 						setupTableEditor,
 						0 /*handler param*/,
 						0 /*progressHandler*/,
@@ -630,7 +630,7 @@
 				{
 					//on success reload all configurations
 					DesktopContent.XMLHttpRequest("Request?RequestType=getTables" +
-							"&refresh=1&allowIllegalColumns=1", "",
+							"&refresh=1", "",
 							setupTableEditor,
 							0 /*handler param*/,
 							0 /*progressHandler*/,

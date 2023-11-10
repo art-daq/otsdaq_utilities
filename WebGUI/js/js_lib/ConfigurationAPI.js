@@ -11,7 +11,7 @@
 //				<script type="text/JavaScript" src="/WebPath/js/Globals.js"></script>	
 //				<script type="text/JavaScript" src="/WebPath/js/Debug.js"></script>	
 //				<script type="text/JavaScript" src="/WebPath/js/DesktopContent.js"></script>
-//				<script type="text/JavaScript" src="/WebPath/js/js_lib/ConfiguraitonAPI.js"></script>
+//				<script type="text/JavaScript" src="/WebPath/js/js_lib/ConfigurationAPI.js"></script>
 //				<link rel="stylesheet" type="text/css" href="/WebPath/css/ConfigurationAPI.css">
 //
 //		...anywhere inside the <head></head> tag of a window content html page

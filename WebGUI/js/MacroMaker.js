@@ -93,7 +93,7 @@
 	var boxOfFreshVar = "";
 	var barWidth = 0;
 	var barIncrement = 0;
-	
+
 	
 	var _codeEditorAppId; //Code Editor Supervisor LID
 
@@ -937,6 +937,7 @@
     }
 
 	//=====================================================================================
+
     function clearAll(el)
     {
 		var contentEl = document.getElementById('sequenceContent');
@@ -2185,7 +2186,7 @@
     		}
     	};
     }
-    
+
     
     
     

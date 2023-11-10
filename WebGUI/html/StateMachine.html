@@ -29,7 +29,7 @@
 	//getStateDrawingColor(i,isBorder)
 	//getTransitionDrawingColor(i,isBorder,isSelected)
     //drawState(stateIndex, x, y, isRootState)
-	//toggleParameterSetup()
+	//toggleConfigurationAliasSelect()
 	//eatParameterMouseEvent(touchEvent) 
 	//showAlarmSetup()
 	//setAlarm(start)
@@ -150,6 +150,7 @@
 			.blackout {
 				position: absolute;
 				display: none;
+				z-index: 3 /* put on top of params, time/run info */;
 			}
 						
 			#blackout-desc {
@@ -314,7 +315,7 @@
             
 
 			var _PARAMETER_SETUP_MIN_HEIGHT = 25; 
-			var _PARAMETER_SETUP_MAX_HEIGHT = 100; 
+			var _PARAMETER_SETUP_MAX_HEIGHT = 80; 
 			var _PARAMETER_SETUP_WIDTH = 150; 
 			
 			var _EXTRAS_WIDTH = 220; 
@@ -358,7 +359,7 @@
 			var _ALARM_SOUND_PATH = "/WebPath/sounds/fx-Alarm-Beep.wav"; // "http://www.soundjay.com/button/button-2.wav"; //must be .wav for firefox incompatibility	
 			var _AlarmSound = new Audio(_ALARM_SOUND_PATH);
 			
-			var _parameterSetupMinimized = true;	//default to minimized
+			var _parameterSetupMinimized = false;	//default to maximized
 			var _parameterInitCount;
 			var _lastAliasListUpdateTime = 0;
 			
@@ -404,7 +405,7 @@
 					"The State Machine web app always show you the <b>current state</b> (in blue) and any states that are valid transitions from the current state. " +
 					"To <b>transition</b> to a another state, hover your mouse over the new state or the desired transition arrow and then click. " +
 					"\n\nIf you prefer to see the full State Machine topology at all times, you can toggle views by clicking <b>Toggle View</b> in the bottom-right. " +
-					"\n\nTransitioning to the <b>Configure</b> state requires selecting a parameter called the <b>ConfigurationAlias</b>. The ConfigurationAlias parameter can be accessed by clicking the <b>Parameter Setup</b> box in the bottom-left. " +
+					"\n\nTransitioning to the <b>Configure</b> state requires selecting a parameter called the <b>ConfigurationAlias</b>. The ConfigurationAlias parameter can be accessed by clicking the <b>Config Alias</b> box in the bottom-left. " +
 					"The ConfigurationAlias is an alias for the Configuration you want to activate during the Configure transition (for example, an alias might be 'DefaultConfig' or 'EmulateHardwareConfig'). The alias must be setup in advance; the <b>Configuration GUI</b> can be used to create and modify configuration aliases. " +
 					"For more information on <i>ots</i> Configuration concepts, see the <a href='https://otsdaq.fnal.gov/tutorials/first_demo/topics/configuration_primer.html' target='_blank'>otsdaq Configuration Primer</a>. " +
 					"\n\n<b>Starting a Run</b> does not require an input parameter, but does have a read-only <b>Run Number</b> parameter. When not in a run, the <b>Next Run Number</b> is shown in the bottom-right; when in a run, the <b>Current Run Number</b> is shown in the bottom-right." +
@@ -536,8 +537,14 @@
 					else //default to js default
 						toggleViewMode(_altStateDrawingMode);
 					
-					initTransitionParameters();
+					//delay get system aliases because it makes the GUI load experience more responsive to users
+					window.setTimeout(
+						function()
+						{
+							initTransitionParameters();
+						},1000); 	
 				});
+					
 			} //end init()
 
 			//=====================================================================================
@@ -584,8 +591,8 @@
 			{				
 				if (!req) //first time
 				{
-					_parameterSetup.innerHTML = //clear
-					"<a href='Javascript:toggleParameterSetup();' title='Toggle Parameter Setup Pane'>Parameter Setup</a><br><br>"; 
+					_transParamsHtmlStr = //clear
+					"<a href='Javascript:toggleConfigurationAliasSelect();' title='Toggle hide/show of Configuration Alias selection pane'>Config Alias</a><br><br>"; 
 					
 					_parameterInitCount = 0;
 
@@ -598,16 +605,18 @@
 					//then clear to make sure, only valid selections get filled
 					_transitionParameterValues = [];
 
-					_transParamsHtmlStr = "<table width='100%'><tr><td><b><u>Parameter</u></b></td><td width='50%'><b><u>Value</u></b></td></tr>";
+					// _transParamsHtmlStr = ""; //"<table width='100%'><tr><td><b><u>Parameter</u></b></td><td width='50%'><b><u>Value</u></b></td></tr>";
 				}
                 else
                 {
                     //get parameters from req
                 	//Debug.log("Physics initTransitionParameters" + req.responseText);
         
-                    _transParamsHtmlStr += "<tr><td>" + _TRANSITION_PARAMETERS[_parameterInitCount] +
-                            "</td><td><select onchange='handleTransitionParameterChange(" +
-                            _parameterInitCount + ",this);'>";
+                    // _transParamsHtmlStr += "<tr><td>" + _TRANSITION_PARAMETERS[_parameterInitCount] +
+                    //         "</td><td><select onchange='handleTransitionParameterChange(" +
+                    //         _parameterInitCount + ",this);'>";
+                    _transParamsHtmlStr += "<select onchange='handleTransitionParameterChange(" +
+                            _parameterInitCount + ",this);' style='font-family: \"Donegal One\", arial; padding: 2px; font-size: 16px;'>";
     
                     switch(_parameterInitCount)
                     {
@@ -632,19 +641,29 @@
             			var lastIndex = -1;
             			var alias;
                         for(var i=0;i<aliasArr.length;++i) 
-                        {
-                            
+                        {                            
+							
+
                         	//this skips all except for Physics.. don't want this anymore
                         	//if(aliasArr[i].getAttribute('value').indexOf("Physics") == -1) continue;
                         	alias = aliasArr[i].getAttribute('value');
+
+							//require meta information for a 'good' alias
+							if(!aliasCommentArr[i] || !aliasCreateTimeArr[i]) 
+							{
+								Debug.err("Configuration alias '" + alias + "' has an illegal group translation or is missing meta data information. Please delete the alias or fix the translation in your active Backbone group.");
+								continue;
+							}
+
                         	_aliasTranslationMap[alias] = aliasGroupArr[i].getAttribute('value');
-                        	if(aliasCommentArr[i])
-                        	_aliasTranslationMetaDataMap[alias] = [
-																   aliasCommentArr[i].getAttribute('value'),
-																   aliasAuthorArr[i].getAttribute('value'),
-																   aliasCreateTimeArr[i].getAttribute('value'),
-																   aliasGroupCommentArr[i].getAttribute('value')
-																   ];
+                        	
+							if(aliasCommentArr[i])
+                        		_aliasTranslationMetaDataMap[alias] = [
+									aliasCommentArr[i].getAttribute('value'),
+									aliasAuthorArr[i].getAttribute('value'),
+									aliasCreateTimeArr[i].getAttribute('value'),
+									aliasGroupCommentArr[i].getAttribute('value')
+									];
 														 
                             //choose the first system alias by default (the first init)
                             if(!i) _transitionParameterValues[_parameterInitCount] = alias;
@@ -667,7 +686,7 @@
                     default:;
                     }
     
-                    _transParamsHtmlStr += "</select></td></tr>";
+                    _transParamsHtmlStr += "</select>"; //</td></tr>";
     				
                     ++_parameterInitCount;
 				
@@ -675,9 +694,10 @@
     
                 if(_parameterInitCount >= _TRANSITION_PARAMETERS.length)
                 {
-                    _transParamsHtmlStr += "</table>";
+                    // _transParamsHtmlStr += "</table>";
                     //Debug.log("Physics _transParamsHtmlStr " + _transParamsHtmlStr);
-                    _parameterSetup.innerHTML += _transParamsHtmlStr; 
+                    _parameterSetup.innerHTML = _transParamsHtmlStr; 
+					_parameterSetup.style.display = "block";
                     return; //done
                 }
     
@@ -914,9 +934,9 @@
 					_altPlacedStates[s] = [r,c];
                 	
                 	Debug.log("placed " + r + "," + c);
-                	console.log(_altPlacedStates);                	
+                	Debug.log(_altPlacedStates);                	
                 	for(var i=0;i<_altStateGrid.length;++i)
-                		console.log("grid",_altStateGrid[i]);
+						Debug.log("grid",_altStateGrid[i]);
 
                 	//place all transition states adjacent to this
                 	for(var i=0;i<_transitions.length;++i)
@@ -980,11 +1000,13 @@
 							_timeUpdateTimeout = window.setInterval(updateTimeInState,1000);
 	        			    updateTimeInState(DesktopContent.getXMLValue(req,"time_in_state"));
                 		}
-        			    
-                		
+        			                    		
         			    //draw current state if changed
 						if(i != _currState)
-						{								
+						{	
+							//in case there is an error, grab it						
+			    			var current_error = DesktopContent.getXMLValue(req,"current_error");	
+
 							//notify if state was changed unexpectedly
 							if(_currState != -1 && _transitionResultingState != i)
 							{
@@ -1020,16 +1042,22 @@
 								_suppressReloginPopups = false;
 
 							    
-							    if(_states[i] == "F") //Failed state occured, so get error message
+							    if(current_error) //Failed error message received (note: could occur in non-"Failed" states if state machine mechanics fail)
 							    {
-							    	DesktopContent.XMLHttpRequest(
+									Debug.err("State Machine Error:\n\n" + current_error);							    	
+							    }
+								else if(_stateNames[i] == "Failed") //If race condition on error message, try to retrieve it
+								{
+									DesktopContent.XMLHttpRequest(
 							    			"Request?RequestType=getErrorInStateMatchine", "",
 											function(req) {
 							    		var err = DesktopContent.getXMLValue(req,"FSM_Error");
 					            		Debug.err("State Machine Error:\n\n" + err);
 							    	});
-							    }
+								}
 							}
+							if(_currState == -1 && current_error)
+								Debug.err("State Machine Error:\n\n" + current_error);
 								
 							_currState = i;
 							redrawPhysics();
@@ -1826,8 +1854,7 @@
                 						"auto");//changed to auto because it is hard to predict the width of system aliases  
                 _parameterSetup.style.height = 
 			    	(_parameterSetupMinimized?_PARAMETER_SETUP_MIN_HEIGHT:_PARAMETER_SETUP_MAX_HEIGHT) + "px";
-                _parameterSetup.style.display = "block";
-                
+                                
                 
 				_extrasBox.style.left = (w - _MARGIN - _HUD_X - _EXTRAS_WIDTH - 10) + "px";  
                 _extrasBox.style.top =  (h - _MARGIN - _HUD_Y - 10 - //2 for border //-10 for padding
@@ -2652,19 +2679,19 @@
 			} //end drawState()
 			
 			//=====================================================================================
-			//toggleParameterSetup()
+			//toggleConfigurationAliasSelect()
 			//	show/hide parameter setup pane
-			function toggleParameterSetup() 
+			function toggleConfigurationAliasSelect() 
 			{
 				
 				_parameterSetupMinimized = !_parameterSetupMinimized;
-                Debug.log("Physics toggleParameterSetup " + _parameterSetupMinimized); 
+                Debug.log("Physics toggleConfigurationAliasSelect " + _parameterSetupMinimized); 
                 
-				if(_parameterSetupMinimized)
+				if(!_parameterSetupMinimized)
 					initTransitionParameters();
                 
                 redrawPhysics();
-			} //end toggleParameterSetup()
+			} //end toggleConfigurationAliasSelect()
 			
 			//=====================================================================================
 			//eatParameterMouseEvent(touchEvent) 
@@ -2760,7 +2787,7 @@
 	<a href='Javascript:showAlarmSetup(1);' title='Setup the Alarm'>Setup Alarm</a>		
 		
 	&nbsp;&nbsp;&nbsp;&nbsp;
-	<a id='view-mode-select' href='Javascript:toggleViewMode();' title='Toggle State Machine View Mode'>View Full State Machine</a>
+	<a id='view-mode-select' href='Javascript:toggleViewMode();' title='Toggle State Machine View Mode'>Toggle View</a>
 </div>
 		
 <div id='alarm-setup-box'>
