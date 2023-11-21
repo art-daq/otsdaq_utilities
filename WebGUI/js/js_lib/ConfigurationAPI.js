@@ -440,15 +440,18 @@ ConfigurationAPI.getAliasesAndGroups = function(responseHandler,optionForNoAlias
 //			from the subset that match the filter list
 //
 ConfigurationAPI.getSubsetRecords = function(subsetBasePath,
-		filterList,responseHandler,modifiedTables)
+											 filterList,
+											 responseHandler,
+											 modifiedTables)
 {
 	var modifiedTablesListStr = "";
-	for(var i=0;modifiedTables && i<modifiedTables.length;++i)
+	for(var i = 0; modifiedTables && i < modifiedTables.length; ++i)
 	{
 		if(i) modifiedTablesListStr += ",";
 		modifiedTablesListStr += modifiedTables[i].tableName + "," +
 				modifiedTables[i].tableVersion;
 	}
+
 	if(filterList === undefined) filterList = "";
 	
 	DesktopContent.XMLHttpRequest("Request?RequestType=getTreeView" + 
@@ -461,29 +464,29 @@ ConfigurationAPI.getSubsetRecords = function(subsetBasePath,
 			"&modifiedTables=" + modifiedTablesListStr, //end post data
 			function(req)
 			{
-		ConfigurationAPI.extractActiveGroups(req);
-		
-		var records = [];
-		var err = DesktopContent.getXMLValue(req,"Error");
-		if(err) 
-		{
-			Debug.log(err,Debug.HIGH_PRIORITY);
-			if(responseHandler) responseHandler(records);
-			return;
-		}
-		
-		//console.log(req);
-		
-		var tree = DesktopContent.getXMLNode(req,"tree");
-		var nodes = tree.children;
-		for(var i=0;i<nodes.length;++i)
-			records.push(nodes[i].getAttribute("value"));
-		Debug.log("Records: " + records);
-		if(responseHandler) responseHandler(records);
-
+				ConfigurationAPI.extractActiveGroups(req);
+				
+				var records = [];
+				var err = DesktopContent.getXMLValue(req,"Error");
+				if(err) 
+				{
+					Debug.log(err,Debug.HIGH_PRIORITY);
+					if(responseHandler) responseHandler(records);
+					return;
+				}
+				
+				//console.log(req);
+				
+				var tree = DesktopContent.getXMLNode(req,"tree");
+				var nodes = tree.children;
+				for(var i=0;i<nodes.length;++i)
+					records.push(nodes[i].getAttribute("value"));
+				Debug.log("Records: " + records);
+				if(responseHandler) responseHandler(records);
 			}, //handler
 			0, //handler param
-			0,true); //progressHandler, callHandlerOnErr
+			0,
+			true); //progressHandler, callHandlerOnErr
 }
 
 //=====================================================================================
@@ -718,8 +721,12 @@ ConfigurationAPI.getTreeLinkTable = function(link)
 //			obj.fieldColumnDefaultValue
 //			
 //
-ConfigurationAPI.getFieldsOfRecords = function(subsetBasePath,recordArr,fieldList,
-		maxDepth,responseHandler,modifiedTables)
+ConfigurationAPI.getFieldsOfRecords = function(subsetBasePath,
+											   recordArr,
+											   fieldList,
+											   maxDepth,
+											   responseHandler, 
+											   modifiedTables)
 {
 	var modifiedTablesListStr = "";
 	for(var i=0;modifiedTables && i<modifiedTables.length;++i)
@@ -949,8 +956,11 @@ ConfigurationAPI.getFieldValuesForRecords = function(subsetBasePath,
 //			obj.fieldUniqueValueArray
 //			
 //
-ConfigurationAPI.getUniqueFieldValuesForRecords = function(subsetBasePath,recordArr,fieldList,
-		responseHandler,modifiedTables)
+ConfigurationAPI.getUniqueFieldValuesForRecords = function(subsetBasePath,
+														   recordArr,
+														   fieldList,
+														   responseHandler,
+														   modifiedTables)
 {
 	var modifiedTablesListStr = "";
 	for(var i=0;modifiedTables && i<modifiedTables.length;++i)
@@ -979,41 +989,40 @@ ConfigurationAPI.getUniqueFieldValuesForRecords = function(subsetBasePath,record
 			"&modifiedTables=" + modifiedTablesListStr, //end post data
 			function(req)
 			{
-		var fieldUniqueValues = [];
-		var err = DesktopContent.getXMLValue(req,"Error");
-		if(err) 
-		{
-			Debug.log(err,Debug.HIGH_PRIORITY);
-			if(responseHandler) responseHandler(fieldUniqueValues);
-			return;
-		}
-		
-		var fields = req.responseXML.getElementsByTagName("field");
+				var fieldUniqueValues = [];
+				var err = DesktopContent.getXMLValue(req,"Error");
+				if (err) 
+				{
+					Debug.log(err,Debug.HIGH_PRIORITY);
+					if(responseHandler) responseHandler(fieldUniqueValues);
+					return;
+				}
+				
+				var fields = req.responseXML.getElementsByTagName("field");
 
-		for(var i=0;i<fields.length;++i)
-		{
-			
-			var uniqueValues = fields[i].getElementsByTagName("uniqueValue");
-			var groupIdChildLinkIndex = DesktopContent.getXMLNode(
-					fields[i],"childLinkIndex");			
-			
-			var obj = {};
-			obj.fieldName = DesktopContent.getXMLValue(fields[i]);
-						
-			if(groupIdChildLinkIndex)
-				obj.childLinkIndex = DesktopContent.getXMLValue(groupIdChildLinkIndex);
-			
-			obj.fieldUniqueValueArray = [];
-			for(var j=0;j<uniqueValues.length;++j)					
-				obj.fieldUniqueValueArray.push(DesktopContent.getXMLValue(uniqueValues[j]));
-			fieldUniqueValues.push(obj);
-		}
-		Debug.log("fieldUniqueValues length: " + fieldUniqueValues.length);		
-		if(responseHandler) responseHandler(fieldUniqueValues);
-
+				for(var i = 0; i < fields.length; ++i)
+				{
+					var uniqueValues = fields[i].getElementsByTagName("uniqueValue");
+					var groupIdChildLinkIndex = DesktopContent.getXMLNode(
+							fields[i],"childLinkIndex");			
+					
+					var obj = {};
+					obj.fieldName = DesktopContent.getXMLValue(fields[i]);
+								
+					if(groupIdChildLinkIndex)
+						obj.childLinkIndex = DesktopContent.getXMLValue(groupIdChildLinkIndex);
+					
+					obj.fieldUniqueValueArray = [];
+					for(var j=0;j<uniqueValues.length;++j)					
+						obj.fieldUniqueValueArray.push(DesktopContent.getXMLValue(uniqueValues[j]));
+					fieldUniqueValues.push(obj);
+				}
+				Debug.log("fieldUniqueValues length: " + fieldUniqueValues.length);		
+				if(responseHandler) responseHandler(fieldUniqueValues);
 			}, //handler
 			0, //handler param
-			0,true); //progressHandler, callHandlerOnErr
+			0,
+			true); //progressHandler, callHandlerOnErr
 } //end getUniqueFieldValuesForRecords()
 
 //=====================================================================================

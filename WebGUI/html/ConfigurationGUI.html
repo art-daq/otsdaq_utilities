@@ -4969,10 +4969,19 @@
 			var tableComment = "";
 			var tableTitle = "";
 
+			// add the FHICL editor
+			var FHICL_TARGET = "BoardReader";
+			if (tableLinkName.toLowerCase().includes(FHICL_TARGET.toLocaleLowerCase()))
+			{
+				DEFAULT_treeNavContextMenuItems.push("Open FHiCL Editor in new Desktop Window");
+				DEFAULT_treeNavContextMenuItems.push("Open FHiCL Editor in new Browser Tab");
+			}
+
 			//search for table link
 			for (j = 0; j < treeMemberNames_.length; ++j)
 				if (tableLinkName == treeMemberNames_[j])
 					break;
+
 			if (j != treeMemberNames_.length) //found table link
 			{
 				backLinkStr = "setupTableGroupTreeView(\\\"" +
@@ -5134,6 +5143,74 @@
 						++menuIndex; //skip 1st menu item
 
 				}
+
+				// add the handler of the FHiCL editor
+				if (tableLinkName.toLowerCase().includes(FHICL_TARGET.toLocaleLowerCase()))
+				{
+					//open FHiCL-Configuration in new window link
+					{
+						//make record alias with spaces instead of all one word
+						// and remove table
+						var recordAlias = "";
+						for (var c = 0; c < treeMemberNames_[j].length - ("Table").length; ++c) {
+							if (c && c + 1 < treeMemberNames_[j].length &&
+								(treeMemberNames_[j][c] >= 'A' &&
+									treeMemberNames_[j][c] <= 'Z') &&
+								(treeMemberNames_[j][c + 1] >= 'a' &&
+									treeMemberNames_[j][c + 1] <= 'z'))
+								recordAlias += ' ';
+							recordAlias += treeMemberNames_[j][c];
+						}
+						if(recordAlias.length && recordAlias[recordAlias.length-1] != 's')
+							recordAlias += 's'; //make plural
+
+						// TODO: check if all the parameters are needed
+						newWindowStr = "/WebPath/html/ConfigurationGUI_fhicl.html?urn=" +
+							DesktopContent._localUrnLid +
+							"&subsetBasePath=" + treeMemberNames_[j] +
+							"&groupingFieldList=AUTO" +
+							"&recordAlias=" + recordAlias +
+							"&editableFieldList=" + "!*CommentDescription";
+
+						// if(isLink) //include special parameters to focus on link targets
+						// {
+						// 	if(isGroupLink)
+						// 	{
+						// 		//for group link, pre-select GroupID value							
+						// 		newWindowStr += "&selectedGroupIDs=" +
+						// 				encodeURIComponent(
+						// 						childLinkIndex + "=" +
+						// 						linkId);
+						// 	}
+						// 	else
+						// 	{
+						// 		//for unique link, presect UID record							
+						// 		newWindowStr += "&selectedRecords=" + linkId;							
+						// 	}
+						// } //end special link parameter handling
+
+						newwindowJS = "DesktopContent.openNewWindow(" +
+							"\"" + treeMemberNames_[j] +
+							" Subset\",\"\",\"" +
+							//windowPath
+							newWindowStr +
+							"\",false /*unique*/);";
+
+						treeNavContextMenuItems.push(DEFAULT_treeNavContextMenuItems[menuIndex++]);
+						treeNavContextMenuItemHandlers.push(newwindowJS);
+					}
+					//open FHiCL-Configuration in new browser tab link
+					{
+						newtabJS = "DesktopContent.openNewBrowserTab(" +
+							"\"" + treeMemberNames_[j] +
+							" Subset\",\"\",\"" +
+							newWindowStr + "\",false /*unique*/);";
+
+						treeNavContextMenuItems.push(DEFAULT_treeNavContextMenuItems[menuIndex++]);
+						treeNavContextMenuItemHandlers.push(newtabJS);
+					}
+				}
+
 
 				tableComment = treeMemberComments_[j];
 				//make comment html safe

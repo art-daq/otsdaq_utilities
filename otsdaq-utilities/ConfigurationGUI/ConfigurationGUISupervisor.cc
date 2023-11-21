@@ -1807,8 +1807,7 @@ try
 	const std::map<std::string, TableInfo>& allTableInfo = cfgMgr->getAllTableInfo();
 
 	std::map<std::string /*name*/, TableVersion /*version*/> modifiedTablesMap;
-	std::map<std::string /*name*/, TableVersion /*version*/>::iterator
-	    modifiedTablesMapIt;
+	std::map<std::string /*name*/, TableVersion /*version*/>::iterator modifiedTablesMapIt;
 
 	if(usingActiveGroups)
 	{
@@ -2586,9 +2585,8 @@ void ConfigurationGUISupervisor::handleFillSetTreeNodeFieldValuesXML(
 			std::string        fieldValue;
 			while(getline(f, fieldValue, ','))
 			{
-				fieldValues.push_back(
-				    fieldValue);  // setURIEncodedValue is expected
-				                  // StringMacros::decodeURIComponent(fieldValue));
+				fieldValues.push_back(fieldValue);  // setURIEncodedValue is expected
+				                  					// StringMacros::decodeURIComponent(fieldValue));
 			}
 
 			// if last value is "" then push empty value
@@ -2669,10 +2667,8 @@ void ConfigurationGUISupervisor::handleFillSetTreeNodeFieldValuesXML(
 					             << __E__;
 
 					// if link must get parent table name
-					table = cfgMgr->getTableByName(
-					    targetNode.getFieldTableName());  // NOT getTableName!
-					if(!(temporaryVersion = table->getViewP()->getVersion())
-					        .isTemporaryVersion())
+					table = cfgMgr->getTableByName(targetNode.getFieldTableName());  // NOT getTableName!
+					if(!(temporaryVersion = table->getViewP()->getVersion()).isTemporaryVersion())
 					{
 						// create temporary version for editing
 						temporaryVersion =
@@ -2697,8 +2693,7 @@ void ConfigurationGUISupervisor::handleFillSetTreeNodeFieldValuesXML(
 					                                      targetNode.getFieldColumn(),
 					                                      author);
 
-					table->getViewP()
-					    ->init();  // verify new table (throws runtime_errors)
+					table->getViewP()->init();  // verify new table (throws runtime_errors)
 				}
 			}
 		}
@@ -3392,8 +3387,7 @@ void ConfigurationGUISupervisor::handleFillTreeViewXML(HttpXmlDocument&        x
 		}
 		else
 		{
-			ConfigurationTree startNode =
-			    cfgMgr->getNode(startPath, true /*doNotThrowOnBrokenUIDLinks*/);
+			ConfigurationTree startNode = cfgMgr->getNode(startPath, true /*doNotThrowOnBrokenUIDLinks*/);
 			if(startNode.isLinkNode() && startNode.isDisconnected())
 			{
 				xmlOut.addTextElementToData("DisconnectedStartNode", "1");
