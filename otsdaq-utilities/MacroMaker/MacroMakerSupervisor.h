@@ -125,8 +125,11 @@ class MacroMakerSupervisor : public CoreSupervisorBase
 	                                                          FEPluginTypetoFEsMap_;
 	std::map<std::string /*FE UID*/, std::string /*FE Type*/> FEtoPluginTypeMap_;
 
-	std::string securityCode_;
-	bool        defaultSequence_;
+	std::string 				securityCode_;
+	bool        				defaultSequence_;
+
+	std::map<std::string /* username */, 
+		std::vector<std::string> /* last command */> 	lastFeCommandToHistory_; //prevent repeats to history
 
 };  // end MacroMakerSupervisor declaration
 

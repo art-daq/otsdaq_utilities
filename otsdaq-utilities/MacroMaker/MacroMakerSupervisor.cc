@@ -615,7 +615,7 @@ try
 		handleRequest(requestType, xmlOut, cgiIn, userInfo);
 
 	
-	__SUP_COUT_TYPE__(TLVL_DEBUG+12) << __COUT_HDR__ << "Total MacroMaker request time: " << artdaq::TimeUtils::GetElapsedTime(requestStart) << 
+	__SUP_COUTT__ << "Total MacroMaker request time: " << artdaq::TimeUtils::GetElapsedTime(requestStart) << 
 		" = " <<  time(0) - requestStartTime << __E__;
 }  // end request()
 catch(const std::runtime_error& e)
@@ -1499,7 +1499,8 @@ void MacroMakerSupervisor::appendCommandToHistory(std::string        Command,
 	}
 	else
 		__SUP_COUT__ << "Unable to open history.hist" << __E__;
-}
+} //end appendCommandToHistory()
+
 //==============================================================================
 void MacroMakerSupervisor::appendCommandToHistory(std::string feClass,
 												  std::string feUID,
@@ -1510,6 +1511,22 @@ void MacroMakerSupervisor::appendCommandToHistory(std::string feClass,
 												  bool saveOutputs,
 												  const std::string& username)
 {
+	//prevent repeats to FE command history (otherwise live view can overwhelm history)
+	auto feHistoryIt = lastFeCommandToHistory_.find(username);
+	if(feHistoryIt != lastFeCommandToHistory_.end() &&
+		feHistoryIt->second.size() == 7 &&
+		feHistoryIt->second[0] == feClass &&
+		feHistoryIt->second[1] == feUID &&
+		feHistoryIt->second[2] == macroType &&
+		feHistoryIt->second[3] == macroName &&
+		feHistoryIt->second[4] == inputArgs &&
+		feHistoryIt->second[5] == outputArgs &&
+		feHistoryIt->second[6] == (saveOutputs?"1":"0"))
+	{
+		__SUP_COUTT__ << "Not saving repeat command to history from user " << username << __E__;
+		return;
+	}
+
 	std::string fileName = "FEhistory.hist";
 	std::string fullPath = (std::string)MACROS_HIST_PATH + username + "/" + fileName;
 	__SUP_COUT__ << fullPath << __E__;
@@ -1529,11 +1546,22 @@ void MacroMakerSupervisor::appendCommandToHistory(std::string feClass,
 			histfile << "\"saveOutputs\":\"" << 0 << "\"\n";
 		histfile << "}#" << __E__;
 		histfile.close();
+
+		lastFeCommandToHistory_[username].clear(); //create instance and/or clear
+		feHistoryIt = lastFeCommandToHistory_.find(username);
+		feHistoryIt->second.push_back(feClass);
+		feHistoryIt->second.push_back(feUID);
+		feHistoryIt->second.push_back(macroType);
+		feHistoryIt->second.push_back(macroName);
+		feHistoryIt->second.push_back(inputArgs);
+		feHistoryIt->second.push_back(outputArgs);
+		feHistoryIt->second.push_back((saveOutputs?"1":"0"));
 	}
 	else
 		__SUP_COUT__ << "Unable to open FEhistory.hist" << __E__;
 
-}
+} //end appendCommandToHistory()
+
 //==============================================================================
 void MacroMakerSupervisor::loadFEMacroSequences(HttpXmlDocument& xmldoc,
                                        		  const std::string& username) 
@@ -1568,7 +1596,7 @@ void MacroMakerSupervisor::loadFEMacroSequences(HttpXmlDocument& xmldoc,
 	// return the list of sequences
 	xmldoc.addTextElementToData("FEsequences", sequences);
 	return;
-}
+} //end loadFEMacroSequences()
 
 //==============================================================================
 void MacroMakerSupervisor::saveFEMacroSequence(cgicc::Cgicc& cgi,
@@ -1593,7 +1621,7 @@ void MacroMakerSupervisor::saveFEMacroSequence(cgicc::Cgicc& cgi,
 	}
 	else
 		__SUP_COUT__ << "Unable to open " << name << ".dat" << __E__;
-}
+} //end saveFEMacroSequence()
 
 //==============================================================================
 void MacroMakerSupervisor::getFEMacroSequence(HttpXmlDocument& xmldoc,
@@ -1633,7 +1661,7 @@ void MacroMakerSupervisor::getFEMacroSequence(HttpXmlDocument& xmldoc,
 		__SUP_COUT__ << "Unable to open " << fullPath << "!" << __E__;
 		xmldoc.addTextElementToData("error", "ERROR");
 	}
-}
+} //end getFEMacroSequence()
 
 //==============================================================================
 void MacroMakerSupervisor::deleteFEMacroSequence(cgicc::Cgicc& cgi, 
@@ -1649,8 +1677,8 @@ void MacroMakerSupervisor::deleteFEMacroSequence(cgicc::Cgicc& cgi,
 
 	std::remove(fullPath.c_str());
 	__SUP_COUT__ << "Successfully deleted " << fullPath;
+} //end deleteFEMacroSequence()
 
-}
 //==============================================================================
 void MacroMakerSupervisor::loadHistory(HttpXmlDocument&   xmldoc,
                                        const std::string& username)
@@ -1695,6 +1723,7 @@ void MacroMakerSupervisor::loadHistory(HttpXmlDocument&   xmldoc,
 			FILE* fp = fopen(fileName.c_str(), "w");
 			if(!fp)
 			{
+				delete[] returnStr;
 				__SS__ << "Big problem with macromaker history file: " << fileName
 				       << __E__;
 				__SS_THROW__;
@@ -1713,9 +1742,10 @@ void MacroMakerSupervisor::loadHistory(HttpXmlDocument&   xmldoc,
 		delete[] returnStr;
 	}
 	else
-
 		__SUP_COUT__ << "Unable to open history.hist" << __E__;
-}
+
+} //end loadHistory()
+
 //==============================================================================
 void MacroMakerSupervisor::loadFEHistory(HttpXmlDocument&   xmldoc,
                                        const std::string& username)
@@ -1763,6 +1793,7 @@ void MacroMakerSupervisor::loadFEHistory(HttpXmlDocument&   xmldoc,
 			FILE* fp = fopen(fileName.c_str(), "w");
 			if (!fp)
 			{
+				delete[] returnStr;
 				__SS__ << "Big problem with FE history file: " << fileName
 				       << __E__;
 				__SS_THROW__;
@@ -1782,7 +1813,8 @@ void MacroMakerSupervisor::loadFEHistory(HttpXmlDocument&   xmldoc,
 	}
 	else
 		__SUP_COUT__ << "Unable to open FE history.hist" << __E__;
-}
+
+} //end loadFEHistory()
 
 //==============================================================================
 void MacroMakerSupervisor::deleteMacro(HttpXmlDocument&   xmldoc,
@@ -1804,7 +1836,7 @@ void MacroMakerSupervisor::deleteMacro(HttpXmlDocument&   xmldoc,
 	std::remove(fullPath.c_str());
 	__SUP_COUT__ << "Successfully deleted " << MacroName;
 	xmldoc.addTextElementToData("deletedMacroName", MacroName);
-}
+} //end deleteMacro()
 
 //==============================================================================
 void MacroMakerSupervisor::editMacro(HttpXmlDocument&   xmldoc,
@@ -1866,7 +1898,7 @@ void MacroMakerSupervisor::editMacro(HttpXmlDocument&   xmldoc,
 		else
 			xmldoc.addTextElementToData("newMacroName", "ERROR");
 	}
-}
+} //end editMacro()
 
 //==============================================================================
 void MacroMakerSupervisor::clearHistory(const std::string& username)
@@ -1876,7 +1908,7 @@ void MacroMakerSupervisor::clearHistory(const std::string& username)
 
 	std::remove(fullPath.c_str());
 	__SUP_COUT__ << "Successfully deleted " << fullPath;
-}
+} //end clearHistory()
 
 //==============================================================================
 void MacroMakerSupervisor::clearFEHistory(const std::string& username)
@@ -1886,7 +1918,7 @@ void MacroMakerSupervisor::clearFEHistory(const std::string& username)
 
 	std::remove(fullPath.c_str());
 	__SUP_COUT__ << "Successfully deleted " << fullPath;
-}
+} //end clearFEHistory()
 
 //==============================================================================
 void MacroMakerSupervisor::exportFEMacro(HttpXmlDocument&   xmldoc,
@@ -2163,7 +2195,7 @@ void MacroMakerSupervisor::exportFEMacro(HttpXmlDocument&   xmldoc,
 		                      insert);
 	}
 
-}  // end exportFEMacro ()
+}  // end exportFEMacro()
 
 //==============================================================================
 void MacroMakerSupervisor::exportMacro(HttpXmlDocument&   xmldoc,

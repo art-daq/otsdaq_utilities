@@ -188,7 +188,7 @@ void SlowControlsDashboardSupervisor::checkSlowControlsAlarms(
 					                      " status: " + alarm[3] + "" +
 					                      " severity: " + alarm[4];
 
-					__COUT_TYPE__(TLVL_DEBUG+20) << __COUT_HDR__
+					__COUTT__
 						<< "checkSlowControlsAlarms() subject '"	<< subject
 						<< "' message '"		<< message
 						<< "' alarm name '"		<< alarm[5]

@@ -772,13 +772,13 @@ try
 		std::string diffGroup     = CgiDataUtilities::getData(cgiIn, "diffGroup");
 		std::string diffGroupKey  = CgiDataUtilities::getData(cgiIn, "diffGroupKey");
 
-		__SUP_COUT_TYPE__(TLVL_DEBUG+11) << __COUT_HDR__ << "tableGroup: " << tableGroup << __E__;
-		__SUP_COUT_TYPE__(TLVL_DEBUG+11) << __COUT_HDR__ << "tableGroupKey: " << tableGroupKey << __E__;
-		__SUP_COUT_TYPE__(TLVL_DEBUG+11) << __COUT_HDR__ << "startPath: " << startPath << __E__;
-		__SUP_COUT_TYPE__(TLVL_DEBUG+11) << __COUT_HDR__ << "depth: " << depth << __E__;
-		__SUP_COUT_TYPE__(TLVL_DEBUG+11) << __COUT_HDR__ << "hideStatusFalse: " << hideStatusFalse << __E__;
-		__SUP_COUT_TYPE__(TLVL_DEBUG+11) << __COUT_HDR__ << "modifiedTables: " << modifiedTables << __E__;
-		__SUP_COUT_TYPE__(TLVL_DEBUG+11) << __COUT_HDR__ << "filterList: " << filterList << __E__;
+		__SUP_COUTT__ << "tableGroup: " << tableGroup << __E__;
+		__SUP_COUTT__ << "tableGroupKey: " << tableGroupKey << __E__;
+		__SUP_COUTT__ << "startPath: " << startPath << __E__;
+		__SUP_COUTT__ << "depth: " << depth << __E__;
+		__SUP_COUTT__ << "hideStatusFalse: " << hideStatusFalse << __E__;
+		__SUP_COUTT__ << "modifiedTables: " << modifiedTables << __E__;
+		__SUP_COUTT__ << "filterList: " << filterList << __E__;
 
 		handleFillTreeViewXML(xmlOut,
 		                      cfgMgr,
@@ -1485,10 +1485,10 @@ try
 		xmlOut.addTextElementToData("Error", ss.str());
 	}
 
-	__SUP_COUT_TYPE__(TLVL_DEBUG+12) << __COUT_HDR__ << "cfgMgr runtime=" << cfgMgr->runTimeSeconds() << __E__;
+	__SUP_COUTT__ << "cfgMgr runtime=" << cfgMgr->runTimeSeconds() << __E__;
 	// always add active table groups to xml response
 	ConfigurationSupervisorBase::getConfigurationStatusXML(xmlOut, cfgMgr);
-	__SUP_COUT_TYPE__(TLVL_DEBUG+12) << __COUT_HDR__ << "cfgMgr runtime=" << cfgMgr->runTimeSeconds() << __E__;
+	__SUP_COUTT__ << "cfgMgr runtime=" << cfgMgr->runTimeSeconds() << __E__;
 
 }  // end ::request()
 catch(const std::runtime_error& e)
@@ -3224,7 +3224,7 @@ void ConfigurationGUISupervisor::handleFillTreeViewXML(HttpXmlDocument&        x
 													   const std::string&      diffGroupName /* = "" */,
 													   const TableGroupKey&    diffGroupKey /* = TableGroupKey() */)
 {
-	__SUP_COUT_TYPE__(TLVL_DEBUG+12) << __COUT_HDR__ << "get Tree View: " << groupName << "(" << groupKey << ")" << __E__;
+	__SUP_COUTT__ << "get Tree View: " << groupName << "(" << groupKey << ")" << __E__;
 	
 	// return xml
 	//	<groupName="groupName"/>
@@ -3288,12 +3288,12 @@ void ConfigurationGUISupervisor::handleFillTreeViewXML(HttpXmlDocument&        x
 		for(auto& activeTable : cfgMgr->getActiveVersions())	
 			__SUP_COUT__ << "cfgMgr " << activeTable.first << "-v" << activeTable.second << __E__;
 		
-		__SUP_COUT_TYPE__(TLVL_DEBUG+12) << __COUT_HDR__ << "Diff Group tables loaded." << __E__;
+		__SUP_COUTT__ << "Diff Group tables loaded." << __E__;
 		diffCfgMgr->copyTableGroupFromCache(*cfgMgr,
 											diffMemberMap,
 											diffGroupName,
 											diffGroupKey);
-		__SUP_COUT_TYPE__(TLVL_DEBUG+12) << __COUT_HDR__ << "Diff Group tables copied to local diff config manager." << __E__;
+		__SUP_COUTT__ << "Diff Group tables copied to local diff config manager." << __E__;
 		
 		//now activate diff table for tree traversal (without calling init())
 		for(auto& memberPair : diffMemberMap)		
@@ -3320,7 +3320,7 @@ void ConfigurationGUISupervisor::handleFillTreeViewXML(HttpXmlDocument&        x
 				else if(diffCfgMgr->getLastTableGroups().begin()->first == ConfigurationManager::GROUP_TYPE_NAME_CONFIGURATION)
 					groupTypeToLoad = ConfigurationManager::GROUP_TYPE_NAME_CONTEXT;
 
-				__SUP_COUT_TYPE__(TLVL_DEBUG+12) << __COUT_HDR__ << "Loading " << groupTypeToLoad <<
+				__SUP_COUTT__ << "Loading " << groupTypeToLoad <<
 					cfgMgr->getLastTableGroups().at(groupTypeToLoad).first.first << "(" <<
 					cfgMgr->getLastTableGroups().at(groupTypeToLoad).first.second << ")" << __E__;
 
@@ -3340,11 +3340,11 @@ void ConfigurationGUISupervisor::handleFillTreeViewXML(HttpXmlDocument&        x
 		
 
 		for(auto& activeTable : cfgMgr->getActiveVersions())	
-			__SUP_COUT_TYPE__(TLVL_DEBUG+1) << "cfgMgr " << activeTable.first << "-v" << activeTable.second << __E__;
+			__SUP_COUTT__ << "cfgMgr " << activeTable.first << "-v" << activeTable.second << __E__;
 		for(auto& activeTable : diffCfgMgr->getActiveVersions())	
-			__SUP_COUT_TYPE__(TLVL_DEBUG+1) << "diffCfgMgr " << activeTable.first << "-v" << activeTable.second << __E__;
+			__SUP_COUTT__ << "diffCfgMgr " << activeTable.first << "-v" << activeTable.second << __E__;
 
-		__SUP_COUT_TYPE__(TLVL_DEBUG+12) << __COUT_HDR__ << "Diff Group tables are setup: " << diffAccumulateErrors << __E__;
+		__SUP_COUTT__ << "Diff Group tables are setup: " << diffAccumulateErrors << __E__;
 	} // end do diff load
 
 
@@ -3380,7 +3380,7 @@ void ConfigurationGUISupervisor::handleFillTreeViewXML(HttpXmlDocument&        x
 		             << StringMacros::mapToString(cfgMgr->getActiveVersions()) << __E__;
 	}
 	else
-		__SUP_COUT_TYPE__(TLVL_DEBUG+12) << __COUT_HDR__ << "Active tables are setup. No issues found." << __E__;
+		__SUP_COUTT__ << "Active tables are setup. No issues found." << __E__;
 
 	
 
@@ -3448,14 +3448,14 @@ void ConfigurationGUISupervisor::handleFillTreeViewXML(HttpXmlDocument&        x
 						diffCfgMgr->getNode(startPath, true /*doNotThrowOnBrokenUIDLinks*/);
 				
 					if(diffStartNode.isLinkNode() && diffStartNode.isDisconnected())
-						__SUP_COUT_TYPE__(TLVL_DEBUG+12) << __COUT_HDR__ << "Diff Group disconnected node." << __E__;
+						__SUP_COUTT__ << "Diff Group disconnected node." << __E__;
 					else
 						diffRootMap = diffCfgMgr->getNode(startPath).getChildrenMap(filterMap);
 				}
 				catch(const std::runtime_error& e)
 				{
 					//if diff node does not exist, user was already notified at parent diff, so ignore error.
-					__SUP_COUT_TYPE__(TLVL_DEBUG+12) << __COUT_HDR__ << "Diff Group node does not exist." << __E__;
+					__SUP_COUTT__ << "Diff Group node does not exist." << __E__;
 				}
 			}
 		}
@@ -3468,7 +3468,7 @@ void ConfigurationGUISupervisor::handleFillTreeViewXML(HttpXmlDocument&        x
 		}
 		else //doDiff
 		{
-			__SUP_COUT_TYPE__(TLVL_DEBUG+12) << __COUT_HDR__ << "Diff Tree recursive handling." << __E__;
+			__SUP_COUTT__ << "Diff Tree recursive handling." << __E__;
 
 			//convert vector rootMap to set for searching
 			std::set<std::string /* treeNodeName */> rootMapToSearch;
@@ -3496,27 +3496,27 @@ void ConfigurationGUISupervisor::handleFillTreeViewXML(HttpXmlDocument&        x
 
 				if(diffMember.second.getNodeType() == "UIDLinkNode")
 				{	
-					__SUP_COUT_TYPE__(TLVL_DEBUG+12) << __COUT_HDR__ << "diff active " << StringMacros::mapToString(diffCfgMgr->getActiveVersions()) << __E__;
-					__SUP_COUT_TYPE__(TLVL_DEBUG+12) << __COUT_HDR__ << "root active " << StringMacros::mapToString(cfgMgr->getActiveVersions()) << __E__;
+					__SUP_COUTT__ << "diff active " << StringMacros::mapToString(diffCfgMgr->getActiveVersions()) << __E__;
+					__SUP_COUTT__ << "root active " << StringMacros::mapToString(cfgMgr->getActiveVersions()) << __E__;
 				
-					__SUP_COUT_TYPE__(TLVL_DEBUG+12) << __COUT_HDR__ << "diff map " << diffRootSs.str() << __E__;
-					__SUP_COUT_TYPE__(TLVL_DEBUG+12) << __COUT_HDR__ << "root map " << rootSs.str() << __E__;	
+					__SUP_COUTT__ << "diff map " << diffRootSs.str() << __E__;
+					__SUP_COUTT__ << "root map " << rootSs.str() << __E__;	
 
-					__SUP_COUT_TYPE__(TLVL_DEBUG+20) << __COUT_HDR__ << "\t\t" << diffMember.second.getValueName() << ": " << diffMember.second.getValueAsString() << __E__;
+					__SUP_COUTT__ << "\t\t" << diffMember.second.getValueName() << ": " << diffMember.second.getValueAsString() << __E__;
 
-					__SUP_COUT_TYPE__(TLVL_DEBUG+12) << __COUT_HDR__ << diffMember.second.nodeDump();
+					__SUP_COUTT__ << diffMember.second.nodeDump();
 				}
 			}
 			
-			__SUP_COUT_TYPE__(TLVL_DEBUG+12) << __COUT_HDR__ << "diff map " << diffRootSs.str() << __E__;
-			__SUP_COUT_TYPE__(TLVL_DEBUG+12) << __COUT_HDR__ << "root map " << rootSs.str() << __E__;
+			__SUP_COUTT__ << "diff map " << diffRootSs.str() << __E__;
+			__SUP_COUTT__ << "root map " << rootSs.str() << __E__;
 		
 			//recurse
 			for(auto& treePair : rootMap)
 			{
 				if(diffRootMap.find(treePair.first) == diffRootMap.end())
 				{
-					__SUP_COUT_TYPE__(TLVL_DEBUG+12) << __COUT_HDR__ << "Diff Tree recursive handling... " << treePair.first << __E__;
+					__SUP_COUTT__ << "Diff Tree recursive handling... " << treePair.first << __E__;
 					ConfigurationTree rootNode(diffCfgMgr, nullptr /* table */);
 					recursiveTreeToXML(
 						treePair.second, depth - 1, xmlOut, parentEl, hideStatusFalse, 
@@ -3524,7 +3524,7 @@ void ConfigurationGUISupervisor::handleFillTreeViewXML(HttpXmlDocument&        x
 				}
 				else
 				{
-					__SUP_COUT_TYPE__(TLVL_DEBUG+12) << __COUT_HDR__ << "Diff Tree recursive handling... " << treePair.first << __E__;
+					__SUP_COUTT__ << "Diff Tree recursive handling... " << treePair.first << __E__;
 					recursiveTreeToXML(
 						treePair.second, depth - 1, xmlOut, parentEl, hideStatusFalse, 
 						diffRootMap.at(treePair.first));
@@ -3565,11 +3565,11 @@ void ConfigurationGUISupervisor::recursiveTreeToXML(const ConfigurationTree& t,
                                                     bool 					 hideStatusFalse,
 													std::optional<std::reference_wrapper<const ConfigurationTree>> diffTree)
 {
-	__COUT_TYPE__(TLVL_DEBUG+11) << __COUT_HDR__ << t.getValueAsString() << __E__;
+	__COUTT__ << t.getValueAsString() << __E__;
 
 	if(t.isValueNode())
 	{
-		__COUT_TYPE__(TLVL_DEBUG+20) << __COUT_HDR__ << "\t" << t.getValueName() << ": " << t.getValueAsString() << __E__;
+		__COUTT__ << "\t" << t.getValueName() << ": " << t.getValueAsString() << __E__;
 
 		parentEl = xmlOut.addTextElementToParent("node", t.getValueName(), parentEl);
 		if(diffTree.has_value() && 
@@ -3577,12 +3577,12 @@ void ConfigurationGUISupervisor::recursiveTreeToXML(const ConfigurationTree& t,
 			t.getValueName() != TableViewColumnInfo::COL_NAME_AUTHOR && 
 			t.getValueName() != TableViewColumnInfo::COL_NAME_CREATION)
 		{	
-			__COUT_TYPE__(TLVL_DEBUG+20) << __COUT_HDR__ << "\t\t diff type " << diffTree->get().getNodeType() << __E__;
+			__COUTT__ << "\t\t diff type " << diffTree->get().getNodeType() << __E__;
 				
 			if(diffTree->get().isValueNode())
 			{
-				__COUT_TYPE__(TLVL_DEBUG+20) << __COUT_HDR__ << "\t" << diffTree->get().getValueAsString() << " ? " << t.getValueAsString() << __E__;
-				__COUT_TYPE__(TLVL_DEBUG+20) << __COUT_HDR__ << "\t" << diffTree->get().getTableName() << "-v" << diffTree->get().getTableVersion() << " ? " << t.getTableName() << "-v" << t.getTableVersion() << __E__;
+				__COUTT__ << "\t" << diffTree->get().getValueAsString() << " ? " << t.getValueAsString() << __E__;
+				__COUTT__ << "\t" << diffTree->get().getTableName() << "-v" << diffTree->get().getTableVersion() << " ? " << t.getTableName() << "-v" << t.getTableVersion() << __E__;
 
 				if(t.getValueAsString() != diffTree->get().getValueAsString())
 				{
@@ -3603,7 +3603,7 @@ void ConfigurationGUISupervisor::recursiveTreeToXML(const ConfigurationTree& t,
 				xmlOut.addTextElementToParent("nodeDiff", missingSs.str(), parentEl);
 			}
 
-			__COUT_TYPE__(TLVL_DEBUG+20) << __COUT_HDR__ << "\t" << t.getValueName() << ": " << t.getValueAsString() << __E__;
+			__COUTT__ << "\t" << t.getValueName() << ": " << t.getValueAsString() << __E__;
 
 		} //end diff tree handling
 
@@ -3615,7 +3615,7 @@ void ConfigurationGUISupervisor::recursiveTreeToXML(const ConfigurationTree& t,
 		if(t.getValueType() == TableViewColumnInfo::TYPE_FIXED_CHOICE_DATA ||
 		   t.getValueType() == TableViewColumnInfo::TYPE_BITMAP_DATA)
 		{
-			__COUT_TYPE__(TLVL_DEBUG+11) << __COUT_HDR__ << t.getValueType() << __E__;
+			__COUTT__ << t.getValueType() << __E__;
 
 			std::vector<std::string> choices = t.getFixedChoices();
 			for(const auto& choice : choices)
@@ -3624,11 +3624,11 @@ void ConfigurationGUISupervisor::recursiveTreeToXML(const ConfigurationTree& t,
 	}
 	else
 	{
-		__COUT_TYPE__(TLVL_DEBUG+20) << __COUT_HDR__ << "\t" << t.getValueAsString() << __E__;
+		__COUTT__ << "\t" << t.getValueAsString() << __E__;
 
 		if(t.isLinkNode())
 		{
-			__COUT_TYPE__(TLVL_DEBUG+20) << __COUT_HDR__ << "\t\t" << t.getValueName() << ": " << t.getValueAsString() << __E__;
+			__COUTT__ << "\t\t" << t.getValueName() << ": " << t.getValueAsString() << __E__;
 
 			// Note: The order of xml fields is required by JavaScript, so do NOT change
 			// order.
@@ -3636,11 +3636,11 @@ void ConfigurationGUISupervisor::recursiveTreeToXML(const ConfigurationTree& t,
 
 			if(diffTree.has_value())
 			{
-				__COUT_TYPE__(TLVL_DEBUG+20) << __COUT_HDR__ << "\t\t diff type " << diffTree->get().getNodeType() << __E__;
+				__COUTT__ << "\t\t diff type " << diffTree->get().getNodeType() << __E__;
 				
 				if(diffTree->get().isRootNode()) //then diff group does not have this uid!
 				{			
-					__COUT_TYPE__(TLVL_DEBUG+20) << __COUT_HDR__ << "" << t.getValueAsString() << __E__;
+					__COUTT__ << "" << t.getValueAsString() << __E__;
 					std::stringstream missingSs; //assume only one group loaded for diff					
 					//lookup group name in diffManager based on current node's parent's table (best proxy info for missing diff node at this point)
 					auto diffGroupPair = diffTree->get().getConfigurationManager()->getGroupOfLoadedTable(t.getParentTableName());
@@ -3650,7 +3650,7 @@ void ConfigurationGUISupervisor::recursiveTreeToXML(const ConfigurationTree& t,
 				}
 				else if(t.isDisconnected() != diffTree->get().isDisconnected())
 				{
-					__COUT_TYPE__(TLVL_DEBUG+20) << __COUT_HDR__ << "\t\t diff isDisconnected " << diffTree->get().isDisconnected() << __E__;
+					__COUTT__ << "\t\t diff isDisconnected " << diffTree->get().isDisconnected() << __E__;
 				
 					std::stringstream missingSs; //assume only one group loaded for diff
 					//lookup group name in diffManager based on current node's parent's table (best proxy info for diff node at this point)
@@ -3661,7 +3661,7 @@ void ConfigurationGUISupervisor::recursiveTreeToXML(const ConfigurationTree& t,
 				}
 				else if(!t.isDisconnected() && t.isUIDLinkNode() != diffTree->get().isUIDLinkNode())
 				{
-					__COUT_TYPE__(TLVL_DEBUG+20) << __COUT_HDR__ << "" << t.getValueAsString() << __E__;
+					__COUTT__ << "" << t.getValueAsString() << __E__;
 					std::stringstream missingSs; //assume only one group loaded for diff
 					//lookup group name in diffManager based on current node's parent's table (best proxy info for diff node at this point)
 					auto diffGroupPair = diffTree->get().getConfigurationManager()->getGroupOfLoadedTable(t.getParentTableName());					
@@ -3671,7 +3671,7 @@ void ConfigurationGUISupervisor::recursiveTreeToXML(const ConfigurationTree& t,
 				}
 				else if(!t.isDisconnected() && t.isUIDLinkNode() && t.getValueAsString() != diffTree->get().getValueAsString()) //both are UID link
 				{
-					__COUT_TYPE__(TLVL_DEBUG+20) << __COUT_HDR__ << "" << t.getValueAsString() << __E__;
+					__COUTT__ << "" << t.getValueAsString() << __E__;
 					std::stringstream missingSs; //assume only one group loaded for diff
 					//lookup group name in diffManager based on current node's parent's table (best proxy info for diff node at this point)
 					auto diffGroupPair = diffTree->get().getConfigurationManager()->getGroupOfLoadedTable(t.getParentTableName());					
@@ -3681,7 +3681,7 @@ void ConfigurationGUISupervisor::recursiveTreeToXML(const ConfigurationTree& t,
 				}
 				else if(!t.isDisconnected() && !t.isUIDLinkNode()) //both are Group links
 				{
-					__COUT_TYPE__(TLVL_DEBUG+20) << __COUT_HDR__ << "" << t.getValueAsString() << __E__;
+					__COUTT__ << "" << t.getValueAsString() << __E__;
 					std::stringstream missingSs; //assume only one group loaded for diff
 
 					auto tchildren = t.getChildrenMap();
@@ -3706,12 +3706,12 @@ void ConfigurationGUISupervisor::recursiveTreeToXML(const ConfigurationTree& t,
 					}
 				}
 				else				
-					__COUT_TYPE__(TLVL_DEBUG+20) << __COUT_HDR__ << "" << t.getValueAsString() << __E__;
+					__COUTT__ << "" << t.getValueAsString() << __E__;
 			} //end diff tree handling
 
 			if(t.isDisconnected())
 			{
-				__COUT_TYPE__(TLVL_DEBUG+11) << __COUT_HDR__ << t.getValueName() << __E__;
+				__COUTT__ << t.getValueName() << __E__;
 
 				// xmlOut.addTextElementToParent("value", t.getValueAsString(), parentEl);
 				// xmlOut.addTextElementToParent("DisconnectedLink", t.getValueAsString(),
@@ -3770,7 +3770,7 @@ void ConfigurationGUISupervisor::recursiveTreeToXML(const ConfigurationTree& t,
 		}
 		else  // uid node (or root node)
 		{
-			__COUT_TYPE__(TLVL_DEBUG+20) << __COUT_HDR__ << "\t\t" << t.getValueAsString() << __E__;
+			__COUTT__ << "\t\t" << t.getValueAsString() << __E__;
 			bool returnNode = true;  // default to shown
 
 			if(t.isUIDNode() && hideStatusFalse)  // only show if status evaluates to true
@@ -3783,11 +3783,11 @@ void ConfigurationGUISupervisor::recursiveTreeToXML(const ConfigurationTree& t,
 				
 				if(diffTree.has_value())
 				{
-					__COUT_TYPE__(TLVL_DEBUG+20) << __COUT_HDR__ << "\t\t diff type " << diffTree->get().getNodeType() << __E__;
+					__COUTT__ << "\t\t diff type " << diffTree->get().getNodeType() << __E__;
 				
 					if(diffTree->get().isRootNode()) //then diff group does not have this uid!
 					{			
-						__COUT_TYPE__(TLVL_DEBUG+20) << __COUT_HDR__ << "" << t.getValueAsString() << __E__;
+						__COUTT__ << "" << t.getValueAsString() << __E__;
 						std::stringstream missingSs; //assume only one group loaded for diff
 						//lookup group name in diffManager based on current node's table (best proxy info for diff node at this point)
 						auto diffGroupPair = diffTree->get().getConfigurationManager()->getGroupOfLoadedTable(t.getTableName());	
@@ -3796,7 +3796,7 @@ void ConfigurationGUISupervisor::recursiveTreeToXML(const ConfigurationTree& t,
 						xmlOut.addTextElementToParent("nodeDiff", missingSs.str(), parentEl);							
 					}
 					else
-						__COUT_TYPE__(TLVL_DEBUG+20) << __COUT_HDR__ << "" << t.getValueAsString() << __E__;
+						__COUTT__ << "" << t.getValueAsString() << __E__;
 				} //end diff tree handling
 			}
 			else //hiding node
@@ -3807,7 +3807,7 @@ void ConfigurationGUISupervisor::recursiveTreeToXML(const ConfigurationTree& t,
 		// child.toXml(depth-1)
 		if(depth >= 1)
 		{
-			__COUT_TYPE__(TLVL_DEBUG+20) << __COUT_HDR__ << "\t\t\t" << t.getValueAsString() << __E__;
+			__COUTT__ << "\t\t\t" << t.getValueAsString() << __E__;
 			auto C = t.getChildren();
 			for(auto& c : C)
 				recursiveTreeToXML( //TODO -- implement diffTree for depth > 1 requests
@@ -4484,13 +4484,13 @@ try
 			int                i;
 			while(getline(f, commandSubString, ';'))
 			{
-				__SUP_COUT_TYPE__(TLVL_DEBUG+11) << __COUT_HDR__ << "commandSubString " << commandSubString << __E__;
+				__SUP_COUTT__ << "commandSubString " << commandSubString << __E__;
 				std::istringstream g(commandSubString);
 
 				i = 0;
 				while(getline(g, paramSubString, ','))
 				{
-					__SUP_COUT_TYPE__(TLVL_DEBUG+12) << __COUT_HDR__ << "paramSubString " << paramSubString << __E__;
+					__SUP_COUTT__ << "paramSubString " << paramSubString << __E__;
 					if(i == 0)  // type
 					{
 						if(paramSubString != "type")
@@ -4503,14 +4503,14 @@ try
 
 						getline(g, paramValue, ',');
 						++i;
-						__SUP_COUT_TYPE__(TLVL_DEBUG+13) << __COUT_HDR__ << "paramValue " << paramValue << __E__;
+						__SUP_COUTT__ << "paramValue " << paramValue << __E__;
 						commands.back().type_ = paramValue;
 					}
 					else  // params
 					{
 						getline(g, paramValue, ',');
 						++i;
-						__SUP_COUT_TYPE__(TLVL_DEBUG+13) << __COUT_HDR__ << "paramValue " << paramValue << __E__;
+						__SUP_COUTT__ << "paramValue " << paramValue << __E__;
 
 						commands.back().params_.emplace(
 						    std::pair<std::string /*param name*/,
@@ -5600,7 +5600,7 @@ try
 			versionAliases = cfgMgr->getVersionAliases();
 			for(const auto& aliases : versionAliases)
 				for(const auto& alias : aliases.second)
-					__SUP_COUT_TYPE__(TLVL_DEBUG+20) << "ALIAS: " << aliases.first << " " << alias.first
+					__SUP_COUTT__ << "ALIAS: " << aliases.first << " " << alias.first
 					             << " ==> " << alias.second << __E__;
 		}
 		catch(const std::runtime_error& e)
@@ -5880,7 +5880,7 @@ ConfigurationManagerRW* ConfigurationGUISupervisor::refreshUserSession(
 	std::stringstream ssMapKey;
 	ssMapKey << username << ":" << activeSessionIndex;
 	std::string mapKey = ssMapKey.str();
-	__SUP_COUT_TYPE__(TLVL_DEBUG+15) << __COUT_HDR__ << "Using Config Session " << mapKey
+	__SUP_COUTT__ << "Using Config Session " << mapKey
 					<< " ... Total Session Count: " << userConfigurationManagers_.size()
 					<< __E__;
 
@@ -5923,7 +5923,7 @@ ConfigurationManagerRW* ConfigurationGUISupervisor::refreshUserSession(
 			false /* getGroupInfo */,
 			true /* initializeActiveGroups */);
 	}
-	__SUP_COUT_TYPE__(TLVL_DEBUG+11) << __COUT_HDR__ << "Configuration Manager ready. time=" << time(0) << " " << clock() <<
+	__SUP_COUTT__ << "Configuration Manager ready. time=" << time(0) << " " << clock() <<
 		" runTimeSeconds=" << userConfigurationManagers_[mapKey]->runTimeSeconds() <<  __E__;
 
 	// update active sessionIndex last use time
@@ -6917,13 +6917,13 @@ void ConfigurationGUISupervisor::handleGroupAliasesXML(HttpXmlDocument&        x
 						}
 					if(foundThreadIndex == -1)
 					{
-						__SUP_COUT_TYPE__(TLVL_DEBUG+12) << __COUT_HDR__ << "Waiting for available thread..." << __E__;
+						__SUP_COUTT__ << "Waiting for available thread..." << __E__;
 						usleep(10000);
 					}
 				} //end thread search loop
 				threadsLaunched = numOfThreads - 1;
 			}					
-			__SUP_COUT_TYPE__(TLVL_DEBUG+12) << __COUT_HDR__ << "Starting load group thread... " << groupName << "(" << groupKey << ")" << __E__;
+			__SUP_COUTT__ << "Starting load group thread... " << groupName << "(" << groupKey << ")" << __E__;
 			*(threadDone[foundThreadIndex]) = false;
 
 
@@ -6959,7 +6959,7 @@ void ConfigurationGUISupervisor::handleGroupAliasesXML(HttpXmlDocument&        x
 				}
 			if(foundThreadIndex != -1)
 			{
-				__SUP_COUT_TYPE__(TLVL_DEBUG+12) << __COUT_HDR__ << "Waiting for thread to finish... " << foundThreadIndex << __E__;
+				__SUP_COUTT__ << "Waiting for thread to finish... " << foundThreadIndex << __E__;
 				usleep(10000);
 			}
 		} while(foundThreadIndex != -1); //end thread done search loop
@@ -7127,7 +7127,7 @@ void ConfigurationGUISupervisor::handleTableGroupsXML(HttpXmlDocument&        xm
                                                       ConfigurationManagerRW* cfgMgr,
                                                       bool returnMembers)
 {
-	__SUP_COUT_TYPE__(TLVL_DEBUG+12) << __COUT_HDR__ << "cfgMgr runtime=" << cfgMgr->runTimeSeconds() << __E__;
+	__SUP_COUTT__ << "cfgMgr runtime=" << cfgMgr->runTimeSeconds() << __E__;
 	// use xmlOut.dataSs_ since there is no need for escape the string and it can be a huge data block to escape and recursively print
 	// xercesc::DOMElement* parentEl;
 
@@ -7150,7 +7150,7 @@ void ConfigurationGUISupervisor::handleTableGroupsXML(HttpXmlDocument&        xm
 	const std::map<std::string, GroupInfo>& allGroupInfo = cfgMgr->getAllGroupInfo();
 
 
-	__SUP_COUT_TYPE__(TLVL_DEBUG+12) << __COUT_HDR__ << "cfgMgr runtime=" << cfgMgr->runTimeSeconds() << __E__;
+	__SUP_COUTT__ << "cfgMgr runtime=" << cfgMgr->runTimeSeconds() << __E__;
 
 	TableGroupKey groupKey;
 	std::string   groupName;
@@ -7286,9 +7286,9 @@ void ConfigurationGUISupervisor::handleTableGroupsXML(HttpXmlDocument&        xm
 			}
 
 		}  // end other key loop
-		__SUP_COUT_TYPE__(TLVL_DEBUG+12) << __COUT_HDR__ << groupName << " runtime=" << cfgMgr->runTimeSeconds() << __E__;
+		__SUP_COUTT__ << groupName << " runtime=" << cfgMgr->runTimeSeconds() << __E__;
 	}      // end primary group loop
-	__SUP_COUT_TYPE__(TLVL_DEBUG+12) << __COUT_HDR__ << "cfgMgr runtime=" << cfgMgr->runTimeSeconds() << __E__;
+	__SUP_COUTT__ << "cfgMgr runtime=" << cfgMgr->runTimeSeconds() << __E__;
 }  // end handleTableGroupsXML()
 
 //==============================================================================
@@ -8187,7 +8187,7 @@ void ConfigurationGUISupervisor::handleGroupDiff(
 				continue;
 			}
 
-			__SUP_COUT_TYPE__(TLVL_DEBUG+20) <<  "Comparing " << 
+			__SUP_COUTT__ <<  "Comparing " << 
 				member.first << "-v" << member.second << " ... " << 
 				member.first << "-v" << diffMemberMap.at(member.first) << __E__;
 			
@@ -8454,7 +8454,7 @@ void ConfigurationGUISupervisor::testXDAQContext()
 	// 			__SUP_COUT__ << "\t\t" << v << __E__;
 	// 		}
 	// 	}
-	// __SUP_COUT_TYPE__(TLVL_DEBUG+12) << __COUT_HDR__ << "Group Info end runtime=" << cfgMgr->runTimeSeconds() << __E__;
+	// __SUP_COUTT__ << "Group Info end runtime=" << cfgMgr->runTimeSeconds() << __E__;
 	// testXDAQContext just a test bed for navigating the new config tree
 	// cfgMgr->testXDAQContext();
 
