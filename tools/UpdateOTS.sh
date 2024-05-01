@@ -69,7 +69,8 @@ function updateUserData
 	echo -e "UpdateOTS.sh:${LINENO}  \t "
 	echo -e "UpdateOTS.sh:${LINENO}  \t \t ${USER_DATA}/ServiceData/CoreTableInfoNames.dat"
 	echo -e "UpdateOTS.sh:${LINENO}  \t "
-	echo -e "UpdateOTS.sh:${LINENO}  \t ... each line will be copied into user data relative to path ${OTSDAQ_DIR}/data-core/TableInfo/"
+	echo -e "UpdateOTS.sh:${LINENO}  \t ... each line will be copied into user data relative to installed path ${OTSDAQ_DIR}/data-core/TableInfo/"
+	echo -e "UpdateOTS.sh:${LINENO}  \t ... 			       and then, if it exists, relative to source path ${OTS_SOURCE}/otsdaq/data-core/TableInfo/"
 	echo -e "UpdateOTS.sh:${LINENO}  \t "
 	echo -e "UpdateOTS.sh:${LINENO}  \t If CoreTableInfoNames.dat doesn't exist the whole directory ${OTSDAQ_DIR}/data-core/TableInfo/ will be copied!"
 	echo -e "UpdateOTS.sh:${LINENO}  \t #######################################################################################################################"
@@ -90,7 +91,7 @@ function updateUserData
 		sed -i s/TheSupervisorConfiguration/GatewaySupervisorConfiguration/g $USER_DATA/ServiceData/CoreTableInfoNames.dat
 
 		#remove empty whitespace lines
-		 sed -i '/^$/d' $USER_DATA/ServiceData/CoreTableInfoNames.dat
+		sed -i '/^$/d' $USER_DATA/ServiceData/CoreTableInfoNames.dat
 		
 		cat $USER_DATA/ServiceData/CoreTableInfoNames.dat
 		echo
@@ -103,8 +104,20 @@ function updateUserData
 		LAST_LINE=
 		while read line; do
 			if [[ "x${line}" != "x" && "${LAST_LINE}" != "${line}" ]]; then
-				#echo -e "UpdateOTS.sh:${LINENO}  \t cp $OTSDAQ_DIR/data-core/TableInfo/${line}Info.xml $USER_DATA/TableInfo/"						
-				cp $OTSDAQ_DIR/data-core/TableInfo/${line}Info.xml $USER_DATA/TableInfo/ #do not hide failures anymore --- &>/dev/null #hide output		
+				
+				#echo -e "UpdateOTS.sh:${LINENO}  \t cp $OTSDAQ_DIR/data-core/TableInfo/${line}Info.xml $USER_DATA/TableInfo/"					
+				DID_IT=0	
+				#verify that at least one of the copies worked! Otherwise, flag for user
+				cp $OTSDAQ_DIR/data-core/TableInfo/${line}Info.xml $USER_DATA/TableInfo/ &>/dev/null && DID_IT=1
+				cp $OTS_SOURCE/otsdaq/data-core/TableInfo/${line}Info.xml $USER_DATA/TableInfo/ &>/dev/null && DID_IT=1
+				lineSed=$(echo $line | sed s/_/-/g) #need to convert repo names from _ to - for backward compatibility of .dat files
+				cp $OTSDAQ_DIR/data-core/TableInfo/${lineSed}Info.xml $USER_DATA/TableInfo/ &>/dev/null && DID_IT=1
+				cp $OTS_SOURCE/otsdaq/data-core/TableInfo/${lineSed}Info.xml $USER_DATA/TableInfo/ &>/dev/null && DID_IT=1
+
+				if [ $DID_IT == 0 ]; then
+					echo -e "UpdateOTS.sh:${LINENO}  \t Error, table dependency copy failed! Could not find table source for ${line}"				
+				fi
+
 				LAST_LINE=${line}
 			fi
 		done < $USER_DATA/ServiceData/CoreTableInfoNames.dat
@@ -120,16 +133,21 @@ function updateUserData
 		rm -rf $USER_DATA/TableInfo_update_bk
 		cp -r $USER_DATA/TableInfo/ $USER_DATA/TableInfo_update_bk
 		
-		echo -e "UpdateOTS.sh:${LINENO}  \t cp $OTSDAQ_DIR/data-core/TableInfo/ARTDAQ/*Info.xml $USER_DATA/TableInfo/"
+		echo -e "UpdateOTS.sh:${LINENO}  \t cp $OTSDAQ_DIR/data-core/TableInfo/ARTDAQ/*Info.xml $USER_DATA/TableInfo/"		
 		cp $OTSDAQ_DIR/data-core/TableInfo/ARTDAQ/*Info.xml $USER_DATA/TableInfo/ 		# undo c++ style comment for Eclipse viewing*/
+		cp $OTS_SOURCE/otsdaq/data-core/TableInfo/ARTDAQ/*Info.xml $USER_DATA/TableInfo/ &>/dev/null 		# undo c++ style comment for Eclipse viewing*/
 		echo -e "UpdateOTS.sh:${LINENO}  \t cp $OTSDAQ_DIR/data-core/TableInfo/BackboneGroup/*Info.xml $USER_DATA/TableInfo/"
 		cp $OTSDAQ_DIR/data-core/TableInfo/BackboneGroup/*Info.xml $USER_DATA/TableInfo/			# undo c++ style comment for Eclipse viewing*/
+		cp $OTS_SOURCE/otsdaq/data-core/TableInfo/BackboneGroup/*Info.xml $USER_DATA/TableInfo/ &>/dev/null			# undo c++ style comment for Eclipse viewing*/
 		echo -e "UpdateOTS.sh:${LINENO}  \t cp $OTSDAQ_DIR/data-core/TableInfo/ConfigCore/*Info.xml $USER_DATA/TableInfo/"
 		cp $OTSDAQ_DIR/data-core/TableInfo/ConfigCore/*Info.xml $USER_DATA/TableInfo/ 		# undo c++ style comment for Eclipse viewing*/
+		cp $OTS_SOURCE/otsdaq/data-core/TableInfo/ConfigCore/*Info.xml $USER_DATA/TableInfo/ &>/dev/null 		# undo c++ style comment for Eclipse viewing*/
 		echo -e "UpdateOTS.sh:${LINENO}  \t cp $OTSDAQ_DIR/data-core/TableInfo/ContextGroup/*Info.xml $USER_DATA/TableInfo/"
 		cp $OTSDAQ_DIR/data-core/TableInfo/ContextGroup/*Info.xml $USER_DATA/TableInfo/			# undo c++ style comment for Eclipse viewing*/
+		cp $OTS_SOURCE/otsdaq/data-core/TableInfo/ContextGroup/*Info.xml $USER_DATA/TableInfo/ &>/dev/null			# undo c++ style comment for Eclipse viewing*/
 		echo -e "UpdateOTS.sh:${LINENO}  \t cp $OTSDAQ_DIR/data-core/TableInfo/IterateGroup/*Info.xml $USER_DATA/TableInfo/"
 		cp $OTSDAQ_DIR/data-core/TableInfo/IterateGroup/*Info.xml $USER_DATA/TableInfo/ 		# undo c++ style comment for Eclipse viewing*/
+		cp $OTS_SOURCE/otsdaq/data-core/TableInfo/IterateGroup/*Info.xml $USER_DATA/TableInfo/ &>/dev/null 		# undo c++ style comment for Eclipse viewing*/
 		
 	fi
 	
@@ -138,16 +156,20 @@ function updateUserData
 	fi
 	echo -e "UpdateOTS.sh:${LINENO}  \t cp $OTSDAQ_DIR/data-core/XDAQConfigurations/otsConfiguration_CMake.xml $USER_DATA/XDAQConfigurations/"
 	cp $OTSDAQ_DIR/data-core/XDAQConfigurations/otsConfiguration_CMake.xml $USER_DATA/XDAQConfigurations/
+	cp $OTS_SOURCE/otsdaq/data-core/XDAQConfigurations/otsConfiguration_CMake.xml $USER_DATA/XDAQConfigurations/ &>/dev/null
 	echo -e "UpdateOTS.sh:${LINENO}  \t cp $OTSDAQ_DIR/data-core/XDAQConfigurations/otsConfiguration_Wizard_CMake.xml $USER_DATA/XDAQConfigurations/"
 	cp $OTSDAQ_DIR/data-core/XDAQConfigurations/otsConfiguration_Wizard_CMake.xml $USER_DATA/XDAQConfigurations/
+	cp $OTS_SOURCE/otsdaq/data-core/XDAQConfigurations/otsConfiguration_Wizard_CMake.xml $USER_DATA/XDAQConfigurations/ &>/dev/null
 	echo -e "UpdateOTS.sh:${LINENO}  \t cp $OTSDAQ_DIR/data-core/XDAQConfigurations/otsConfiguration_MacroMaker_CMake.xml $USER_DATA/XDAQConfigurations/"
 	cp $OTSDAQ_DIR/data-core/XDAQConfigurations/otsConfiguration_MacroMaker_CMake.xml $USER_DATA/XDAQConfigurations/
+	cp $OTS_SOURCE/otsdaq/data-core/XDAQConfigurations/otsConfiguration_MacroMaker_CMake.xml $USER_DATA/XDAQConfigurations/ &>/dev/null
 
 	if ! [ -d $USER_DATA/MessageFacilityConfigurations ]; then
 		mkdir $USER_DATA/MessageFacilityConfigurations
 	fi
 	echo -e "UpdateOTS.sh:${LINENO}  \t cp $OTSDAQ_DIR/data-core/MessageFacilityConfigurations/* $USER_DATA/MessageFacilityConfigurations/"
 	cp $OTSDAQ_DIR/data-core/MessageFacilityConfigurations/* $USER_DATA/MessageFacilityConfigurations/ # undo c++ style comment for Eclipse viewing*/
+	cp $OTS_SOURCE/otsdaq/data-core/MessageFacilityConfigurations/* $USER_DATA/MessageFacilityConfigurations/ &>/dev/null # undo c++ style comment for Eclipse viewing*/
 		
 	#make sure permissions are usable
 	echo -e "UpdateOTS.sh:${LINENO}  \t chmod 755 $USER_DATA/TableInfo/*.xml"
