@@ -11,3 +11,4 @@ WebGUI/*Path
 WebGUI/js/Debug.js
 *.code-workspace
 spack-build-*
+build-linux-*
