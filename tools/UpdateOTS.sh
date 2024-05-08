@@ -209,7 +209,6 @@ source "${SCRIPT_DIR}"/displayVersionsAndQualifiers.sh
 GIT_COMMENT=
 
 ALL_REPOS=0
-TABLES_ONLY=0
 SKIP_CORE=0
 ONLY_CORE=0
 
@@ -220,7 +219,6 @@ DEVELOP_ONLY=0
 MAIN_ONLY=0
 
 if [ "$1"  == "--tables" ]; then
-	TABLES_ONLY=1
 	echo -e "UpdateOTS.sh:${LINENO}  \t Updating tables only!"
 	updateUserData
 	
@@ -431,7 +429,7 @@ if [[ "x$GIT_COMMENT" == "x" && $FETCH_ONLY = 0 ]]; then
 	echo -e "UpdateOTS.sh:${LINENO}  \t Update status will be logged here: $UPDATE_LOG_PATH"
 	echo -e "UpdateOTS.sh:${LINENO}  \t Update log start:" > $UPDATE_LOG_PATH
 
-	updateUserData #call function
+	#updateUserData #do not call function during git pulls, have user explicitly call --tables to avoid unexepcted table changes
 	
 	#copy tutorial launching scripts
 	echo
