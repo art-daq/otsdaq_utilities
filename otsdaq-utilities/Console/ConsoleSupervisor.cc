@@ -234,21 +234,15 @@ try
 				
 				
 				//check if any trigger strings are contained with in the buffer string
-				if (pauseTrigger) {
-					uint8_t pausePriorityIndex = 0;
-					StringMacros::wildCardMatch(&pauseTrigger, &buffer, pausePriorityIndex );
+				if (pauseTrigger  && StringMacros::wildCardMatch(&pauseTrigger, &buffer, pausePriorityIndex ){
+					
 				}
-				if (haltTrigger) {
-					uint8_t haltPriorityIndex = 0;
-					StringMacros::wildCardMatch(&pauseTrigger, &buffer, haltPriorityIndex );
 				}
-				if (systemMessageTrigger) {
-					uint8_t systemPriorityIndex = 0;
-					StringMacros::wildCardMatch(&pauseTrigger, &buffer, systemPriorityIndex );
+				 if (haltTrigger && StringMacros::wildCardMatch(&haltTrigger, &buffer, haltPriorityIndex ){
 				}
-				if (countTrigger) {
-					uint8_t countPriorityIndex = 0;
-					StringMacros::wildCardMatch(&pauseTrigger, &buffer, countPriorityIndex );
+				 if (systemMessageTrigger && StringMacros::wildCardMatch(&systemMessageTrigger, &buffer, systemPriorityIndex ){
+				}
+				 if (countTrigger && StringMacros::wildCardMatch(&pauseTrigger, &buffer, countPriorityIndex ){
 				}
 
 				// check if sequence ID is out of order
