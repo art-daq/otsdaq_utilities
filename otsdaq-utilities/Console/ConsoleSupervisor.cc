@@ -5,6 +5,7 @@
 #include "otsdaq/MessageFacility/MessageFacility.h"
 #include "otsdaq/NetworkUtilities/ReceiverSocket.h"
 #include "otsdaq/XmlUtilities/HttpXmlDocument.h"
+#include "otsdaq/Macros/StringMacros.h"
 
 #include <dirent.h>    //for DIR
 #include <sys/stat.h>  //for mkdir
@@ -16,7 +17,7 @@
 using namespace ots;
 
 // UDP Message Format:
-// UDPMESSAGE|TIMESTAMP|SEQNUM|HOSTNAME|HOSTADDR|SEVERITY|CATEGORY|APPLICATION|PID|ITERATION|MODULE|(FILE|LINE)|MESSAGE
+// UDPMESSAGE|TIMESTAMP|SEQNUM|HOSTNAME|HOSTADDR|SEVERITY|CATEGORY |APPLICATION|PID|ITERATION|MODULE|(FILE|LINE)|MESSAGE
 // FILE and LINE are only printed for s67+
 
 XDAQ_INSTANTIATOR_IMPL(ConsoleSupervisor)
@@ -26,7 +27,7 @@ XDAQ_INSTANTIATOR_IMPL(ConsoleSupervisor)
 #define USER_CONSOLE_SNAPSHOT_PATH \
 	std::string(__ENV__("SERVICE_DATA_PATH")) + "/ConsoleSnapshots/"
 #define USERS_PREFERENCES_FILETYPE "pref"
-
+#define USERS_TRIGGER_STRING_FILETYPE "triggers"
 #define QUIET_CFG_FILE                    \
 	std::string(__ENV__("USER_DATA")) +   \
 	    "/MessageFacilityConfigurations/" \
@@ -108,7 +109,11 @@ try
 	fgets(tmp, 100, fp);  // destination port *** used here ***
 	int myport;
 	sscanf(tmp, "%*s %d", &myport);
-
+	
+	//get trigger strings
+	std::string haltTrigger, pauseTrigger, countTrigger, systemMessageTrigger; 
+	//read from prefrence file and set trigger strings 
+	
 	fgets(tmp, 100, fp);  // destination ip *** used here ***
 	char myip[100];
 	sscanf(tmp, "%*s %s", myip);
@@ -226,6 +231,25 @@ try
 				// std::cout << "CONSOLE " << c << " sz=" << buffer.size() << " len=" <<
 				// 	strlen(&(buffer.c_str()[c])) << __E__;
 				cs->messages_.emplace_back(&(buffer.c_str()[c]), cs->messageCount_++);
+				
+				
+				//check if any trigger strings are contained with in the buffer string
+				if (pauseTrigger) {
+					uint8_t pausePriorityIndex = 0;
+					StringMacros::wildCardMatch(&pauseTrigger, &buffer, pausePriorityIndex );
+				}
+				if (haltTrigger) {
+					uint8_t haltPriorityIndex = 0;
+					StringMacros::wildCardMatch(&pauseTrigger, &buffer, haltPriorityIndex );
+				}
+				if (systemMessageTrigger) {
+					uint8_t systemPriorityIndex = 0;
+					StringMacros::wildCardMatch(&pauseTrigger, &buffer, systemPriorityIndex );
+				}
+				if (countTrigger) {
+					uint8_t countPriorityIndex = 0;
+					StringMacros::wildCardMatch(&pauseTrigger, &buffer, countPriorityIndex );
+				}
 
 				// check if sequence ID is out of order
 				newSourceId   = cs->messages_.back().getSourceIDAsNumber();
@@ -313,7 +337,6 @@ try
 			break;  // assume something wrong, and break loop
 		}
 	}  // end infinite loop
-
 }  // end messageFacilityReceiverWorkLoop()
 catch(const std::runtime_error& e)
 {
@@ -375,7 +398,7 @@ void ConsoleSupervisor::request(const std::string&               requestType,
 	if(requestType == "GetConsoleMsgs")
 	{
 		// lindex of -1 means first time and user just gets update lcount and lindex
-		std::string lastUpdateCountStr = CgiDataUtilities::postData(cgiIn, "lcount");
+		std::string lastUpdateCountStr = CgiDataUtilities::postData(cgiFIn, "lcount");
 
 		if(lastUpdateCountStr == "")
 		{
@@ -542,7 +565,7 @@ void ConsoleSupervisor::request(const std::string&               requestType,
 			}
 			catch(const xdaq::exception::Exception& e)
 			{
-				__SUP_SS__ << "Error transmitting request to TRACE Supervisor LID = "
+				__SUP_SS__ << "Error transmitting request to TRACE Supervi	sor LID = "
 				           << appInfo.second.getId()
 				           << " name = " << appInfo.second.getName() << ". \n\n"
 				           << e.what() << __E__;
@@ -1181,6 +1204,55 @@ void ConsoleSupervisor::request(const std::string&               requestType,
 		             << modifiedTriggerStatus << __E__;
 		xmlOut.addTextElementToData("modTriggerStatus", modifiedTriggerStatus);
 	}  // end getTraceSnapshot
+	else if (requestType = "setTriggerStrings") {
+		// read in the trigger string in form like "pauseTrigger=[USER_INPUT]
+		// Add to user preference file 
+		int pauseTrigger = CgiDataUtilities::postDataAsInt(cgiIn, "pauseTrigger");
+		int haltTrigger = CgiDataUtilities::postDataAsInt(cgiIn, "haltTrigger");
+		int countTrigger = CgiDataUtilities::postDataAsInt(cgiIn, "countTrigger");
+		int systemMessageTrigger = CgiDataUtilities::postDataAsInt(cgiIn, "systemMessageTrigger");
+//		int hideLineNumers = CgiDataUtilities::postDataAsInt(cgiIn, "hideLineNumers");
+		if (pauseTrigger == haltTrigger || haltTrigger = countTrigger || countTrigger == systemMessageTrigger
+		|| pauseTrigger = countTrigger || haltTrigger = systemMessageTrigger  || pauseTrigger = systemMessageTrigger) {
+	
+			__SUP_COUT_ERR__ << "Tried to set two trigger strings to identitical values"
+			                 << __E__;
+
+			return;
+
+		}
+		// __SUP_COUT__ << "requestType " << requestType << __E__;
+		// __SUP_COUT__ << "colorIndex: " << colorIndex << __E__;
+		// __SUP_COUT__ << "showSideBar: " << showSideBar << __E__;
+		// __SUP_COUT__ << "noWrap: " << noWrap << __E__;
+		// __SUP_COUT__ << "messageOnly: " << messageOnly << __E__;
+		// __SUP_COUT__ << "hideLineNumers: " << hideLineNumers << __E__;
+
+		if(userInfo.username_ == "")  // should never happen?
+		{
+			__SUP_COUT_ERR__ << "Invalid user found! user=" << userInfo.username_
+			                 << __E__;
+			xmlOut.addTextElementToData("Error",
+			                            "Error - InvauserInfo.username_user found.");
+			return;
+		}
+
+		std::string fn = (std::string)USER_CONSOLE_PREF_PATH + userInfo.username_ + "." +
+		                 (std::string)USERS_TRIGGER_STRING_FILETYPE;
+
+		// __SUP_COUT__ << "Save preferences: " << fn << __E__;
+		FILE* fp = fopen(fn.c_str(), "w");
+		if(!fp)
+		{
+			__SS__;
+			__THROW__(ss.str() + "Could not open file: " + fn);
+		}
+		fprintf(fp, "pauseTrigger: %s\n", pauseTrigger );
+		fprintf(fp, "haltTrigger: %s\n", haltTrigger );
+		fprintf(fp, "countTrigger: %s\n", countTrigger );
+		fprintf(fp, "systemMessageTrigger: %s\n", systemMessageTrigger);
+		fclose(fp);
+	}
 	else
 	{
 		__SUP_SS__ << "requestType Request, " << requestType << ", not recognized."
