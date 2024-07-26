@@ -38,6 +38,7 @@ class ConsoleSupervisor : public CoreSupervisorBase
 	                                                            // settings)
 
   private:
+
 	static void messageFacilityReceiverWorkLoop(ConsoleSupervisor* cs);
 	void insertMessageRefresh(HttpXmlDocument* xmldoc, const size_t lastUpdateCount);
 
@@ -247,7 +248,7 @@ class ConsoleSupervisor : public CoreSupervisorBase
 	std::mutex                       messageMutex_;
 	size_t messageCount_;  //"unique" incrementing ID for messages
 	size_t maxMessageCount_, maxClientMessageRequest_;
-
+	std::map<std::string, std::map<std::string, uint32_t>> counter;
 	std::map<std::string /*TRACE hostname*/, std::string /*xdaq context hostname*/>
 	    traceMapToXDAQHostname_;
 

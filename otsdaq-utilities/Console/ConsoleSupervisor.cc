@@ -67,6 +67,13 @@ ConsoleSupervisor::ConsoleSupervisor(xdaq::ApplicationStub* stub)
 
 }  // end constructor()
 
+bool checkTriggers(std::set<std::string>& needles, std::string& haystack){
+	for (const std::string needle: needles) {
+		if (needle && StringMacros::wildCardMatch(needle, haystack)) {
+			return std::make_tuple(needle, true); 
+		}
+	}
+}
 //==============================================================================
 ConsoleSupervisor::~ConsoleSupervisor(void) { destroy(); }
 //==============================================================================
@@ -111,9 +118,8 @@ try
 	sscanf(tmp, "%*s %d", &myport);
 	
 	//get trigger strings
-	std::string haltTrigger, pauseTrigger, countTrigger, systemMessageTrigger; 
+	std::set<std::string> haltTriggers, pauseTriggers, countTriggers, systemMessageTriggers; 
 	//read from prefrence file and set trigger strings 
-	
 	fgets(tmp, 100, fp);  // destination ip *** used here ***
 	char myip[100];
 	sscanf(tmp, "%*s %s", myip);
@@ -176,6 +182,30 @@ try
 	// force a starting message
 	__MOUT__ << "DEBUG messages look like this." << __E__;
 
+	//TODO: Not sure where best place to make these lists are, have it right here for now so it recreates the list every time the console starts
+	std::string triggerFileString = (std::string)USER_CONSOLE_PREF_PATH + userInfo.username_ + "." +
+		                 (std::string)USERS_TRIGGER_STRING_FILETYPE;
+	FILE* triggerFile = fopen(triggerFileString.c_str(), "r")
+	if (triggerFile != NULL) {
+		std::string triggerType, triggerString;
+		while (!feof(triggerFile) {
+			fscanf(triggerFile, "%s: %s", triggerType, triggerString)
+			switch (triggerType) {
+				case "HALT":
+					haltTriggers.insert(triggerString);
+					break;
+				case "PAUSE":
+					pauseTriggers.insert(triggerString);
+					break;
+				case "COUNT":
+				countTriggers.insert(triggerString);
+					break;
+				case "SYSTEM-MESSAGE":
+				systemMessageTriggers.insert(triggerString);
+					break;
+			}
+		}
+	}
 	while(1)
 	{
 		// if receive succeeds display message
@@ -234,17 +264,29 @@ try
 				
 				
 				//check if any trigger strings are contained with in the buffer string
-				if (pauseTrigger  && StringMacros::wildCardMatch(&pauseTrigger, &buffer, pausePriorityIndex ){
+				std::tuple<std::string, bool> pause = checkTriggers(pauseTriggers, buffer);
+				std::tuple<std::string, bool> halt = checkTriggers(haltTriggers, buffer);
+				std::tuple<std::string, bool> count = checkTriggers(countTriggers, buffer);
+				std::tuple<std::string, bool> systemMessage = checkTriggers(systemMessageTriggers, buffer);
+			
+				if (std::get<1>(pause)) {
+					__MOUT__ << "Pausing the state machine" << __E__ 
+				}
+				if (std::get<1>(halt)) {
+					__MOUT__ << "Halting the state machine" << __E__ 
+				}
+				if (std::get<1>(count)) {
+					if (cs.counter.find(userInfo.username) != cs.counter.end() &&cs.counter[userInfo.username_].find(std::get<0>count) != cs.counter[userInfo.username_].end()) 
+					{
+						 cs.counter[userInfo.username_][std::get<0>(count)]+=1;
+					}
+					else {
+						
+					}
+				}
+				if (std::get<1>(systemMessage)) {
 					
 				}
-				}
-				 if (haltTrigger && StringMacros::wildCardMatch(&haltTrigger, &buffer, haltPriorityIndex ){
-				}
-				 if (systemMessageTrigger && StringMacros::wildCardMatch(&systemMessageTrigger, &buffer, systemPriorityIndex ){
-				}
-				 if (countTrigger && StringMacros::wildCardMatch(&pauseTrigger, &buffer, countPriorityIndex ){
-				}
-
 				// check if sequence ID is out of order
 				newSourceId   = cs->messages_.back().getSourceIDAsNumber();
 				newSequenceId = cs->messages_.back().getSequenceIDAsNumber();
@@ -1197,30 +1239,16 @@ void ConsoleSupervisor::request(const std::string&               requestType,
 		__SUP_COUT__ << "mod'd TRACE Trigger Status received: \n"
 		             << modifiedTriggerStatus << __E__;
 		xmlOut.addTextElementToData("modTriggerStatus", modifiedTriggerStatus);
-	}  // end getTraceSnapshot
-	else if (requestType = "setTriggerStrings") {
+	}  // end getTraceSnapsho
+//	request for setting trigger strings for halting, pausing, counting, or sending out a system message
+//	requests should be of the form "triggerType=[one of the four options below]&triggerString=[desired string]"
+//	Trigger types should be either HALT, PAUSE, COUNT, or SYSTEM-MESSAGE
+
+	else if (requestType = "setTriggerString") {
 		// read in the trigger string in form like "pauseTrigger=[USER_INPUT]
 		// Add to user preference file 
-		int pauseTrigger = CgiDataUtilities::postDataAsInt(cgiIn, "pauseTrigger");
-		int haltTrigger = CgiDataUtilities::postDataAsInt(cgiIn, "haltTrigger");
-		int countTrigger = CgiDataUtilities::postDataAsInt(cgiIn, "countTrigger");
-		int systemMessageTrigger = CgiDataUtilities::postDataAsInt(cgiIn, "systemMessageTrigger");
-//		int hideLineNumers = CgiDataUtilities::postDataAsInt(cgiIn, "hideLineNumers");
-		if (pauseTrigger == haltTrigger || haltTrigger = countTrigger || countTrigger == systemMessageTrigger
-		|| pauseTrigger = countTrigger || haltTrigger = systemMessageTrigger  || pauseTrigger = systemMessageTrigger) {
-	
-			__SUP_COUT_ERR__ << "Tried to set two trigger strings to identitical values"
-			                 << __E__;
-
-			return;
-
-		}
-		// __SUP_COUT__ << "requestType " << requestType << __E__;
-		// __SUP_COUT__ << "colorIndex: " << colorIndex << __E__;
-		// __SUP_COUT__ << "showSideBar: " << showSideBar << __E__;
-		// __SUP_COUT__ << "noWrap: " << noWrap << __E__;
-		// __SUP_COUT__ << "messageOnly: " << messageOnly << __E__;
-		// __SUP_COUT__ << "hideLineNumers: " << hideLineNumers << __E__;
+		std::string triggerAction = CgiDataUtilities::postData(cgiIn, "triggerType");
+		std::string trigger = CgiDataUtilities::postData(cgiIn, "triggerString");
 
 		if(userInfo.username_ == "")  // should never happen?
 		{
@@ -1235,17 +1263,15 @@ void ConsoleSupervisor::request(const std::string&               requestType,
 		                 (std::string)USERS_TRIGGER_STRING_FILETYPE;
 
 		// __SUP_COUT__ << "Save preferences: " << fn << __E__;
-		FILE* fp = fopen(fn.c_str(), "w");
+		FILE* fp = fopen(fn.c_str(), "a+");
 		if(!fp)
 		{
 			__SS__;
 			__THROW__(ss.str() + "Could not open file: " + fn);
 		}
-		fprintf(fp, "pauseTrigger: %s\n", pauseTrigger );
-		fprintf(fp, "haltTrigger: %s\n", haltTrigger );
-		fprintf(fp, "countTrigger: %s\n", countTrigger );
-		fprintf(fp, "systemMessageTrigger: %s\n", systemMessageTrigger);
-		fclose(fp);
+		cs.counter[userInfo.username_][trigger] = 0;
+		fprintf(fp, "%s: %s\n", triggerAction, trigger );
+
 	}
 	else
 	{
@@ -1377,3 +1403,4 @@ void ConsoleSupervisor::insertMessageRefresh(HttpXmlDocument* xmlOut,
 	if(requestOutOfSync)  // if request was out of sync, show message
 		__SUP_COUT__ << requestOutOfSyncMsg;
 }  // end insertMessageRefresh()
+
