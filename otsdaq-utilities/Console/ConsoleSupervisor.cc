@@ -67,9 +67,9 @@ ConsoleSupervisor::ConsoleSupervisor(xdaq::ApplicationStub* stub)
 
 }  // end constructor()
 
-bool checkTriggers(std::set<std::string>& needles, std::string& haystack){
-	for (const std::string needle: needles) {
-		if (needle && StringMacros::wildCardMatch(needle, haystack)) {
+std::tuple<std::string, bool> checkTriggers(std::set<std::string>& needles, std::string& haystack){
+	for (const std::string &needle: needles) {
+		if (needle != "" && StringMacros::wildCardMatch(needle, haystack)) {
 			return std::make_tuple(needle, true); 
 		}
 	}
@@ -183,27 +183,28 @@ try
 	__MOUT__ << "DEBUG messages look like this." << __E__;
 
 	//TODO: Not sure where best place to make these lists are, have it right here for now so it recreates the list every time the console starts
-	std::string triggerFileString = (std::string)USER_CONSOLE_PREF_PATH + userInfo.username_ + "." +
+	std::string triggerFileString = (std::string)USER_CONSOLE_PREF_PATH +
 		                 (std::string)USERS_TRIGGER_STRING_FILETYPE;
-	FILE* triggerFile = fopen(triggerFileString.c_str(), "r")
+	FILE* triggerFile = fopen(triggerFileString.c_str(), "r");
 	if (triggerFile != NULL) {
 		std::string triggerType, triggerString;
-		while (!feof(triggerFile) {
-			fscanf(triggerFile, "%s: %s", triggerType, triggerString)
-			switch (triggerType) {
-				case "HALT":
+		while (!feof(triggerFile)) {
+			fscanf(triggerFile, "{			}: {			}", triggerType, triggerString);
+			 if (triggerType=="HALT"){
 					haltTriggers.insert(triggerString);
-					break;
-				case "PAUSE":
+					
+ 			}
+ 			else if (triggerType ==
+				"PAUSE"){
 					pauseTriggers.insert(triggerString);
-					break;
-				case "COUNT":
+					}
+			else if (triggerType =="COUNT"){
 				countTriggers.insert(triggerString);
-					break;
-				case "SYSTEM-MESSAGE":
+					}
+			else if (triggerType =="SYSTEM-MESSAGE"){
 				systemMessageTriggers.insert(triggerString);
-					break;
-			}
+				}
+			
 		}
 	}
 	while(1)
@@ -261,8 +262,6 @@ try
 				// std::cout << "CONSOLE " << c << " sz=" << buffer.size() << " len=" <<
 				// 	strlen(&(buffer.c_str()[c])) << __E__;
 				cs->messages_.emplace_back(&(buffer.c_str()[c]), cs->messageCount_++);
-				
-				
 				//check if any trigger strings are contained with in the buffer string
 				std::tuple<std::string, bool> pause = checkTriggers(pauseTriggers, buffer);
 				std::tuple<std::string, bool> halt = checkTriggers(haltTriggers, buffer);
@@ -270,29 +269,30 @@ try
 				std::tuple<std::string, bool> systemMessage = checkTriggers(systemMessageTriggers, buffer);
 			
 				if (std::get<1>(pause)) {
-					__MOUT__ << "Pausing the state machine" << __E__ 
+					//TODO: actually pause the statemachine
+					__MOUT__ << "Pausing the state machine" << __E__;
 				}
 				if (std::get<1>(halt)) {
-					__MOUT__ << "Halting the state machine" << __E__ 
+					//TODO: actually halt the statemachine
+					__MOUT__ << "Halting the state machine" << __E__;
 				}
 				if (std::get<1>(count)) {
-					if (cs.counter.find(userInfo.username) != cs.counter.end() &&cs.counter[userInfo.username_].find(std::get<0>count) != cs.counter[userInfo.username_].end()) 
-					{
-						 cs.counter[userInfo.username_][std::get<0>(count)]+=1;
+					if (cs->counter.find(userInfo.username) != cs->counter.end() &&
+					cs->counter[userInfo.username_].find(std::get<0>(count)) != cs->counter[userInfo.username_].end()) {
+					++cs->counter[userInfo.username_][std::get<0>(count)];
 					}
 					else {
-						
+					cs->	counter[userInfo.username_][std::get<0>(count)]=1;
 					}
 				}
 				if (std::get<1>(systemMessage)) {
-					
+					//TODO: not sure what the message should be from the trigger, this is my best idea
+					std::string message = "trigger string " + (std::string)std::get<0>(systemMessage) + "was found in message: " + buffer;
+					theRemoteWebUsers_.sendSystemMessage("*", message, false);
 				}
 				// check if sequence ID is out of order
 				newSourceId   = cs->messages_.back().getSourceIDAsNumber();
 				newSequenceId = cs->messages_.back().getSequenceIDAsNumber();
-
-				//__COUT__ << "newSourceId: " << newSourceId << __E__;
-				//__COUT__ << "newSequenceId: " << newSequenceId << __E__;
 
 				if(newSourceId != -1 &&
 				   sourceLastSequenceID.find(newSourceId) !=
@@ -434,7 +434,7 @@ void ConsoleSupervisor::request(const std::string&               requestType,
 	if(requestType == "GetConsoleMsgs")
 	{
 		// lindex of -1 means first time and user just gets update lcount and lindex
-		std::string lastUpdateCountStr = CgiDataUtilities::postData(cgiFIn, "lcount");
+		std::string lastUpdateCountStr = CgiDataUtilities::postData(cgiIn, "lcount");
 
 		if(lastUpdateCountStr == "")
 		{
@@ -1244,7 +1244,7 @@ void ConsoleSupervisor::request(const std::string&               requestType,
 //	requests should be of the form "triggerType=[one of the four options below]&triggerString=[desired string]"
 //	Trigger types should be either HALT, PAUSE, COUNT, or SYSTEM-MESSAGE
 
-	else if (requestType = "setTriggerString") {
+	else if (requestType == "setTriggerString") {
 		// read in the trigger string in form like "pauseTrigger=[USER_INPUT]
 		// Add to user preference file 
 		std::string triggerAction = CgiDataUtilities::postData(cgiIn, "triggerType");
@@ -1259,7 +1259,7 @@ void ConsoleSupervisor::request(const std::string&               requestType,
 			return;
 		}
 
-		std::string fn = (std::string)USER_CONSOLE_PREF_PATH + userInfo.username_ + "." +
+		std::string fn = (std::string)USER_CONSOLE_PREF_PATH  +
 		                 (std::string)USERS_TRIGGER_STRING_FILETYPE;
 
 		// __SUP_COUT__ << "Save preferences: " << fn << __E__;
@@ -1269,7 +1269,7 @@ void ConsoleSupervisor::request(const std::string&               requestType,
 			__SS__;
 			__THROW__(ss.str() + "Could not open file: " + fn);
 		}
-		cs.counter[userInfo.username_][trigger] = 0;
+		this->counter[userInfo.username_][trigger] = 0;
 		fprintf(fp, "%s: %s\n", triggerAction, trigger );
 
 	}

@@ -27,8 +27,8 @@ class ConsoleSupervisor : public CoreSupervisorBase
 	void destroy(void);
 
 	virtual void defaultPage(xgi::Input* in, xgi::Output* out) override;
-	virtual void request(const std::string&               requestType,
-	                     cgicc::Cgicc&                    cgiIn,
+	virtual void request(const std::string&  requestType,
+	                    cgicc::Cgicc&                    cgiIn,
 	                     HttpXmlDocument&                 xmlOut,
 	                     const WebUsers::RequestUserInfo& userInfo) override;
 
