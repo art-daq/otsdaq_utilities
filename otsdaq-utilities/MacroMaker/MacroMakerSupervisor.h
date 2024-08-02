@@ -39,6 +39,8 @@ class MacroMakerSupervisor : public CoreSupervisorBase
 	void requestWrapper(xgi::Input* in, xgi::Output* out);
 	// end MacroMaker only functions
 
+	static void 				RemoteControlWorkLoop			(MacroMakerSupervisor* supervisorPtr);
+
 	void handleRequest(const std::string                Command,
 	                   HttpXmlDocument&                 xmldoc,
 	                   cgicc::Cgicc&                    cgi,

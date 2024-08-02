@@ -155,7 +155,7 @@ else {
 		    	if((err = Desktop.getXMLValue(req,"Error")) && err != "")
 		    	{
 		    		Debug.log("Error: " + err, Debug.HIGH_PRIORITY);
-		    		return;		    		
+		    		//try to power through error //return;		    		
 		    	}
 		    	
 		    	iconArray = Desktop.getXMLValue(req,"iconList"); 

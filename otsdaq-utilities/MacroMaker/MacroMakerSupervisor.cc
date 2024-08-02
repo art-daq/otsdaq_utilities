@@ -4,6 +4,8 @@
 #include "otsdaq/ConfigurationInterface/ConfigurationManager.h"
 #include "otsdaq/FECore/FEVInterface.h"
 
+#include "otsdaq/NetworkUtilities/TransceiverSocket.h"  // for UDP remote control
+
 #include <dirent.h>    //for DIR
 #include <stdio.h>     //for file rename
 #include <sys/stat.h>  //for mkdir
@@ -115,6 +117,30 @@ MacroMakerSupervisor::MacroMakerSupervisor(xdaq::ApplicationStub* stub)
 		__SUP_COUTV__(StringMacros::mapToString(FEPluginTypetoFEsMap_));
 		__SUP_COUTV__(StringMacros::mapToString(FEtoPluginTypeMap_));
 	}
+
+	//setup UDP interface thread if env variable set for port
+	{
+		bool enableRemoteControl = false;
+		try
+		{
+			__ENV__("OTS_MACROMAKER_UDP_PORT");
+			__ENV__("OTS_MACROMAKER_UDP_IP");
+			enableRemoteControl = true;
+		}
+		catch(...)
+		{
+			;
+		}  // ignore errors
+
+		if(enableRemoteControl)
+		{
+			__SUP_COUT__ << "Enabling remote control over UDP..." << __E__;
+			// start state changer UDP listener thread
+			std::thread([](MacroMakerSupervisor* s) { MacroMakerSupervisor::RemoteControlWorkLoop(s); }, this).detach();
+		}
+		else
+			__SUP_COUT__ << "Remote control over UDP is disabled." << __E__;
+	}  // end setting up thread for UDP drive of state machine
 
 	__SUP_COUT__ << "Constructed." << __E__;
 }  // end constructor
@@ -419,6 +445,180 @@ xoap::MessageReference MacroMakerSupervisor::supervisorSequenceCheck(xoap::Messa
 
 	return SOAPUtilities::makeSOAPMessageReference("SequenceResponse", retParameters);
 } //end supervisorSequenceCheck()
+
+
+
+//==============================================================================
+// RemoteControlWorkLoop
+//	child thread
+void MacroMakerSupervisor::RemoteControlWorkLoop(MacroMakerSupervisor* theSupervisor)
+{
+	// ConfigurationTree configLinkNode = theSupervisor->CorePropertySupervisorBase::getSupervisorTableNode();
+
+	std::string ipAddressForRemoteControlOverUDP = __ENV__("OTS_MACROMAKER_UDP_IP"); //configLinkNode.getNode("IPAddressForStateChangesOverUDP").getValue<std::string>();
+	int         portForRemoteControlOverUDP      = atoi(__ENV__("OTS_MACROMAKER_UDP_PORT")); //configLinkNode.getNode("PortForStateChangesOverUDP").getValue<int>();
+	bool        acknowledgementEnabled          = true; //configLinkNode.getNode("EnableAckForStateChangesOverUDP").getValue<bool>();
+
+	__COUTV__(ipAddressForRemoteControlOverUDP);
+	__COUTV__(portForRemoteControlOverUDP);
+	__COUTV__(acknowledgementEnabled);
+
+	TransceiverSocket sock(ipAddressForRemoteControlOverUDP,
+	                       portForRemoteControlOverUDP);  // Take Port from Table
+	try
+	{
+		sock.initialize();
+	}
+	catch(...)
+	{
+		// generate special message to indicate failed socket
+		__SS__ << "FATAL Console error. Could not initialize socket at ip '" << ipAddressForRemoteControlOverUDP 
+			   << "' and port " << portForRemoteControlOverUDP
+		       << ". Perhaps it is already in use? Exiting Remote Control "
+		          "SOAPUtilities::receive loop."
+		       << __E__;
+		__SS_THROW__;
+		return;
+	}
+
+	std::size_t              commaPosition;
+	unsigned int             commaCounter = 0;
+	std::size_t              begin        = 0;
+	std::string              buffer;
+	std::string              errorStr;
+	std::string              fsmName;
+	std::string              command;
+	std::vector<std::string> parameters;
+	while(1)
+	{
+		// workloop procedure
+		//	if SOAPUtilities::receive a UDP command
+		//		execute command
+		//	else
+		//		sleep
+
+		if(sock.receive(buffer, 0 /*timeoutSeconds*/, 1 /*timeoutUSeconds*/, false /*verbose*/) != -1)
+		{
+			__COUT__ << "UDP Remote Control packet received of size = " << buffer.size() << __E__;
+			__COUTV__(buffer);
+
+			// if(buffer == "GetRemoteAppStatus")
+			// {
+			// 	__COUT__ << "Giving app status to remote monitor..." << __E__;
+			// 	HttpXmlDocument xmlOut;
+			// 	for(const auto& it : theSupervisor->allSupervisorInfo_.getAllSupervisorInfo())
+			// 	{
+			// 		const auto& appInfo = it.second;
+
+			// 		xmlOut.addTextElementToData("name",
+			// 									appInfo.getName());                      // get application name
+			// 		xmlOut.addTextElementToData("id", std::to_string(appInfo.getId()));  // get application id
+			// 		xmlOut.addTextElementToData("status", appInfo.getStatus());          // get status
+			// 		xmlOut.addTextElementToData(
+			// 			"time", appInfo.getLastStatusTime() ? StringMacros::getTimestampString(appInfo.getLastStatusTime()) : "0");  // get time stamp
+			// 		xmlOut.addTextElementToData("stale",
+			// 									std::to_string(time(0) - appInfo.getLastStatusTime()));  // time since update
+			// 		xmlOut.addTextElementToData("progress", std::to_string(appInfo.getProgress()));      // get progress
+			// 		xmlOut.addTextElementToData("detail", appInfo.getDetail());                          // get detail
+			// 		xmlOut.addTextElementToData("class",
+			// 									appInfo.getClass());  // get application class
+			// 		xmlOut.addTextElementToData("url",
+			// 									appInfo.getURL());  // get application url
+			// 		xmlOut.addTextElementToData("context",
+			// 									appInfo.getContextName());  // get context
+			// 		auto subappElement = xmlOut.addTextElementToData("subapps", "");
+			// 		for(auto& subappInfoPair : appInfo.getSubappInfo())
+			// 		{
+			// 			xmlOut.addTextElementToParent("subapp_name", subappInfoPair.first, subappElement);
+			// 			xmlOut.addTextElementToParent("subapp_status", subappInfoPair.second.status, subappElement);  // get status
+			// 			xmlOut.addTextElementToParent("subapp_time",
+			// 				subappInfoPair.second.lastStatusTime ? StringMacros::getTimestampString(subappInfoPair.second.lastStatusTime) : "0",
+			// 										subappElement);  // get time stamp
+			// 			xmlOut.addTextElementToParent("subapp_stale", std::to_string(time(0) - subappInfoPair.second.lastStatusTime), subappElement);  // time since update
+			// 			xmlOut.addTextElementToParent("subapp_progress", std::to_string(subappInfoPair.second.progress), subappElement);               // get progress
+			// 			xmlOut.addTextElementToParent("subapp_detail", subappInfoPair.second.detail, subappElement);                                   // get detail
+			// 			xmlOut.addTextElementToParent("subapp_url", subappInfoPair.second.url, subappElement);                                   // get url
+			// 			xmlOut.addTextElementToParent("subapp_class", subappInfoPair.second.class_name, subappElement);                                // get class
+
+			// 		}
+			// 	}
+			// 	std::stringstream out;
+			// 	xmlOut.outputXmlDocument((std::ostringstream*)&out, false /*dispStdOut*/, false /*allowWhiteSpace*/);
+			// 	__COUTT__ << "App status to monitor: " << out.str() << __E__;
+			// 	sock.acknowledge(out.str(), false /* verbose */);
+			// 	continue;
+			// }
+
+			// size_t nCommas = std::count(buffer.begin(), buffer.end(), ',');
+			// if(nCommas == 0)
+			// {
+			// 	__SS__ << "Unrecognized State Machine command :-" << buffer
+			// 	       << "-. Format is FiniteStateMachineName,Command,Parameter(s). "
+			// 	          "Where Parameter(s) is/are optional."
+			// 	       << __E__;
+			// 	__COUT_ERR__ << ss.str();
+			// 	continue;
+			// }
+			// begin        = 0;
+			// commaCounter = 0;
+			// parameters.clear();
+			// while((commaPosition = buffer.find(',', begin)) != std::string::npos || commaCounter == nCommas)
+			// {
+			// 	if(commaCounter == nCommas)
+			// 		commaPosition = buffer.size();
+			// 	if(commaCounter == 0)
+			// 		fsmName = buffer.substr(begin, commaPosition - begin);
+			// 	else if(commaCounter == 1)
+			// 		command = buffer.substr(begin, commaPosition - begin);
+			// 	else
+			// 		parameters.push_back(buffer.substr(begin, commaPosition - begin));
+			// 	__COUT__ << "Word: " << buffer.substr(begin, commaPosition - begin) << __E__;
+
+			// 	begin = commaPosition + 1;
+			// 	++commaCounter;
+			// }
+			// __COUTV__(fsmName);
+			// __COUTV__(command);
+			// __COUTV__(StringMacros::vectorToString(parameters));
+
+
+			// // set scope of mutex
+			// {
+			// 	// should be mutually exclusive with GatewaySupervisor main thread state
+			// 	// machine accesses  lockout the messages array for the remainder of the
+			// 	// scope  this guarantees the reading thread can safely access the
+			// 	// messages
+			// 	if(theSupervisor->VERBOSE_MUTEX)
+			// 		__COUT__ << "Waiting for FSM access" << __E__;
+			// 	std::lock_guard<std::mutex> lock(theSupervisor->stateMachineAccessMutex_);
+			// 	if(theSupervisor->VERBOSE_MUTEX)
+			// 		__COUT__ << "Have FSM access" << __E__;
+
+			// 	errorStr = theSupervisor->attemptStateMachineTransition(
+			// 	    0, 0, command, fsmName, WebUsers::DEFAULT_STATECHANGER_USERNAME /*fsmWindowName*/, WebUsers::DEFAULT_STATECHANGER_USERNAME, parameters);
+			// }
+
+			// if(errorStr != "")
+			// {
+			// 	__SS__ << "UDP State Changer failed to execute command because of the "
+			// 	          "following error: "
+			// 	       << errorStr;
+			// 	__COUT_ERR__ << ss.str();
+			// 	if(acknowledgementEnabled)
+			// 		sock.acknowledge(errorStr, true /* verbose */);
+			// }
+			// else
+			// {
+			// 	__SS__ << "Successfully executed state change command '" << command << ".'" << __E__;
+			// 	__COUT_INFO__ << ss.str();
+			// 	if(acknowledgementEnabled)
+			// 		sock.acknowledge("Done", true /* verbose */);
+			// }
+		}
+		else
+			usleep(1000);
+	}
+}  // end RemoteControlWorkLoop()
 
 //==============================================================================
 // requestWrapper ~
