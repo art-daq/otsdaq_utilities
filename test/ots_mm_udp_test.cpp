@@ -9,21 +9,22 @@
 #include <iostream>  //for cout
 #include <sstream>   //for stringstream, std::stringbuf
 
-#define TRACEMF_USE_VERBATIM 1 //for trace longer path filenames
-#include "TRACE/tracemf.h"
+// #define TRACEMF_USE_VERBATIM 1 //for trace longer path filenames
+// #include "TRACE/tracemf.h"
 
 #define __COUT_HDR__ 		""
 
 #define Q(X) #X
 #define QUOTE(X) Q(X)
 
-#define TLOG(X)             std::cout << QUOTE(X) << ": " 
 #define __FILENAME__ 		(__builtin_strrchr(__FILE__, '/') ? __builtin_strrchr(__FILE__, '/') + 1 : __FILE__)
 #define __MF_SUBJECT__ 		__FILENAME__
 #define __MF_DECOR__		(__MF_SUBJECT__)
-#define __SHORTFILE__ 		(__builtin_strstr(&__FILE__[0], "/srcs/") ? __builtin_strstr(&__FILE__[0], "/srcs/") + 6 : __FILE__)
+// __SHORTFILE__ broken with spack env path change
+// #define __SHORTFILE__ 		(__builtin_strstr(&__FILE__[0], "/srcs/") ? __builtin_strstr(&__FILE__[0], "/srcs/") + 6 : __FILE__)
 #define __COUT_HDR_L__ 		":" << std::dec        << __LINE__ << " |\t"
-#define __COUT_HDR_FL__ 	__SHORTFILE__ << ""   << __COUT_HDR_L__
+#define __COUT_HDR_FL__ 	__FILENAME__ << ""   << __COUT_HDR_L__
+#define TLOG(X)             std::cout << QUOTE(X) << ": " //<< __LINE__ << ": " 
 #define __COUT_ERR__ 		TLOG(TLVL_ERROR)    << __COUT_HDR__
 #define __COUT_WARN__ 		TLOG(TLVL_WARN)     << __COUT_HDR__
 #define __COUT_INFO__ 		TLOG(TLVL_INFO)     << __COUT_HDR__
@@ -53,6 +54,9 @@ int main(int argc, char* argv[])
     __COUTV__(target_mm_ip);
     __COUTV__(target_mm_port);
 
-    ots_mm_udp_interface();
+    __COUT__ << "instantiating..." << __E__;
+    // ots_mm_udp_interface mm;
+    // __COUTV__(mm.getCommands());
+    // __COUTV__(mm.runCommand("hello"));
     return 0;
 }

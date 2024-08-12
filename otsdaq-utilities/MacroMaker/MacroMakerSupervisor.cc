@@ -905,6 +905,7 @@ xoap::MessageReference MacroMakerSupervisor::frontEndCommunicationRequest(
     xoap::MessageReference message)
 try
 {
+	__COUTT__; //mark for debugging
 	__SUP_COUT__ << "FE Request received: " << SOAPUtilities::translate(message) << __E__;
 
 	SOAPParameters typeParameter, rxParameters;  // params for xoap to recv
