@@ -1,50 +1,16 @@
 
 #include "test/ots_mm_udp_interface.h"
 
-#include <unistd.h>
-#include <iostream>
-
-
-#include <string.h>  //for strstr (not the same as <string>)
-#include <iostream>  //for cout
-#include <sstream>   //for stringstream, std::stringbuf
-
-// #define TRACEMF_USE_VERBATIM 1 //for trace longer path filenames
-// #include "TRACE/tracemf.h"
-
-#define __COUT_HDR__ 		""
-
-#define Q(X) #X
-#define QUOTE(X) Q(X)
-
-#define __FILENAME__ 		(__builtin_strrchr(__FILE__, '/') ? __builtin_strrchr(__FILE__, '/') + 1 : __FILE__)
-#define __MF_SUBJECT__ 		__FILENAME__
-#define __MF_DECOR__		(__MF_SUBJECT__)
-// __SHORTFILE__ broken with spack env path change
-// #define __SHORTFILE__ 		(__builtin_strstr(&__FILE__[0], "/srcs/") ? __builtin_strstr(&__FILE__[0], "/srcs/") + 6 : __FILE__)
-#define __COUT_HDR_L__ 		":" << std::dec        << __LINE__ << " |\t"
-#define __COUT_HDR_FL__ 	__FILENAME__ << ""   << __COUT_HDR_L__
-#define TLOG(X)             std::cout << QUOTE(X) << ": " //<< __LINE__ << ": " 
-#define __COUT_ERR__ 		TLOG(TLVL_ERROR)    << __COUT_HDR__
-#define __COUT_WARN__ 		TLOG(TLVL_WARN)     << __COUT_HDR__
-#define __COUT_INFO__ 		TLOG(TLVL_INFO)     << __COUT_HDR__
-#define __COUT__			TLOG(TLVL_DEBUG)    << __COUT_HDR__
-#define __COUTT__			TLOG(TLVL_TRACE)    << __COUT_HDR__
-//std::cout << __MF_DECOR__ << __COUT_HDR_FL__
-
-#define __SS__            	std::stringstream ss; ss << "|" << __MF_DECOR__ << ": " << __COUT_HDR_FL__ << __COUT_HDR__
-#define __SS_THROW__        { __COUT_ERR__ << "\n" << ss.str(); throw std::runtime_error(ss.str()); } //put in {}'s to prevent surprises, e.g. if ... else __SS_THROW__;
-#define __SS_THROW_ONLY__   { throw std::runtime_error(ss.str()); } //put in {}'s to prevent surprises, e.g. if ... else __SS_THROW__;
-#define __E__ 				std::endl
-
-#define __COUTV__(X) 		__COUT__ << QUOTE(X) << " = " << X << __E__
-#define __COUTVS__(LVL,X)	TLOG(TLVL_DEBUG + LVL) << __COUT_HDR__ << QUOTE(X) << " = " << X << __E__
 
 int main(int argc, char* argv[])
+try
 {
-    if(argc != 3)
+    if(argc < 3)
 	{
-		fprintf(stderr, "usage: ots_mm_udp_interface <mm IP> <mm Port>\n");
+		fprintf(stderr, "usage: ots_mm_udp_interface <mm IP> <mm Port> <Front-end UID> <FEMacro Name> <Macro Input args...> \n");
+        fprintf(stderr, "\t If <Front-end UID> not specified, then the list of existing FE UIDs will be output \n");
+        fprintf(stderr, "\t If <FEMacro Name> not specified, then the list of existing FE Macro Names will be output associated with the specified FE UID\n");
+        fprintf(stderr, "\t Note: use quotes around command line arguments with spaces to prevent them from being interpreted as multiple arguments.\n");
 		exit(1);
 	}
 
@@ -55,8 +21,145 @@ int main(int argc, char* argv[])
     __COUTV__(target_mm_port);
 
     __COUT__ << "instantiating..." << __E__;
-    // ots_mm_udp_interface mm;
-    // __COUTV__(mm.getCommands());
-    // __COUTV__(mm.runCommand("hello"));
+    ots_mm_udp_interface mm(target_mm_ip.c_str(), target_mm_port);
+
+    std::string feStr = mm.getFrontendList();
+    __COUTV__(feStr);
+    std::vector<std::string> fes = getVectorFromString(feStr, {';'});
+
+
+    uint32_t fe = -1;
+    uint32_t cmd = -1;
+
+    if(argc >= 4)
+    {
+        //look for FE
+        std::string target_fe = argv[3];
+        for(fe = 0;fe < fes.size(); ++fe)
+            if(fes[fe] == target_fe)
+                break;
+        if(fe >= fes.size())
+        {
+            __COUT_ERR__ << "Illegal front-end UID " << target_fe << " not found in FE list: " << vectorToString(fes,{';'}) << "." << __E__;
+            return 0;
+        } 
+    }
+    else
+    {
+        __COUT_ERR__ << "No front-end UID specified, here is the list of existing Front-end UIDs:" << __E__;
+        for(fe = 0;fe < fes.size(); ++fe)
+            __COUT_ERR__ << "\t\t" << fes[fe] << __E__;
+
+        return 0;
+    }
+
+    if(fe >= fes.size())
+    {
+        __COUT_ERR__ << "Illegal front-end index " << fe << " vs " << fes.size() << " count." << __E__;
+        return 0;
+    } 
+
+    __COUTV__(fes[fe]);
+    std::string commandStr = mm.getCommandList(fes[fe]);
+    __COUTV__(commandStr);
+
+    std::vector<std::string> commands = getVectorFromString(commandStr, {';'});
+
+    if(argc >= 5)
+    {
+        //look for command
+        std::string target_command = argv[4];
+        for(cmd = 0;cmd < commands.size(); ++cmd)
+            if(commands[cmd] == target_command)
+                break;
+        if(cmd >= commands.size())
+        {
+            __COUT_ERR__ << "Illegal Front-end Macro Command name '" << target_command << 
+                "' not found in '" << fes[fe] << "' Command list: " << vectorToString(commands,{';'}) << "." << __E__;
+            return 0;
+        } 
+    }
+    else
+    {
+        __COUT_ERR__ << "No FE Macro Name specified, here is the list of existing FE Macro Names corresponding to the specified Front-end UID '" << argv[3] << "':" << __E__;        
+        for(cmd = 0;cmd < commands.size(); ++cmd)
+            __COUT_ERR__ << "\t\t" << commands[cmd] << __E__;
+
+        return 0;
+    }
+
+
+    if(cmd >= commands.size())
+    {
+        __COUT_ERR__ << "Illegal command index " << cmd << " vs " << commands.size() << " count." << __E__;
+        return 0;
+    } 
+
+    __COUTV__(commands[cmd]);
+
+    uint32_t numberOfInputs = mm.getCommandInputCount(fes[fe], commands[cmd]);
+    __COUTV__(numberOfInputs);
+
+    uint32_t numberOfOutputs = mm.getCommandOutputCount(fes[fe], commands[cmd]);
+    __COUTV__(numberOfOutputs);
+
+    std::vector<std::string> inputs;
+    if(argc != int(5 + numberOfInputs))
+    {
+        __COUT_WARN__ << "Incorrect number of inputs provided for Front-end Macro Command name '" <<  commands[cmd] << 
+            "' on FE UID '" << fes[fe] << "': " << argc - 5 << " vs " <<  numberOfInputs << " expected." << __E__;
+        __COUT_INFO__ << "Will not run command." << __E__;
+
+        for(uint32_t i = 0;i < numberOfInputs; ++i)
+        {
+             std::string inputName = mm.getCommandInputName(fes[fe], commands[cmd], i);
+            __COUT_INFO__ << "\tExpected input #" << i+1 << ": " << 
+                inputName << __E__;
+        }
+        return 0;
+    }
+
+    __COUTV__(vectorToString(inputs,{';'}));
+    for(uint32_t i = 0;i < numberOfInputs; ++i)
+    {
+        inputs.push_back(ots_mm_udp_interface::encodeURIComponent(argv[5+i]));    
+        std::string inputName = mm.getCommandInputName(fes[fe], commands[cmd], i);
+        __COUT_INFO__ << "\tInput #" << i << ": " << 
+                inputName << " = " << inputs.back() << __E__;
+    }
+    
+
+    __COUT_INFO__ << "Running command with these expected outputs..." << __E__;
+    for(uint32_t i = 0;i < numberOfOutputs; ++i)
+    { 
+        std::string outputName = mm.getCommandOutputName(fes[fe], commands[cmd], i);
+        __COUT_INFO__ << "\tOutput #" << i << ": " << outputName << __E__;
+    }
+
+    std::string commandResult = mm.runCommand(fes[fe], commands[cmd], 
+        vectorToString(inputs,{';'}));
+
+    std::vector<std::string> outputs = getVectorFromString(commandResult,{';'});
+     
+    if(numberOfOutputs != outputs.size())
+    {
+        __COUTV__(commandResult);
+        __COUT_ERR__ << "Illegal response, mismatch in output arguments returned: " << outputs.size() << " vs " << numberOfOutputs << " expected." << __E__;
+        return 0;
+    } 
+    
+    __COUTV__(vectorToString(outputs,{';'}));
+    for(uint32_t i = 0;i < numberOfOutputs; ++i)
+    {
+         std::string outputName = mm.getCommandOutputName(fes[fe], commands[cmd], i);
+        __COUT__ << "\tOutput #" << i << ": " << outputName
+                 << " = " << mm.decodeURIComponent(outputs[i]) << __E__;
+    }
+    __COUT_INFO__ << "Done." << __E__;
     return 0;
+}
+catch(const std::runtime_error& e)
+{
+    __COUT_ERR__ << "Error caught during test execution: \n" << e.what() << __E__;
+    return 1; 
 }
