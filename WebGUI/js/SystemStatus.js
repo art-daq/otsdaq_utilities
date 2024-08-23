@@ -857,7 +857,7 @@ function collapsibleList()
 
 	var collapsible = document.getElementsByClassName("collapsible");
 
-	Debug.log(collapsible.length + " collapsible lists found.");
+	// Debug.log(collapsible.length + " collapsible lists found.");
 
 	for (var i = 0; i < collapsible.length; i++) 
 	{

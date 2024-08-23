@@ -770,7 +770,8 @@
 				Debug.logv({activeGroups});
 
 				//get command string if opening a new window
-				var cmdStr = DesktopContent.getParameter(1); //from  location.search
+				var cmdStr = DesktopContent.getParameter(0,"cmd");
+					//DesktopContent.getParameter(1); //from  location.search				
 				if (cmdStr && cmdStr != "") 
 				{
 					//do incoming commands!

@@ -262,6 +262,9 @@ else {
 			//	and show the top level folder icon (if new to _folders object)
 			//else
 			//	just show icon
+
+			while(folderPath.length && folderPath[0] == '/') //remove leading '/'s
+				folderPath = folderPath.substr(1);
 			
 			var folderSplit = folderPath.split('/'); //root folder is first non empty index			
 			var rootFolderIndex;
@@ -269,7 +272,15 @@ else {
 			var folders = this.folders;
 			for(var i=0;i<folderSplit.length;++i)
 			{
-				if(folderSplit[i] == "") continue;
+				if(folderSplit[i] == "")
+				{
+					if(folderSplit.length == 1) continue; //skip eempty folder path field
+
+					Debug.warn("Empty folder names are not allowed. Icon '" + subtext + 
+						"' has an illegal folder path:", folderPath);
+					folderPtr = undefined; 
+					break;					
+				} 
 				
 				if(folderPtr === undefined)
 					folderPtr = folders; //init to root folder first time

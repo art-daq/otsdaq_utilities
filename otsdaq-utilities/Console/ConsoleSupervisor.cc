@@ -45,6 +45,8 @@ XDAQ_INSTANTIATOR_IMPL(ConsoleSupervisor)
 #undef __MF_SUBJECT__
 #define __MF_SUBJECT__ "Console"
 
+const std::set<std::string> ConsoleSupervisor::CUSTOM_TRIGGER_ACTIONS({"Halt","Stop","Pause","Soft Error","Hard Error","System Message"});
+
 //==============================================================================
 ConsoleSupervisor::ConsoleSupervisor(xdaq::ApplicationStub* stub)
     : CoreSupervisorBase(stub)
@@ -61,6 +63,23 @@ ConsoleSupervisor::ConsoleSupervisor(xdaq::ApplicationStub* stub)
 	mkdir(((std::string)USER_CONSOLE_SNAPSHOT_PATH).c_str(), 0755);
 
 	init();
+
+
+	//test custom trigger list and always force the first one to be the "Console missed" !
+	//Note: to avoid recursive triggers, Label='Console' can not trigger, so this 1st one is the only Console source trigger!
+	//	Custom Trigger Philosophy
+	//		- only one global trigger priority list (too complicated to manage by user, would have to timeout logins, etc..)
+	//		- the admin users can modify priority of items in prority list
+	//		- the admin users can add multiple actions to a single trigger needle ('Count' is always inferred, could be e.g. "Count, System Message, Halt")		
+	//			-- including to the 1st Console missing message trigger
+	{
+		addCustomTriggeredAction("Console missed * packet(s)",
+			"System Message");		
+		addCustomTriggeredAction("runtime***4", 
+			"Halt");
+		addCustomTriggeredAction("runtime", 
+			"System Message");
+	} //end test and force custom trigger list 
 
 	__SUP_COUT__ << "Constructor complete." << __E__;
 
@@ -145,7 +164,7 @@ try
 		       << __E__;
 		__COUT__ << ss.str();
 
-		cs->messages_.emplace_back(CONSOLE_SPECIAL_ERROR + ss.str(), cs->messageCount_++);
+		cs->messages_.emplace_back(CONSOLE_SPECIAL_ERROR + ss.str(), cs->messageCount_++, cs->priorityCustomTriggerList_);
 
 		if(cs->messages_.size() > cs->maxMessageCount_)
 		{
@@ -225,8 +244,10 @@ try
 			{
 				// std::cout << "CONSOLE " << c << " sz=" << buffer.size() << " len=" <<
 				// 	strlen(&(buffer.c_str()[c])) << __E__;
-				cs->messages_.emplace_back(&(buffer.c_str()[c]), cs->messageCount_++);
-
+				cs->messages_.emplace_back(&(buffer.c_str()[c]), cs->messageCount_++, cs->priorityCustomTriggerList_);
+				if(cs->messages_.back().hasCustomTriggerMatchAction())
+					cs->customTriggerActionQueue_.push(cs->messages_.back().getCustomTriggerMatch());
+				
 				// check if sequence ID is out of order
 				newSourceId   = cs->messages_.back().getSourceIDAsNumber();
 				newSequenceId = cs->messages_.back().getSequenceIDAsNumber();
@@ -234,13 +255,16 @@ try
 				//__COUT__ << "newSourceId: " << newSourceId << __E__;
 				//__COUT__ << "newSequenceId: " << newSequenceId << __E__;
 
-				if(newSourceId != -1 &&
+				//if
+				if( newSequenceId%1000 == 0 || //for debugging missed!
+				(newSourceId != -1 &&
 				   sourceLastSequenceID.find(newSourceId) !=
 				       sourceLastSequenceID.end() &&  // ensure not first packet received
 				   ((newSequenceId == 0 && sourceLastSequenceID[newSourceId] !=
 				                               (uint32_t)-1) ||  // wrap around case
 				    newSequenceId !=
 				        sourceLastSequenceID[newSourceId] + 1))  // normal sequence case
+				)
 				{
 					// missed some messages!
 					std::stringstream missedSs;
@@ -254,7 +278,14 @@ try
 
 					// generate special message to indicate missed packets
 					cs->messages_.emplace_back(CONSOLE_SPECIAL_WARNING + missedSs.str(),
-					                           cs->messageCount_++);
+					                           cs->messageCount_++, cs->priorityCustomTriggerList_);
+					//Force a custom trigger because Console Label are ignored! if(cs->messages_.back().hasCustomTriggerMatchAction())					
+					if(cs->priorityCustomTriggerList_.size())
+					{
+						cs->customTriggerActionQueue_.push(cs->priorityCustomTriggerList_[0]);	//push newest action to back
+						cs->customTriggerActionQueue_.back().triggeredMessageID = cs->messages_.back().getSequenceIDAsNumber();
+						cs->messages_.back().setCustomTriggerMatch(cs->customTriggerActionQueue_.back());
+					}									   
 				}
 
 				// save the new last sequence ID
@@ -312,6 +343,19 @@ try
 			         << __E__;
 			break;  // assume something wrong, and break loop
 		}
+
+
+		if(cs->customTriggerActionQueue_.size() && !cs->customTriggerActionThreadExists_)
+		{
+			cs->customTriggerActionThreadExists_ = true;
+
+			std::thread(
+				[](ConsoleSupervisor* c) { 
+					ConsoleSupervisor::customTriggerActionThread(c); },
+				cs)
+				.detach();
+		}
+
 	}  // end infinite loop
 
 }  // end messageFacilityReceiverWorkLoop()
@@ -325,10 +369,114 @@ catch(...)
 }  // end messageFacilityReceiverWorkLoop() exception handling
 
 //==============================================================================
+// customTriggerActionThread ~~
+//	Thread for sequentially handling customTriggerActionQueue_
+void ConsoleSupervisor::customTriggerActionThread(ConsoleSupervisor* cs)
+try
+{
+	__COUT__ << "Starting customTriggerActionThread" << __E__;
+	CustomTriggeredAction_t triggeredAction; 
+	while(1) //infinite workloop
+	{
+		{ //mutex scope:
+			// lockout the messages array for the remainder of the scope
+			// this guarantees the reading thread can safely access the action queue
+			std::lock_guard<std::mutex> lock(cs->messageMutex_);
+			if(cs->customTriggerActionQueue_.size())
+			{
+				triggeredAction = cs->customTriggerActionQueue_.front();
+				cs->customTriggerActionQueue_.pop(); //pop first/oldest element
+			}
+		} //end mutex scope
+		
+		if(triggeredAction.action.size())
+		{
+			__COUT__ << "Handling action '" << triggeredAction.action <<
+				 "' on trigger: " << StringMacros::vectorToString(triggeredAction.needleSubstrings,{'*'}) << __E__;
+			cs->doTriggeredAction(triggeredAction);
+		}
+
+		triggeredAction.action = ""; //clear action for next in queue
+		triggeredAction.triggeredMessageID = -1; //clear triggered message ID for next in queue
+		sleep(2); //mostly sleep
+
+	} //end infinite workloop
+
+}  // end customTriggerActionThread()
+catch(const std::runtime_error& e)
+{
+	__COUT_ERR__ << "Error caught at Console Supervisor Action thread: " << e.what() << __E__;
+}
+catch(...)
+{
+	__COUT_ERR__ << "Unknown error caught at Console Supervisor Action thread." << __E__;
+}  // end customTriggerActionThread() exception handling
+
+//==============================================================================
+void ConsoleSupervisor::doTriggeredAction(const CustomTriggeredAction_t& triggeredAction)
+{	
+	__SUP_COUT_INFO__ << "Launching Triggered Action '" << triggeredAction.action << "' fired on trigger '" << 
+		StringMacros::vectorToString(triggeredAction.needleSubstrings,{'*'}) << "'" << __E__;
+
+	//valid actions:
+	//		Halt
+	//	 	Stop
+	//		Pause
+	//		Soft Error
+	//		Hard Error
+	//		System Message
+
+	if(CUSTOM_TRIGGER_ACTIONS.find(triggeredAction.action) == CUSTOM_TRIGGER_ACTIONS.end())
+	{
+		__SUP_SS__ << "Unrecognized triggered action '" << triggeredAction.action << ",' valid actions are " <<
+			StringMacros::setToString(CUSTOM_TRIGGER_ACTIONS) << __E__;
+		__SUP_SS_THROW__;
+	}
+
+	theRemoteWebUsers_.sendSystemMessage("*" /* to all users*/,
+		"In the Console Supervisor, a custom trigger fired on '" + StringMacros::vectorToString(triggeredAction.needleSubstrings,{'*'}) + "'");
+
+}  // end doTriggeredAction()
+
+//==============================================================================
+void ConsoleSupervisor::addCustomTriggeredAction(const std::string& triggerNeedle, const std::string& triggerAction)
+{
+	__SUP_COUTV__(triggerNeedle);
+	__SUP_COUTV__(triggerAction);
+
+	//valid actions:
+	//		Halt
+	//	 	Stop
+	//		Pause
+	//		Soft Error
+	//		Hard Error
+	//		System Message
+
+	if(CUSTOM_TRIGGER_ACTIONS.find(triggerAction) == CUSTOM_TRIGGER_ACTIONS.end())
+	{
+		__SUP_SS__ << "Unrecognized triggered action '" << triggerAction << ",' valid actions are " <<
+			StringMacros::setToString(CUSTOM_TRIGGER_ACTIONS) << __E__;
+		__SUP_SS_THROW__;
+	}
+	
+	//break up on substring
+	priorityCustomTriggerList_.push_back(CustomTriggeredAction_t());
+	StringMacros::getVectorFromString(triggerNeedle, 
+		priorityCustomTriggerList_.back().needleSubstrings,
+		{'*'} /* delimiter */);
+	priorityCustomTriggerList_.back().action = triggerAction;
+
+	__SUP_COUT__ << "Added custom trigger: " << 
+		(StringMacros::vectorToString(
+			priorityCustomTriggerList_.back().needleSubstrings)) << __E__;
+
+}  // end addCustomTriggeredAction()
+
+//==============================================================================
 void ConsoleSupervisor::defaultPage(xgi::Input* /*in*/, xgi::Output* out)
 {
-	__SUP_COUT__ << "ApplicationDescriptor LID="
-	             << getApplicationDescriptor()->getLocalId() << __E__;
+	// __SUP_COUT__ << "ApplicationDescriptor LID="
+	//              << getApplicationDescriptor()->getLocalId() << __E__;
 	*out << "<!DOCTYPE HTML><html lang='en'><frameset col='100%' row='100%'><frame "
 	        "src='/WebPath/html/Console.html?urn="
 	     << getApplicationDescriptor()->getLocalId() << "'></frameset></html>";
@@ -391,6 +539,12 @@ void ConsoleSupervisor::request(const std::string&               requestType,
 		//		__SUP_COUT__ << "lastUpdateCount=" << lastUpdateCount << __E__;
 
 		insertMessageRefresh(&xmlOut, lastUpdateCount);
+	}
+	else if(requestType == "PrependHistoricMessages")
+	{
+		size_t earliestOnhandMessageCount = CgiDataUtilities::postDataAsInt(cgiIn, "earlyCount");
+		__SUP_COUTV__(earliestOnhandMessageCount);
+		prependHistoricMessages(&xmlOut, earliestOnhandMessageCount);
 	}
 	else if(requestType == "SaveUserPreferences")
 	{
@@ -1295,19 +1449,129 @@ void ConsoleSupervisor::insertMessageRefresh(HttpXmlDocument* xmlOut,
 				continue;  // skip, not userful
 			if(field.second.fieldName == "SourceID")
 				continue;  // skip, not userful
+			if(field.second.fieldName == "Timestamp") //use Time instead
+				continue;  // skip, not userful
 
 			xmlOut->addTextElementToParent("message_" + field.second.fieldName,
 			                               field.second.fieldValue,
 			                               refreshParent_);
 		}
 
+
 		// give timestamp also
 		xmlOut->addTextElementToParent("message_Time", msg.getTime(), refreshParent_);
-		// give clock also
-		xmlOut->addTextElementToParent(
-		    "message_Count", std::to_string(msg.getCount()), refreshParent_);
+		// // give clock also
+		// xmlOut->addTextElementToParent(
+		//     "message_Count", std::to_string(msg.getCount()), refreshParent_);
+
+		//give Custom trigger label also (i.e., which trigger this message matches, or blank "")
+		xmlOut->addTextElementToParent("message_Custom", 
+			StringMacros::vectorToString(msg.getCustomTriggerMatch().needleSubstrings,{'*'}),
+			refreshParent_);
 	}
 
 	if(requestOutOfSync)  // if request was out of sync, show message
 		__SUP_COUT__ << requestOutOfSyncMsg;
+}  // end insertMessageRefresh()
+
+
+//==============================================================================
+// ConsoleSupervisor::prependHistoricMessages()
+//	if earliestOnhandMessageCount is 0, return nothing
+//	else return earlier messages as much as possible
+//
+//	format of xml:
+//
+//	<last_update_count/>
+//	<last_update_index/>
+//	<messages>
+//		<message_FIELDNAME*/>
+//"Level"
+//"Label"
+//"Source"
+//"Msg"
+//"Time"
+//"Count"
+//	</messages>
+//
+//	NOTE: Uses std::mutex to avoid conflict with writing thread. (this is the reading
+// thread)
+void ConsoleSupervisor::prependHistoricMessages(HttpXmlDocument* xmlOut,
+                                             const size_t     earliestOnhandMessageCount)
+{
+	//__SUP_COUT__ << __E__;
+
+	if(messages_.size() == 0)
+		return;
+
+	// validate earliestOnhandMessageCount
+	if(earliestOnhandMessageCount >= messages_.back().getCount())
+	{
+		__SS__ << "Invalid earliestOnhandMessageCount: " << earliestOnhandMessageCount
+		       << " messagesArray size = " << messages_.back().getCount() << __E__;
+		__SS_THROW__;
+	}
+
+	// lockout the messages array for the remainder of the scope
+	// this guarantees the reading thread can safely access the messages
+	std::lock_guard<std::mutex> lock(messageMutex_);
+
+
+
+	refreshParent_ = xmlOut->addTextElementToData("messages", "");
+
+	size_t refreshReadPointer = 0;
+	size_t readCountStart = earliestOnhandMessageCount - maxClientMessageRequest_;
+	if(readCountStart >= messages_.back().getCount()) //then wrapped around, so set to 0
+		readCountStart = 0;
+
+	//find starting read pointer
+	while(refreshReadPointer < messages_.size() &&
+			messages_[refreshReadPointer].getCount() < readCountStart)
+	{
+		++refreshReadPointer;
+	}	
+
+	if(refreshReadPointer >= messages_.size())
+		return;
+
+	xmlOut->addTextElementToData("earliest_onhand_count", //return new early onhand count
+	                             std::to_string(readCountStart));
+
+	//messages returned will be from readCountStart to earliestOnhandMessageCount-1
+	// output oldest to new
+	for(; refreshReadPointer < messages_.size(); ++refreshReadPointer)
+	{
+		auto msg = messages_[refreshReadPointer];
+		if(messages_[refreshReadPointer].getCount() >= earliestOnhandMessageCount)
+			break; //found last message
+		
+		// for all fields, give value
+		for(auto& field : msg.fields)
+		{
+			if(field.second.fieldName == "Source")
+				continue;  // skip, not userful
+			if(field.second.fieldName == "SourceID")
+				continue;  // skip, not userful
+			if(field.second.fieldName == "Timestamp") //use Time instead
+				continue;  // skip, not userful
+
+			xmlOut->addTextElementToParent("message_" + field.second.fieldName,
+			                               field.second.fieldValue,
+			                               refreshParent_);
+		}
+
+
+		// give timestamp also
+		xmlOut->addTextElementToParent("message_Time", msg.getTime(), refreshParent_);
+		// // give clock also
+		// xmlOut->addTextElementToParent(
+		//     "message_Count", std::to_string(msg.getCount()), refreshParent_);
+
+		//give Custom trigger label also (i.e., which trigger this message matches, or blank "")
+		xmlOut->addTextElementToParent("message_Custom", 
+			StringMacros::vectorToString(msg.getCustomTriggerMatch().needleSubstrings,{'*'}),
+			refreshParent_);
+	}
+
 }  // end insertMessageRefresh()

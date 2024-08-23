@@ -121,7 +121,7 @@ else {
 			
 			Debug.log("Server desktop sending first message to window: ",_id,e);
 			
-			//remove the "Loading" once iframe loades
+			//remove the "Loading" once iframe loads
 			if(_winfrmHolder.childNodes.length > 1) 
 				_winfrmHolder.removeChild(
 						document.getElementById("DesktopWindowFrameLoadingDiv-"+_id));
@@ -132,6 +132,7 @@ else {
 			
 			var initObject = {
 					"windowId":			_id,
+					"windowTitle": 		(_name + (_subname==""?"":" - ") + _subname),
 					"gatewayURN":  		urnLid_,
 					"gatewayOrigin":  	serverOrigin_,
 					"cookieCode":  		Desktop.desktop.login.getCookieCode(),

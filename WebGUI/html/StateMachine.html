@@ -450,7 +450,8 @@
 				else
 					_fsmName = "";
 				
-				_fsmWindowName = DesktopContent.getDesktopWindowTitle();
+				try	{ _fsmWindowName = DesktopContent.getDesktopWindowTitle(); }
+				catch(e) {;} //ignore any errors (like cross-origin)
 				if(_fsmWindowName && _fsmWindowName != "")
 					Debug.log("_fsmWindowName=" + _fsmWindowName);
 				else

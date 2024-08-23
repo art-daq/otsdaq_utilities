@@ -33,7 +33,7 @@
 			}
 			
 			
-			#userLink, #clearConsoleLink, #downloadIconDiv, #pauseControlsLink {
+			#userLink, #clearConsoleLink, #downloadIconDiv, #pauseControlsLink, #navLatestControlsLink {
 				float: right;
 				margin: 2px 2px 2px 20px;
 			}
@@ -103,6 +103,7 @@
 				border-radius: 3px;	
 
 				font-family: 'Inconsolata', monospace;	
+				font-size: 14px;
 			}
 			
 			#consoleHistory {
@@ -138,6 +139,10 @@
 			
 			#consoleHistory::-webkit-scrollbar-corner {
 			    display: none;
+			}
+
+			#consoleHistory .lineNumberEntry {
+				font-size: 8px;
 			}
 
 			/* ***************** USER AREA ******************************************/
@@ -216,6 +221,9 @@
 			
 			.countsTable {
 				font-size: 			12px;
+			}
+			.countsTable a {
+				white-space: 		nowrap;
 			}
 			
 			#advancedContainer {
@@ -380,16 +388,18 @@
 				//initSideBar()
 				//updateFilterBoxes()
 				//updateSideBarCounts()
+				//toggleSideBarLabelFilter(fieldType, el)
 				//toggleSideBar()
 				//handleUserScroll(e)
 				//handleUserInputScroll(e)
 				//handleMouseMoveScroll(mouseEvent) 
 				//clearFilterControls(field)
 				//togglePauseControls()
+				//navToLatest()
 				//clearConsoleMessages()
 				//downloadMessages()
 				
-				//showAdvancedControls()
+				//toggleAdvancedControls()
 				//handleAdvancedGetTraceLevels(req)
 				//closeAdvancedControls()
 				//handleAdvancedFilterInput()
@@ -430,7 +440,7 @@
 			var _displayName;
 			
 			var _consoleHistoryFields = ["chat_entry","chat_author","chat_time"];
-			var _CONSOLE_HISTORY_MAX_LENGTH = 1000000;
+			var _CONSOLE_HISTORY_MAX_LENGTH = 2000000;
 						
 			var _chatUsersTitle = "<div class='userTitle'>Chatting:</div>";
 			var _activeUsersTitle = "<div class='userTitle'>Logged In:</div>";
@@ -454,15 +464,16 @@
 									"File",
 									"Line",
 									"SequenceID",
+									"Custom",
 									//"Count" //not needed
 								  ];
 			var _MESSAGE_FIELD_LEVEL = _consoleMessageFields.indexOf("Level"),
 					_MESSAGE_FIELD_LABEL = _consoleMessageFields.indexOf("Label"), 
-					//_MESSAGE_FIELD_SOURCE = 2,
 					_MESSAGE_FIELD_MSG = _consoleMessageFields.indexOf("Msg"), 
 					_MESSAGE_FIELD_TIME = _consoleMessageFields.indexOf("Time"), 
 					_MESSAGE_FIELD_FILE = _consoleMessageFields.indexOf("File"), 
 					_MESSAGE_FIELD_ID = _consoleMessageFields.indexOf("SequenceID"), 
+					_MESSAGE_FIELD_CUSTOM = _consoleMessageFields.indexOf("Custom"), 
 					_MESSAGE_FIELD_LINE = _consoleMessageFields.indexOf("Line");
 
 			var _consoleMessageArray; 			
@@ -477,7 +488,7 @@
 								 ["transparent",DesktopContent.getDefaultDesktopColor()]
 								];
 			
-			var _FIELDS_TO_OBSERVE = ["Level", "Label"];
+			var _FIELDS_TO_OBSERVE = ["Level", "Label", "Custom"];
 			var _observed = {}; 
 			for(var f in _FIELDS_TO_OBSERVE) //accumulate field values and their counts
 			{
@@ -512,12 +523,14 @@
 			var _advancedPreset_INFO = 2;
 			var _advancedPreset_WARN = 3;
 			var _advancedPreset_ERROR = 4;
-			var _advancedPreset_NONE = 5;
-			var _advancedPreset_ALL = 6;
+			var _advancedPreset_TRACE = 5;
+			var _advancedPreset_NONE = 6;
+			var _advancedPreset_ALL = 7;
 			var _advancedMaskPreset = _advancedPreset_MASK;
 			
 			
-			var _traceBIT_STANDARDS = {0: "Error", 1: "Warning", 2: "Info", 3: "Debug"};
+			var _traceBIT_STANDARDS = {0: "Fatal", 1: "Alert", 2: "Critical", 3: "Error",
+				4: "Warning", 5: "Notice", 6: "Info", 7: "Debug", 8: "Trace"};
 			var _advancedPage_SLOW = 0;
 			var _advancedPage_FAST = 1;
 			var _advancedPage_TRIGGER = 2;
@@ -818,7 +831,7 @@
 			    var w = window.innerWidth;
 			    var h = window.innerHeight;
 			    
-			    if(w < 540) w = 540;
+			    if(w < 570) w = 570;
 			    if(h < 300) h = 300;
 			    
 			    Debug.log("Chat redrawChat to " + w + " - " + h);
@@ -940,7 +953,14 @@
 				Debug.log("reconnectConsole()");
 				_lastUpdateCount = 0;
 				_lastUpdateIndex = -1; 
+				DesktopContent.showLoading();
 				getConsoleUpdates();
+
+				//give Loading box feedback to use for 1 second 
+				window.setTimeout(function()
+					{
+						DesktopContent.hideLoading();
+					},1000);	
 			} //end reconnectConsole()
 			
 			//=====================================================================================
@@ -1023,8 +1043,8 @@
 						"href='Javascript:toggleFilterControls();' " + 
 						"title='Toggle Filter Controls' >Hide Filters</a>";
 				str += "<a id='advancedControlsLink' class='consoleLink' " +
-						"onclick='showAdvancedControls();' " + 
-						"title='Show advanced controls' >Advanced</a>";
+						"onclick='toggleAdvancedControls();' " + 
+						"title='Toggle advanced controls' >Advanced</a>";
 
 				str += "<div id='filterContainer'>";
 				for(var f in _FIELDS_TO_OBSERVE) //create filter divs for each field's multiselect box
@@ -1056,32 +1076,112 @@
 			{
 				var el = document.getElementById('consoleCounts');
 
+				//for each field, show values as Bold and Underlined if selected for filter
+				
 				var str = "";
 				var fieldStr, countStr;
 				for(var f in _FIELDS_TO_OBSERVE) //show accumulated field values and their counts
 				{
 					str += "<br><u>" + _FIELDS_TO_OBSERVE[f] +
 							" counts:</u><br>";
+							
+					var sel = document.getElementById(_FIELDS_TO_OBSERVE[f] + 'sFilterSelect');
+					var selects = MultiSelectBox.mySelects_["selbox-" + _FIELDS_TO_OBSERVE[f] + "sFilter"];
+
 					fieldStr = ""; countStr = "";
-					for(var i in _observed[_FIELDS_TO_OBSERVE[f]])		
+					
+					var labelKeys = Object.keys(_observed[_FIELDS_TO_OBSERVE[f]]);
+					var labelKey; //modify for Custom field
+					for(var i=0; i < labelKeys.length; ++i)
 					{
-						fieldStr += i + " <br>";
-						countStr += _observed[_FIELDS_TO_OBSERVE[f]][i] + "<br>";
-						//						str += "<tr><td>";
-						//						str += i + ": ";
-						//						str += "</td><td>";
-						//						str += _observed[_FIELDS_TO_OBSERVE[f]][i];
-						//						str += "</td></tr>";
+						if(labelKeys[i].length == 0 || labelKeys[i][0] != '_')
+							labelKey = labelKeys[i]; //for Level, Label
+						else //is Custom
+						{
+							if(labelKeys[i].length == 1)
+								labelKey = "< Untriggered >";
+							else //decode the custom class name for display
+							{
+								labelKey = labelKeys[i].substr(1).replaceAll("_-_","%");
+								labelKey = decodeURIComponent(labelKey);
+							}
+						}
+
+						eli = MultiSelectBox.getSelectionElementByIndex(sel,i);
+						var selForFilter = false;
+						if(selects && selects.length > i && selects[i] && 
+								eli.innerText == labelKey)// labelKeys[i])
+							selForFilter = true;
+
+						if(selForFilter) //bold and underline
+							fieldStr += "<a style='text-decoration:underline;font-weight:bold;'";
+						else
+							fieldStr += "<a style='font-weight:normal;'";
+
+						fieldStr += " onclick='toggleSideBarLabelFilter(\"" + 
+								_FIELDS_TO_OBSERVE[f] + "\",this);'>" + 
+								labelKey + 
+								//labelKeys[i] + 
+								"</a> <br>";
+						countStr += _observed[ _FIELDS_TO_OBSERVE[f] ][ labelKeys[i] ] + "<br>";
 					}
+
+					// for(var i in _observed[ _FIELDS_TO_OBSERVE[f] ])		
+					// {
+					// 	fieldStr += "<a style='text-decoration:none;' onclick='toggleSideBarLabelFilter(\"" + 
+					// 			_FIELDS_TO_OBSERVE[f] + "\",this);'>" + 
+					// 			i + "</a> <br>";
+					// 	countStr += _observed[_FIELDS_TO_OBSERVE[f]][i] + "<br>";
+					// }
 
 					str += "<table class='countsTable' >";
 					str += "<tr><td style='width:50px;overflow-x:auto'>" + countStr + 
-							"</td><td style='overflow-x:auto'>" + 
-							fieldStr + "</td></tr>";
+							"</td><td style='overflow-x:auto'>" + 							
+							fieldStr + 
+							"</td></tr>";
 					str += "</table>"			
 				}			
 				el.innerHTML = str;
 			} //end updateSideBarCounts()
+			
+			//=====================================================================================
+			//toggleSideBarLabelFilter ~
+			// input el is side bar count field 
+			function toggleSideBarLabelFilter(fieldType, el) 
+			{
+				var value = el.innerText;
+				Debug.log("toggleSideBarLabelFilter()", fieldType, value);
+
+				var sel = document.getElementById(fieldType + 'sFilterSelect');
+	            
+				var selects = MultiSelectBox.mySelects_["selbox-" + fieldType + "sFilter"];
+				
+				//if all not selected, then select 
+				//if some selected, then toggle select
+
+				var eli;
+				for(var s in selects)
+				{
+					eli = MultiSelectBox.getSelectionElementByIndex(sel,s);
+					// selects[s] = 0;
+					Debug.log("Value ", s, eli.innerText, selects[s]);
+					if(value == eli.innerText)
+					{
+						selects[s] = selects[s]?0:1;
+						Debug.log("Value ", s, eli.innerText, selects[s]);
+					}
+				}
+
+				// selects[value] = selects[value]?0:1;
+				MultiSelectBox.initMySelectBoxes();	  //repaint
+
+				//update filter
+				if(eli)
+					filterSelectionHandler(eli);
+
+				updateSideBarCounts();
+
+			} //end toggleSideBarLabelFilter()
 			
 			//=====================================================================================
 			//updateFilterBoxes ~
@@ -1089,10 +1189,10 @@
 			{
 				Debug.log("Draw filter controls");
 				
-				//do nothing if not currently shown
-				if(!_displaySidePane || !_showFilterControls) return;
+				// //do nothing if not currently shown
+				// if(!_displaySidePane || !_showFilterControls) return;
 			
-				Debug.log("Draw filter controls true");
+				// Debug.log("Draw filter controls true");
 
 				//setup filter box for each field observed
 				var el;
@@ -1104,7 +1204,20 @@
 					el = document.getElementById(_FIELDS_TO_OBSERVE[f] + 'sFilterSelect');
 					keys = [];
 					for(var label in _observed[_FIELDS_TO_OBSERVE[f]])
+					{
+						//modify label for Custom field
+						if(label.length > 0 && label[0] == '_') //is Custom
+						{
+							if(label.length == 1)
+							label = "< Untriggered >";
+							else //decode the custom class name for display
+							{
+								label = label.substr(1).replaceAll("_-_","%");
+								label = decodeURIComponent(label);
+							}
+						}
 						keys.push(label);
+					}
 
 					el.style.display = "block";
 					el.style.width = (_usersEl.offsetWidth - 2 - 17) + "px"; //-17 for scrollbar
@@ -1158,7 +1271,8 @@
 				for(i=0;i<selects.length;++i)
 					if(!selects[i])
 					{
-						Debug.log("Hiding " + tmpKeys[i]);
+						Debug.log("Hiding class", tmpKeys[i]);
+						
 						tmpKeys[i] = tmpKeys[i].replace(".","\\.");
 						css += "." + tmpKeys[i] + "_" + 
 								field + "Entry " +
@@ -1227,29 +1341,55 @@
 				{		 			
 					tmp.Label = _consoleMessageArray[_MESSAGE_FIELD_LABEL][i].getAttribute('value');
 					tmp.Level = _consoleMessageArray[_MESSAGE_FIELD_LEVEL][i].getAttribute('value');
+					tmp.Custom = _consoleMessageArray[_MESSAGE_FIELD_CUSTOM][i].getAttribute('value');
 					tmp.ID = _consoleMessageArray[_MESSAGE_FIELD_ID][i].getAttribute('value');
 					
 					firstMsg = _consoleMessageArray[_MESSAGE_FIELD_FILE][i].getAttribute('value') +
-							"[" + _consoleMessageArray[_MESSAGE_FIELD_LINE][i].getAttribute('value') + "]\t";
+							":" + _consoleMessageArray[_MESSAGE_FIELD_LINE][i].getAttribute('value');// + "\t";
 					
 					secondMsg = _consoleMessageArray[_MESSAGE_FIELD_MSG][i].getAttribute('value');
 										 
 					firstMsg = convertForClient(firstMsg);
 					secondMsg = convertForClient(secondMsg);
+
+					//Note: A valid class name should start with an underscore (_), a hyphen (-) or a letter (a-z)/(A-Z) which is followed by any numbers, hyphens, underscores, letters.
+					//so for custom filter span, must clean and place leading underscore for leading numbers
+					// It escapes all characters except: A–Z a–z 0–9 - _ . ! ~ * ' ( )
+					tmp.Custom = encodeURIComponent(tmp.Custom). //so add addtional escaping
+									replace(/[.!~*'()]/g,
+        								(c) => `%${c.charCodeAt(0).toString(16).toUpperCase()}`,
+									);
+					//replace all % with _
+					tmp.Custom = "_" + tmp.Custom.replaceAll("%","_-_");
+					//Note: decodeURIComponent() decodes all escape sequences, including those that are not created by encodeURIComponent, like -.!~*'().
 					
 					//important to only have one /div> per entry for truncate
 					str += "<div class='consoleEntry consoleEntryId-" +
 						tmp.ID + "' style='color:" + 
 						getColorForLevel(tmp.Level) + "'>" +
 						"<span class='" + tmp.Label + "_LabelEntry'>" + 
-						"<span class='" + tmp.Level + "_LevelEntry'>" + //open label level span (for filtering)
+						"<span class='" + tmp.Level + "_LevelEntry'>" + 
+						"<span class='" + tmp.Custom + "_CustomEntry'>" + //open label level custom span (for filtering)
 						"<span class='elaboratedEntry'><b>" +
 						tmp.Level + " " +
 						"(" + formatTime(_consoleMessageArray[_MESSAGE_FIELD_TIME][i].getAttribute('value')) + ") ";					 
 					str += tmp.Label + ":</b> " +
 							"</span><span class='lineNumberEntry'>" +
-						firstMsg + "</span>" + secondMsg + 
-						"</span></span>" + //close label level span (for filtering)
+						DesktopContent.htmlOpen("a", //start macro module table
+								{
+									"title":"Open file in a new browser tab: \n" + firstMsg,
+									"style":"color:inherit;",
+									"onclick":"DesktopContent.openNewBrowserTab(" +
+									"\"Code Editor\",undefined /*subname undefined for LID lookup*/," + 
+									"\"?" +
+									"startFilePrimary=" +
+									firstMsg + "\",undefined /*unique undefined for LID lookup*/);", //end onclick
+								}, 
+								firstMsg,
+								true /*doCloseTag*/) + "\t" +
+						// firstMsg + 
+						"</span>" + secondMsg + 
+						"</span></span></span>" + //close label level span (for filtering)
 						"</div>"; //important to only have one /div> per entry for truncate
 						
 					//aggragate stats for each observed field
@@ -1305,9 +1445,22 @@
 			
 			//=====================================================================================
 			//clearConsoleMessages ~
+			//	clear console messages and counts
 			function clearConsoleMessages() 
 			{
 				_consoleEl.innerHTML = "";
+
+				for(var f in _FIELDS_TO_OBSERVE) //for each field type			
+				{					
+					var labelKeys = Object.keys(_observed[_FIELDS_TO_OBSERVE[f]]);
+					for(var i=0; i < labelKeys.length; ++i) //for each label within field type
+					{
+						_observed[ _FIELDS_TO_OBSERVE[f] ][ labelKeys[i] ] = 0; //reset count
+					}
+				}
+
+				updateSideBarCounts();
+
 			} //end clearConsoleMessages()			
 		
 			//=====================================================================================
@@ -1464,6 +1617,15 @@
 			} //end togglePauseControls()
 
 			//=====================================================================================
+			//navToLatest ~
+			function navToLatest() 
+			{			
+				Debug.log("navToLatest()");
+				_historyEl.scrollTop = _historyEl.scrollHeight;
+				_scrollWithNewChats = true;
+			} //end navToLatest()
+
+			//=====================================================================================
 			//handleUserScroll ~
 			//	identify when user wants to keep up with live chats
 			function handleUserScroll(e) 
@@ -1523,7 +1685,7 @@
 			} //end downloadMessages()
 
 			//=====================================================================================
-			function showAdvancedControls() 
+			function toggleAdvancedControls() 
 			{	
 				if(0) //while debugging
 				{
@@ -1531,7 +1693,13 @@
 					clearTimeout(_consoleUpdateTimer);
 					_consoleUpdateTimer = 0;
 				}
-				Debug.log("showAdvancedControls()");
+				Debug.log("toggleAdvancedControls()");
+
+				if(_advancedContainerEl.style.display == "block") //then close
+				{
+					closeAdvancedControls(); 
+					return;
+				}
 				
 				_advancedContainerEl.style.display = "block";
 				
@@ -1557,7 +1725,7 @@
 						" button. All TRACE labels and their hosts that you have selected, by checking their associated checkbox, will have the specified bitmask" +
 						" applied. You can also use left- and right-click to draw a custom mask directly to a label by clicking the bitmask in the label table." +						
 						""); 
-			} //end showAdvancedControls()
+			} //end toggleAdvancedControls()
 
 			//=====================================================================================
 			function handleAdvancedGetTraceLevels(req) 
@@ -2110,6 +2278,7 @@
 					str += "<option>Info Preset</option>";
 					str += "<option>Warning Preset</option>";
 					str += "<option>Error Preset</option>";
+					str += "<option>Trace Preset</option>";
 					str += "<option>None Preset</option>";
 					str += "<option>All Preset</option>";
 					str += "</select>"; //end set type select
@@ -2557,7 +2726,9 @@
 				var count = 0;
 				var name;
 				for(var r=0;r<rows.length;++r)
-					if(rows[r].children[0].children[0].checked) 
+					if(rows[r].children.length && 
+						rows[r].children[0].children.length && 
+						rows[r].children[0].children[0].checked) 
 					{
 						++count;
 						name = rows[r].children[1].innerText;
@@ -2652,13 +2823,15 @@
 				//setup _advancedEditBitMask based on preset
 				var val64 = [_advancedEditBitMask[0] /*msb*/,_advancedEditBitMask[1] /*lsb*/];
 				if(_advancedMaskPreset == _advancedPreset_DEBUG)
-					val64 = [0,0xF];
+					val64 = [0,0xFF];
 				else if(_advancedMaskPreset == _advancedPreset_INFO)
-					val64 = [0,0x7];
+					val64 = [0,0x7F];
 				else if(_advancedMaskPreset == _advancedPreset_WARN)
-					val64 = [0,0x3];
+					val64 = [0,0x1F];
 				else if(_advancedMaskPreset == _advancedPreset_ERROR)
-					val64 = [0,0x1];
+					val64 = [0,0xF];
+				else if(_advancedMaskPreset == _advancedPreset_TRACE)
+					val64 = [0,0x1FF];
 				else if(_advancedMaskPreset == _advancedPreset_NONE)
 					val64 = [0,0];
 				else if(_advancedMaskPreset == _advancedPreset_ALL)
@@ -3347,8 +3520,12 @@
 		<div id='pauseControlsLink'>
 			<a onclick='togglePauseControls();' title='Pause and Resume getting new messages.' class='consoleLink' id='pauseControlsLinkText'>Pause</a>		 
 		</div>
+				
+		<div id='navLatestControlsLink'>
+			<a onclick='navToLatest();' title='Scroll to latest console messages, and continue to scroll with new chats.' class='consoleLink' id='pauseControlsLinkText'>Nav to Latest</a>		 
+		</div>
 		
-						
+		
 		<div id='consoleHistoryContainer'>
 			<div id='consoleHistory' class='consoleEntry' <!--to match nowrap --> >
 			<table height='100%'><td height='100%' valign='bottom'>

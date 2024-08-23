@@ -481,14 +481,8 @@ void MacroMakerSupervisor::RemoteControlWorkLoop(MacroMakerSupervisor* theSuperv
 		return;
 	}
 
-	std::size_t              commaPosition;
-	unsigned int             commaCounter = 0;
-	std::size_t              begin        = 0;
 	std::string              buffer;
-	std::string              errorStr;
-	std::string              fsmName;
-	std::string              command;
-	std::vector<std::string> parameters;
+	__COUT__ << "UDP Remote Control workloop starting..." << __E__;
 	while(1)
 	{
 		// workloop procedure
@@ -502,118 +496,67 @@ void MacroMakerSupervisor::RemoteControlWorkLoop(MacroMakerSupervisor* theSuperv
 			__COUT__ << "UDP Remote Control packet received of size = " << buffer.size() << __E__;
 			__COUTV__(buffer);
 
-			// if(buffer == "GetRemoteAppStatus")
-			// {
-			// 	__COUT__ << "Giving app status to remote monitor..." << __E__;
-			// 	HttpXmlDocument xmlOut;
-			// 	for(const auto& it : theSupervisor->allSupervisorInfo_.getAllSupervisorInfo())
-			// 	{
-			// 		const auto& appInfo = it.second;
+			try
+			{
+				if(buffer == "GetFrontendMacroInfo")
+				{
+					HttpXmlDocument xmldoc;
+					theSupervisor->getFEMacroList(xmldoc, "NO-USER");
 
-			// 		xmlOut.addTextElementToData("name",
-			// 									appInfo.getName());                      // get application name
-			// 		xmlOut.addTextElementToData("id", std::to_string(appInfo.getId()));  // get application id
-			// 		xmlOut.addTextElementToData("status", appInfo.getStatus());          // get status
-			// 		xmlOut.addTextElementToData(
-			// 			"time", appInfo.getLastStatusTime() ? StringMacros::getTimestampString(appInfo.getLastStatusTime()) : "0");  // get time stamp
-			// 		xmlOut.addTextElementToData("stale",
-			// 									std::to_string(time(0) - appInfo.getLastStatusTime()));  // time since update
-			// 		xmlOut.addTextElementToData("progress", std::to_string(appInfo.getProgress()));      // get progress
-			// 		xmlOut.addTextElementToData("detail", appInfo.getDetail());                          // get detail
-			// 		xmlOut.addTextElementToData("class",
-			// 									appInfo.getClass());  // get application class
-			// 		xmlOut.addTextElementToData("url",
-			// 									appInfo.getURL());  // get application url
-			// 		xmlOut.addTextElementToData("context",
-			// 									appInfo.getContextName());  // get context
-			// 		auto subappElement = xmlOut.addTextElementToData("subapps", "");
-			// 		for(auto& subappInfoPair : appInfo.getSubappInfo())
-			// 		{
-			// 			xmlOut.addTextElementToParent("subapp_name", subappInfoPair.first, subappElement);
-			// 			xmlOut.addTextElementToParent("subapp_status", subappInfoPair.second.status, subappElement);  // get status
-			// 			xmlOut.addTextElementToParent("subapp_time",
-			// 				subappInfoPair.second.lastStatusTime ? StringMacros::getTimestampString(subappInfoPair.second.lastStatusTime) : "0",
-			// 										subappElement);  // get time stamp
-			// 			xmlOut.addTextElementToParent("subapp_stale", std::to_string(time(0) - subappInfoPair.second.lastStatusTime), subappElement);  // time since update
-			// 			xmlOut.addTextElementToParent("subapp_progress", std::to_string(subappInfoPair.second.progress), subappElement);               // get progress
-			// 			xmlOut.addTextElementToParent("subapp_detail", subappInfoPair.second.detail, subappElement);                                   // get detail
-			// 			xmlOut.addTextElementToParent("subapp_url", subappInfoPair.second.url, subappElement);                                   // get url
-			// 			xmlOut.addTextElementToParent("subapp_class", subappInfoPair.second.class_name, subappElement);                                // get class
+					std::stringstream out;
+					xmldoc.outputXmlDocument((std::ostringstream*)&out, false /*dispStdOut*/, false /*allowWhiteSpace*/);
+					__COUT__ << "out: " << out.str();
+					sock.acknowledge(out.str(), true /* verbose */);
+				}
+				else if(buffer.find("RunFrontendMacro") == 0)
+				{
+					HttpXmlDocument xmldoc;
+					__COUTV__(buffer);
+					std::vector<std::string> bufferFields = StringMacros::getVectorFromString(buffer,{';'});
+					if(bufferFields.size() < 8)
+					{
+						__SS__ << "Missing input arguments for running FE Macro: " << bufferFields.size() << " vs 8 expected" << __E__; 
+						__SS_THROW__;
+					}
 
-			// 		}
-			// 	}
-			// 	std::stringstream out;
-			// 	xmlOut.outputXmlDocument((std::ostringstream*)&out, false /*dispStdOut*/, false /*allowWhiteSpace*/);
-			// 	__COUTT__ << "App status to monitor: " << out.str() << __E__;
-			// 	sock.acknowledge(out.str(), false /* verbose */);
-			// 	continue;
-			// }
-
-			// size_t nCommas = std::count(buffer.begin(), buffer.end(), ',');
-			// if(nCommas == 0)
-			// {
-			// 	__SS__ << "Unrecognized State Machine command :-" << buffer
-			// 	       << "-. Format is FiniteStateMachineName,Command,Parameter(s). "
-			// 	          "Where Parameter(s) is/are optional."
-			// 	       << __E__;
-			// 	__COUT_ERR__ << ss.str();
-			// 	continue;
-			// }
-			// begin        = 0;
-			// commaCounter = 0;
-			// parameters.clear();
-			// while((commaPosition = buffer.find(',', begin)) != std::string::npos || commaCounter == nCommas)
-			// {
-			// 	if(commaCounter == nCommas)
-			// 		commaPosition = buffer.size();
-			// 	if(commaCounter == 0)
-			// 		fsmName = buffer.substr(begin, commaPosition - begin);
-			// 	else if(commaCounter == 1)
-			// 		command = buffer.substr(begin, commaPosition - begin);
-			// 	else
-			// 		parameters.push_back(buffer.substr(begin, commaPosition - begin));
-			// 	__COUT__ << "Word: " << buffer.substr(begin, commaPosition - begin) << __E__;
-
-			// 	begin = commaPosition + 1;
-			// 	++commaCounter;
-			// }
-			// __COUTV__(fsmName);
-			// __COUTV__(command);
-			// __COUTV__(StringMacros::vectorToString(parameters));
+					std::string feClassSelected = bufferFields[1];
+					std::string feUIDSelected = bufferFields[2];  // allow CSV multi-selection
+					std::string macroType =  bufferFields[3]; // "fe", "public", "private"
+					std::string macroName = StringMacros::decodeURIComponent(bufferFields[4]);
+					std::string inputArgs   = StringMacros::decodeURIComponent(bufferFields[5]); //two level ;- and ,- separated
+					std::string outputArgs  =  StringMacros::decodeURIComponent(bufferFields[6]); //,- separated
+					bool        saveOutputs = bufferFields[7] == "1";
+					std::string username = "NO-USER";
+					std::string userGroupPermission = "allUsers: 255";
 
 
-			// // set scope of mutex
-			// {
-			// 	// should be mutually exclusive with GatewaySupervisor main thread state
-			// 	// machine accesses  lockout the messages array for the remainder of the
-			// 	// scope  this guarantees the reading thread can safely access the
-			// 	// messages
-			// 	if(theSupervisor->VERBOSE_MUTEX)
-			// 		__COUT__ << "Waiting for FSM access" << __E__;
-			// 	std::lock_guard<std::mutex> lock(theSupervisor->stateMachineAccessMutex_);
-			// 	if(theSupervisor->VERBOSE_MUTEX)
-			// 		__COUT__ << "Have FSM access" << __E__;
+					theSupervisor->runFEMacro(xmldoc, feClassSelected, feUIDSelected, macroType, macroName,
+						inputArgs, outputArgs, saveOutputs, username, userGroupPermission);
+						
 
-			// 	errorStr = theSupervisor->attemptStateMachineTransition(
-			// 	    0, 0, command, fsmName, WebUsers::DEFAULT_STATECHANGER_USERNAME /*fsmWindowName*/, WebUsers::DEFAULT_STATECHANGER_USERNAME, parameters);
-			// }
+					std::stringstream out;
+					xmldoc.outputXmlDocument((std::ostringstream*)&out, false /*dispStdOut*/, false /*allowWhiteSpace*/);
+					__COUT__ << "out: " << out.str();
+					sock.acknowledge(out.str(), true /* verbose */);
+				}
+				else
+				{
+					__SS__ << "Unrecognized UDP command received: " << buffer << __E__;
+					__SS_THROW__;	
+				}
+			}
+			catch(const std::runtime_error& e)
+			{
+				__COUT_ERR__ << "Error during UDP command handling: " << e.what() << __E__;
+				sock.acknowledge(std::string("Error: ") + e.what(), true /* verbose */);
+			}			
+			catch(...)
+			{
+				__COUT_ERR__ << "Unknown error caught during UDP command handling - check the logs." << __E__;
+				sock.acknowledge(std::string("Error: ") + "unknown error caught", true /* verbose */);
+			}			
 
-			// if(errorStr != "")
-			// {
-			// 	__SS__ << "UDP State Changer failed to execute command because of the "
-			// 	          "following error: "
-			// 	       << errorStr;
-			// 	__COUT_ERR__ << ss.str();
-			// 	if(acknowledgementEnabled)
-			// 		sock.acknowledge(errorStr, true /* verbose */);
-			// }
-			// else
-			// {
-			// 	__SS__ << "Successfully executed state change command '" << command << ".'" << __E__;
-			// 	__COUT_INFO__ << ss.str();
-			// 	if(acknowledgementEnabled)
-			// 		sock.acknowledge("Done", true /* verbose */);
-			// }
+			__COUT__ << "Done handling command '" << buffer << "'" << __E__;		
 		}
 		else
 			usleep(1000);
@@ -2800,8 +2743,6 @@ try
 {
 	__SUP_COUT__ << __E__;
 
-	// unsigned int feSupervisorID = CgiDataUtilities::getDataAsInt(cgi,
-	// "feSupervisorID");
 	std::string feClassSelected = CgiDataUtilities::getData(cgi, "feClassSelected");
 	std::string feUIDSelected =
 	    CgiDataUtilities::getData(cgi, "feUIDSelected");  // allow CSV multi-selection
@@ -2812,7 +2753,43 @@ try
 	std::string outputArgs  = CgiDataUtilities::postData(cgi, "outputArgs");
 	bool        saveOutputs = CgiDataUtilities::getDataAsInt(cgi, "saveOutputs") == 1;
 
-	//__SUP_COUTV__(feSupervisorID);
+	runFEMacro(xmldoc
+		, feClassSelected
+		, feUIDSelected
+		, macroType
+		, macroName
+		, inputArgs
+		, outputArgs
+		, saveOutputs
+		, userInfo.username_
+		, StringMacros::mapToString(userInfo.getGroupPermissionLevels()));
+}
+catch(const std::runtime_error& e)
+{
+	__SUP_SS__ << "Error processing FE communication request: " << e.what() << __E__;
+	__SUP_COUT_ERR__ << ss.str();
+	xmldoc.addTextElementToData("Error", ss.str());
+}
+catch(...)
+{
+	__SUP_SS__ << "Unknown error processing FE communication request." << __E__;
+	try	{ throw; } //one more try to printout extra info
+	catch(const std::exception &e)
+	{
+		ss << "Exception message: " << e.what();
+	}
+	catch(...){}
+	__SUP_COUT_ERR__ << ss.str();
+
+	xmldoc.addTextElementToData("Error", ss.str());
+}  // end runFEMacro() catch
+
+//==============================================================================
+void MacroMakerSupervisor::runFEMacro(HttpXmlDocument&                 xmldoc,
+    std::string feClassSelected, std::string feUIDSelected, const std::string& macroType,
+	const std::string& macroName, const std::string& inputArgs, const std::string outputArgs, 
+	bool        saveOutputs, const std::string& username, const std::string& userGroupPermissions)
+{
 	__SUP_COUTV__(feClassSelected);
 	__SUP_COUTV__(feUIDSelected);
 	__SUP_COUTV__(macroType);
@@ -2820,6 +2797,8 @@ try
 	__SUP_COUTV__(inputArgs);
 	__SUP_COUTV__(outputArgs);
 	__SUP_COUTV__(saveOutputs);
+	__SUP_COUTV__(username);
+	__SUP_COUTV__(userGroupPermissions);
 
 	appendCommandToHistory(feClassSelected, 
 						   feUIDSelected,
@@ -2828,7 +2807,7 @@ try
 						   inputArgs,
 						   outputArgs,
 						   saveOutputs,
-						   userInfo.username_);
+						   username);
 
 	std::set<std::string /*feUID*/> feUIDs;
 
@@ -2876,7 +2855,7 @@ try
 	if(macroType == "public")
 		loadMacro(macroName, macroString);
 	else if(macroType == "private")
-		loadMacro(macroName, macroString, userInfo.username_);
+		loadMacro(macroName, macroString, username);
 
 	__SUP_COUTV__(macroString);
 
@@ -2958,9 +2937,7 @@ try
 			}
 			txParameters.addParameter("inputArgs", inputArgs);
 			txParameters.addParameter("outputArgs", outputArgs);
-			txParameters.addParameter(
-			    "userPermissions",
-			    StringMacros::mapToString(userInfo.getGroupPermissionLevels()));
+			txParameters.addParameter("userPermissions",userGroupPermissions);
 
 			SOAPParameters rxParameters;  // params for xoap to recv
 			// rxParameters.addParameter("success");
@@ -3070,25 +3047,6 @@ try
 		fclose(fp);
 
 }  // end runFEMacro()
-catch(const std::runtime_error& e)
-{
-	__SUP_SS__ << "Error processing FE communication request: " << e.what() << __E__;
-	__SUP_COUT_ERR__ << ss.str();
-	xmldoc.addTextElementToData("Error", ss.str());
-}
-catch(...)
-{
-	__SUP_SS__ << "Unknown error processing FE communication request." << __E__;
-	try	{ throw; } //one more try to printout extra info
-	catch(const std::exception &e)
-	{
-		ss << "Exception message: " << e.what();
-	}
-	catch(...){}
-	__SUP_COUT_ERR__ << ss.str();
-
-	xmldoc.addTextElementToData("Error", ss.str());
-}  // end runFEMacro() catch
 
 //==============================================================================
 void MacroMakerSupervisor::getFEMacroList(HttpXmlDocument&   xmldoc,
