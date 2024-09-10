@@ -26,6 +26,7 @@ XDAQ_INSTANTIATOR_IMPL(ConsoleSupervisor)
 #define USER_CONSOLE_SNAPSHOT_PATH \
 	std::string(__ENV__("SERVICE_DATA_PATH")) + "/ConsoleSnapshots/"
 #define USERS_PREFERENCES_FILETYPE "pref"
+#define CUSTOM_COUNT_LIST_FILENAME std::string("CustomCountList.dat")
 
 #define QUIET_CFG_FILE                    \
 	std::string(__ENV__("USER_DATA")) +   \
@@ -45,7 +46,10 @@ XDAQ_INSTANTIATOR_IMPL(ConsoleSupervisor)
 #undef __MF_SUBJECT__
 #define __MF_SUBJECT__ "Console"
 
-const std::set<std::string> ConsoleSupervisor::CUSTOM_TRIGGER_ACTIONS({"Halt","Stop","Pause","Soft Error","Hard Error","System Message"});
+#define CONSOLE_MISSED_NEEDLE "Console missed * packet(s)"
+
+//Count always happens, and System Message always happens for FSM commands
+const std::set<std::string> ConsoleSupervisor::CUSTOM_TRIGGER_ACTIONS({"Count Only","System Message","Halt","Stop","Pause","Soft Error","Hard Error"});
 
 //==============================================================================
 ConsoleSupervisor::ConsoleSupervisor(xdaq::ApplicationStub* stub)
@@ -65,21 +69,24 @@ ConsoleSupervisor::ConsoleSupervisor(xdaq::ApplicationStub* stub)
 	init();
 
 
-	//test custom trigger list and always force the first one to be the "Console missed" !
+	//test custom count list and always force the first one to be the "Console missed" !
 	//Note: to avoid recursive triggers, Label='Console' can not trigger, so this 1st one is the only Console source trigger!
 	//	Custom Trigger Philosophy
-	//		- only one global trigger priority list (too complicated to manage by user, would have to timeout logins, etc..)
+	//		- only one global custom count priority list (too complicated to manage by user, would have to timeout logins, etc..)
 	//		- the admin users can modify priority of items in prority list
-	//		- the admin users can add multiple actions to a single trigger needle ('Count' is always inferred, could be e.g. "Count, System Message, Halt")		
-	//			-- including to the 1st Console missing message trigger
+	//		- actions can infer others ('Count' is always inferred, in addition 'System Message' is inferred for FSM actions)
+	//		- the admin users can modify actions
+	//			-- including to the 1st Console-missing-message custom count
+	loadCustomCountList();
+	if(priorityCustomTriggerList_.size() == 0) //then create default starting list example for user
 	{
-		addCustomTriggeredAction("Console missed * packet(s)",
+		addCustomTriggeredAction(CONSOLE_MISSED_NEEDLE,
 			"System Message");		
-		addCustomTriggeredAction("runtime***4", 
+		addCustomTriggeredAction("runtime*4", 
 			"Halt");
 		addCustomTriggeredAction("runtime", 
 			"System Message");
-	} //end test and force custom trigger list 
+	} //end test and force custom count list 
 
 	__SUP_COUT__ << "Constructor complete." << __E__;
 
@@ -165,7 +172,8 @@ try
 		__COUT__ << ss.str();
 
 		cs->messages_.emplace_back(CONSOLE_SPECIAL_ERROR + ss.str(), cs->messageCount_++, cs->priorityCustomTriggerList_);
-
+		//force time to now for auto-generated message
+		cs->messages_.back().setTime(time(0));	
 		if(cs->messages_.size() > cs->maxMessageCount_)
 		{
 			cs->messages_.erase(cs->messages_.begin());
@@ -279,11 +287,14 @@ try
 					// generate special message to indicate missed packets
 					cs->messages_.emplace_back(CONSOLE_SPECIAL_WARNING + missedSs.str(),
 					                           cs->messageCount_++, cs->priorityCustomTriggerList_);
-					//Force a custom trigger because Console Label are ignored! if(cs->messages_.back().hasCustomTriggerMatchAction())					
+					//force time to now for auto-generated message
+					cs->messages_.back().setTime(time(0));					
+					//Force a custom count because Console Label are ignored! if(cs->messages_.back().hasCustomTriggerMatchAction())					
 					if(cs->priorityCustomTriggerList_.size())
 					{
 						cs->customTriggerActionQueue_.push(cs->priorityCustomTriggerList_[0]);	//push newest action to back
-						cs->customTriggerActionQueue_.back().triggeredMessageID = cs->messages_.back().getSequenceIDAsNumber();
+						cs->priorityCustomTriggerList_[0].occurrences++; //increment occurrences
+						cs->customTriggerActionQueue_.back().triggeredMessageCountIndex = cs->messages_.back().getCount();
 						cs->messages_.back().setCustomTriggerMatch(cs->customTriggerActionQueue_.back());
 					}									   
 				}
@@ -392,12 +403,12 @@ try
 		if(triggeredAction.action.size())
 		{
 			__COUT__ << "Handling action '" << triggeredAction.action <<
-				 "' on trigger: " << StringMacros::vectorToString(triggeredAction.needleSubstrings,{'*'}) << __E__;
+				 "' on custom count search string: " << StringMacros::vectorToString(triggeredAction.needleSubstrings,{'*'}) << __E__;
 			cs->doTriggeredAction(triggeredAction);
 		}
 
 		triggeredAction.action = ""; //clear action for next in queue
-		triggeredAction.triggeredMessageID = -1; //clear triggered message ID for next in queue
+		triggeredAction.triggeredMessageCountIndex = -1; //clear triggered message ID for next in queue
 		sleep(2); //mostly sleep
 
 	} //end infinite workloop
@@ -415,8 +426,8 @@ catch(...)
 //==============================================================================
 void ConsoleSupervisor::doTriggeredAction(const CustomTriggeredAction_t& triggeredAction)
 {	
-	__SUP_COUT_INFO__ << "Launching Triggered Action '" << triggeredAction.action << "' fired on trigger '" << 
-		StringMacros::vectorToString(triggeredAction.needleSubstrings,{'*'}) << "'" << __E__;
+	__SUP_COUT_INFO__ << "Launching Triggered Action '" << triggeredAction.action << "' fired on custom count search string: " << 
+		StringMacros::vectorToString(triggeredAction.needleSubstrings,{'*'}) << __E__;
 
 	//valid actions:
 	//		Halt
@@ -434,15 +445,49 @@ void ConsoleSupervisor::doTriggeredAction(const CustomTriggeredAction_t& trigger
 	}
 
 	theRemoteWebUsers_.sendSystemMessage("*" /* to all users*/,
-		"In the Console Supervisor, a custom trigger fired on '" + StringMacros::vectorToString(triggeredAction.needleSubstrings,{'*'}) + "'");
+		"In the Console Supervisor, a custom count fired on '" + StringMacros::vectorToString(triggeredAction.needleSubstrings,{'*'}) + "'");
 
 }  // end doTriggeredAction()
 
 //==============================================================================
-void ConsoleSupervisor::addCustomTriggeredAction(const std::string& triggerNeedle, const std::string& triggerAction)
+//Never allow priority 0 to change, forced to be missed packets
+void ConsoleSupervisor::addCustomTriggeredAction(const std::string& triggerNeedle, const std::string& triggerAction,
+	uint32_t priority /* = -1 */)
 {
 	__SUP_COUTV__(triggerNeedle);
+
+	bool allAsterisks = true;
+	for(const auto& c : triggerNeedle)
+		if(c != '*') {allAsterisks = false; break;}
+	if(allAsterisks)
+	{
+		__SUP_SS__ << "Illegal empty Search String value for the new Custom Count and Action! Please enter a valid Search String (* wildcards are allowed, e.g. \"value = * seconds\")." << __E__;
+		__SUP_SS_THROW__;
+	}
+
+	//check if triggerNeedle already exists
+	uint32_t currentPriority = -1;
+	for(const auto& customTrigger : priorityCustomTriggerList_)
+	{
+		++currentPriority; //inc first to get to 0, -1 indicates not found
+		if(StringMacros::vectorToString(
+			customTrigger.needleSubstrings,{'*'}) == triggerNeedle)
+		{
+			__SUP_SS__ << "Failure! Can not add Custom Count Search String that already exists. Found '" 
+					<< triggerNeedle << "' already existing at priority = " << currentPriority << __E__;
+			__SUP_SS_THROW__;
+		}
+	} //end check if already exists	
+	
 	__SUP_COUTV__(triggerAction);
+	__SUP_COUTV__(priority);
+	if(priority >= priorityCustomTriggerList_.size())
+			priority = priorityCustomTriggerList_.size(); //place at end
+	if(priority == 0 && triggerNeedle != CONSOLE_MISSED_NEEDLE)
+	{
+		__SUP_SS__ << "Illegal priority position of '" << priority << "' requested. Please enter a priority value greater than 0. Position 0 is reserved for identifying missing messages at the Console Supervisor. Note: the action for missing messages, at priority 0, may be customized by the user." << __E__;
+		__SUP_SS_THROW__;
+	}
 
 	//valid actions:
 	//		Halt
@@ -459,18 +504,197 @@ void ConsoleSupervisor::addCustomTriggeredAction(const std::string& triggerNeedl
 		__SUP_SS_THROW__;
 	}
 	
-	//break up on substring
-	priorityCustomTriggerList_.push_back(CustomTriggeredAction_t());
-	StringMacros::getVectorFromString(triggerNeedle, 
-		priorityCustomTriggerList_.back().needleSubstrings,
-		{'*'} /* delimiter */);
-	priorityCustomTriggerList_.back().action = triggerAction;
+	//insert new custom count at priority position
+	priorityCustomTriggerList_.insert(priorityCustomTriggerList_.begin() + priority,
+		CustomTriggeredAction_t());
+	// priorityCustomTriggerList_.push_back(CustomTriggeredAction_t());
+	// priorityCustomTriggerList_.back()
 
-	__SUP_COUT__ << "Added custom trigger: " << 
+	//break up on substring
+	StringMacros::getVectorFromString(triggerNeedle, 
+		priorityCustomTriggerList_[priority].needleSubstrings,
+		{'*'} /* delimiter */, {} /* do not ignore whitespace */);
+	priorityCustomTriggerList_[priority].action = triggerAction;
+
+	__SUP_COUT__ << "Added custom count: " << 
 		(StringMacros::vectorToString(
-			priorityCustomTriggerList_.back().needleSubstrings)) << __E__;
+			priorityCustomTriggerList_[priority].needleSubstrings)) <<
+			" at priority: " << priority << __E__;
 
 }  // end addCustomTriggeredAction()
+
+//==============================================================================
+//Never allow priority 0 to change, forced to be missed packets
+// modifyType := {"Deletion", "Priority", "Action","Search String", "All"}
+// Returns the modified priority position, or -1 on deletion
+uint32_t ConsoleSupervisor::modifyCustomTriggeredAction(const std::string& currentNeedle, const std::string& modifyType, const std::string& setNeedle, const std::string& setAction, 
+	uint32_t setPriority)
+{
+	__SUP_COUTV__(currentNeedle);
+	__SUP_COUTV__(modifyType);
+	__SUP_COUTV__(setNeedle);
+	__SUP_COUTV__(setAction);
+	__SUP_COUTV__(setPriority);
+
+
+	//find current priority position of currentNeedle
+	uint32_t currentPriority = -1;
+	for(const auto& customTrigger : priorityCustomTriggerList_)
+	{
+		++currentPriority; //inc first to get to 0, -1 indicates not found
+		if(StringMacros::vectorToString(
+			customTrigger.needleSubstrings,{'*'}) == currentNeedle)
+			break; //found
+	}
+
+	__SUP_COUTV__(currentPriority);
+	if(currentPriority >= priorityCustomTriggerList_.size())
+	{
+		__SUP_SS__ << "Attempt to modify Custom Count Search String failed. Could not find specified Search String '" << currentNeedle << "' in prioritized list." << __E__;
+		__SUP_SS_THROW__;
+	}
+
+	if(modifyType == "Deletion")
+	{
+		if(currentPriority == 0)
+		{
+			__SUP_SS__ << "Illegal deletion requested of priority position 0. Position 0 is reserved for identifying missing messages at the Console Supervisor. Note: the action of priority 0 may be customized by the user, but it can not be deleted." << __E__;
+			__SUP_SS_THROW__;
+		}
+
+		__SUP_COUT__ << "Deleting custom count: " << 
+			StringMacros::vectorToString(
+				priorityCustomTriggerList_[currentPriority].needleSubstrings,{'*'}) <<
+				" w/action: " << priorityCustomTriggerList_[currentPriority].action <<
+				" and priority: " << currentPriority << __E__;
+		priorityCustomTriggerList_.erase(priorityCustomTriggerList_.begin() + currentPriority);
+		return -1;
+	}
+
+	if(modifyType == "Priority" || modifyType == "All")
+	{
+		if(setPriority >= priorityCustomTriggerList_.size())
+			setPriority = priorityCustomTriggerList_.size(); //place at end
+		if(setPriority == 0 && setNeedle != CONSOLE_MISSED_NEEDLE)
+		{
+			__SUP_SS__ << "Illegal priority position of '" << setPriority << "' requested. Position 0 is reserved for identifying missing messages at the Console Supervisor. Note: the action of priority 0 may be customized by the user." << __E__;
+			__SUP_SS_THROW__;
+		}
+	}
+	else //keep existing
+		setPriority = currentPriority;
+
+
+	if(modifyType == "Action" || modifyType == "All")
+	{
+		//valid actions:
+		//		Halt
+		//	 	Stop
+		//		Pause
+		//		Soft Error
+		//		Hard Error
+		//		System Message
+
+		if(CUSTOM_TRIGGER_ACTIONS.find(setAction) == CUSTOM_TRIGGER_ACTIONS.end())
+		{
+			__SUP_SS__ << "Unrecognized custom count action '" << setAction << ",' valid actions are " <<
+				StringMacros::setToString(CUSTOM_TRIGGER_ACTIONS) << __E__;
+			__SUP_SS_THROW__;
+		}
+		//modify existing action
+		priorityCustomTriggerList_[currentPriority].action = setAction;
+	}
+
+	if(modifyType == "Search String" || modifyType == "All")
+	{
+		//modify existing needle
+		StringMacros::getVectorFromString(setNeedle, 
+			priorityCustomTriggerList_[currentPriority].needleSubstrings,
+			{'*'} /* delimiter */, {} /* do not ignore whitespace */);
+	}
+
+	if(currentPriority != setPriority) //then need to copy
+	{
+		//insert new custom count at priority position
+		priorityCustomTriggerList_.insert(priorityCustomTriggerList_.begin() + setPriority,
+			priorityCustomTriggerList_[currentPriority]);
+
+		//delete from old position
+		if(currentPriority >= setPriority) //then increment after insert
+			++currentPriority;
+
+		priorityCustomTriggerList_.erase(priorityCustomTriggerList_.begin() + currentPriority);
+
+		if(currentPriority < setPriority) //then decrement after delete
+			--setPriority;
+	}
+
+	__SUP_COUT__ << "Modified '" << modifyType << "' custom count: " << 
+		StringMacros::vectorToString(
+			priorityCustomTriggerList_[setPriority].needleSubstrings,{'*'}) <<
+			" now w/action: " << priorityCustomTriggerList_[setPriority].action <<
+			" and at priority: " << setPriority << __E__;
+
+	return setPriority;
+}  // end modifyCustomTriggeredAction()
+
+//==============================================================================
+void ConsoleSupervisor::loadCustomCountList()
+{
+	__SUP_COUT__ << "loadCustomCountList() from " << USER_CONSOLE_PREF_PATH + CUSTOM_COUNT_LIST_FILENAME << __E__;
+
+	FILE *fp = fopen((USER_CONSOLE_PREF_PATH + CUSTOM_COUNT_LIST_FILENAME).c_str(),"r");
+	if(!fp)
+	{
+		__SUP_COUT__ << "Ignoring missing Custom Count list file at path: " << (USER_CONSOLE_PREF_PATH + CUSTOM_COUNT_LIST_FILENAME) << __E__;
+		return;
+	}
+	priorityCustomTriggerList_.clear();
+
+
+	char line[1000]; //do not allow larger than 1000 chars!
+	uint32_t i = 0;
+	std::string needle;
+	while(fgets(line,1000,fp))
+	{
+		//ignore new line
+		if(strlen(line)) line[strlen(line)-1] = '\0';
+
+		if(i%2 == 0) //needle
+			needle = line;
+		else //action (so have all info)
+		{
+			__SUP_COUTV__(needle);
+			__SUP_COUTV__(line);
+			if(i == 1 && needle != CONSOLE_MISSED_NEEDLE) //then force missed Console message as priority 0
+				addCustomTriggeredAction(CONSOLE_MISSED_NEEDLE,	"System Message");	
+			addCustomTriggeredAction(needle,line);
+		}
+		
+		++i;
+	}
+	fclose(fp);
+	
+}  // end loadCustomCountList()
+
+//==============================================================================
+void ConsoleSupervisor::saveCustomCountList()
+{
+	__SUP_COUT__ << "saveCustomCountList()" << __E__;
+
+	FILE *fp = fopen((USER_CONSOLE_PREF_PATH + CUSTOM_COUNT_LIST_FILENAME).c_str(),"w");
+	if(!fp)
+	{
+		__SUP_SS__ << "Failed to create Custom Count list file at path: " << (USER_CONSOLE_PREF_PATH + CUSTOM_COUNT_LIST_FILENAME) << __E__;
+		__SUP_SS_THROW__;
+	}
+	for(auto& customCount : priorityCustomTriggerList_)
+	{
+		fprintf(fp,(StringMacros::vectorToString(customCount.needleSubstrings,{'*'}) + "\n").c_str());
+		fprintf(fp,(customCount.action + "\n").c_str());
+	}
+	fclose(fp);
+}  // end saveCustomCountList()
 
 //==============================================================================
 void ConsoleSupervisor::defaultPage(xgi::Input* /*in*/, xgi::Output* out)
@@ -507,6 +731,7 @@ void ConsoleSupervisor::request(const std::string&               requestType,
 
 	// Commands:
 	// GetConsoleMsgs
+	// PrependHistoricMessages
 	// SaveUserPreferences
 	// LoadUserPreferences
 	// GetTraceLevels
@@ -516,6 +741,9 @@ void ConsoleSupervisor::request(const std::string&               requestType,
 	// ResetTRACE
 	// EnableTRACE
 	// GetTraceSnapshot
+	// GetCustomCountsAndActions
+	// AddCustomCountsAndAction
+	// ModifyCustomCountsAndAction
 
 	// Note: to report to logbook admin status use
 	// xmlOut.addTextElementToData(XML_ADMIN_STATUS,refreshTempStr_);
@@ -704,16 +932,21 @@ void ConsoleSupervisor::request(const std::string&               requestType,
 			}
 
 			std::vector<std::string> traceHostnameArr;
+			__COUTTV__(rxParameters.getValue("TRACEHostnameList"));
 			StringMacros::getVectorFromString(
 			    rxParameters.getValue("TRACEHostnameList"), traceHostnameArr, {';'});
 			for(const auto& traceHostname : traceHostnameArr)
+			{
+				if(traceHostname == "") continue; //skip blanks
 				traceMapToXDAQHostname_[traceHostname] = appInfo.first;
+			}
 
 			// traceList 		  += ";" + appInfo.first; //insert xdaq context version of
 			// name
 			//						//FIXME and create mapp from user's typed in xdaq
 			// context name to TRACE hostname resolution
 
+			__COUTTV__(rxParameters.getValue("TRACEList"));
 			traceList += rxParameters.getValue("TRACEList");
 
 		}  // end app get TRACE loop
@@ -1335,6 +1568,90 @@ void ConsoleSupervisor::request(const std::string&               requestType,
 		             << modifiedTriggerStatus << __E__;
 		xmlOut.addTextElementToData("modTriggerStatus", modifiedTriggerStatus);
 	}  // end getTraceSnapshot
+	else if(requestType == "GetCustomCountsAndActions" || requestType == "AddCustomCountsAndAction"
+		|| requestType == "ModifyCustomCountsAndAction")
+	{
+		__SUP_COUT__ << "requestType " << requestType << " size=" << priorityCustomTriggerList_.size() << __E__;
+		
+		//mutex scope:
+		// lockout the messages array for the remainder of the scope
+		// this guarantees can safely access the action queue
+		std::lock_guard<std::mutex> lock(messageMutex_);
+
+		if(requestType == "AddCustomCountsAndAction" || requestType == "ModifyCustomCountsAndAction")
+		{
+			std::string needle  = StringMacros::decodeURIComponent(CgiDataUtilities::postData(cgiIn, "needle"));
+			uint32_t priority = CgiDataUtilities::postDataAsInt(cgiIn, "priority");
+			std::string action = StringMacros::decodeURIComponent(CgiDataUtilities::postData(cgiIn, "action"));
+
+			__SUP_COUTV__(needle);
+			__SUP_COUTV__(priority);
+			__SUP_COUTV__(action);
+			
+			if(requestType == "ModifyCustomCountsAndAction")
+			{
+				std::string buttonDo  = StringMacros::decodeURIComponent(CgiDataUtilities::postData(cgiIn, "buttonDo"));
+				std::string currentNeedle  = CgiDataUtilities::postData(cgiIn, "currentNeedle");
+
+				//treat needle as CSV list and do in reverse order to maintain priority of group
+				std::vector<std::string> csvNeedles = StringMacros::getVectorFromString(currentNeedle,{','});
+				for(size_t i = csvNeedles.size()-1; i < csvNeedles.size(); --i)
+				{
+					if(csvNeedles[i].size() == 0) continue; //skip empty entries
+					//change the priority to the last placed priority entry to keep group order
+					priority = modifyCustomTriggeredAction(
+						StringMacros::decodeURIComponent(
+							csvNeedles[i]),
+							buttonDo,needle,action,priority);
+				} //end csv needle list handling
+			}
+			else
+				addCustomTriggeredAction(needle,action,priority);
+
+			saveCustomCountList();
+		}  // end AddCustomCountsAndAction
+
+
+		//always calculate untriggered count
+		size_t untriggeredCount = messageCount_;  //copy and then decrement "unique" incrementing ID for messages
+
+		for(const auto& customCount: priorityCustomTriggerList_)
+		{
+			xercesc::DOMElement* customCountParent = xmlOut.addTextElementToData("customCount", "");
+
+			if(customCount.occurrences < untriggeredCount)
+				untriggeredCount -= customCount.occurrences;
+			else
+			{
+				__SUP_SS__ << "Impossible custom count; notify admins! " <<
+					customCount.occurrences << " > " << untriggeredCount << " for " <<
+					StringMacros::vectorToString(customCount.needleSubstrings,{'*'}) << __E__;
+				__SUP_SS_THROW__;
+			}
+			xmlOut.addTextElementToParent("needle",
+										StringMacros::vectorToString(customCount.needleSubstrings,{'*'}),
+										customCountParent);
+			xmlOut.addTextElementToParent("count",
+										std::to_string(customCount.occurrences),
+										customCountParent);
+			xmlOut.addTextElementToParent("action",
+										customCount.action,
+										customCountParent);
+		} //end adding custom counts to response xml loop
+
+		//add untriggered always last
+		xercesc::DOMElement* customCountParent = xmlOut.addTextElementToData("customCount", "");	
+		xmlOut.addTextElementToParent("needle",
+									"< Untriggered >",
+									customCountParent);
+		xmlOut.addTextElementToParent("count",
+									std::to_string(untriggeredCount),
+									customCountParent);
+		xmlOut.addTextElementToParent("action",
+									"Count Only",
+									customCountParent);
+
+	}  // end GetCustomCountsAndActions or AddCustomCountsAndAction
 	else
 	{
 		__SUP_SS__ << "requestType Request, " << requestType << ", not recognized."
@@ -1388,7 +1705,7 @@ void ConsoleSupervisor::insertMessageRefresh(HttpXmlDocument* xmlOut,
 
 	xmlOut->addTextElementToData("last_update_count",
 	                             std::to_string(messages_.back().getCount()));
-
+	
 	refreshParent_ = xmlOut->addTextElementToData("messages", "");
 
 	bool        requestOutOfSync = false;
@@ -1424,6 +1741,10 @@ void ConsoleSupervisor::insertMessageRefresh(HttpXmlDocument* xmlOut,
 		// std::advance(it, refreshReadPointer + 1);
 		// messages_.insert(it, msg);
 	}
+	
+	//return first_update_count, so that older messages could be retrieved later if desired by user
+	xmlOut->addTextElementToData("earliest_update_count",
+	                             std::to_string( messages_[refreshReadPointer].getCount()));
 
 	// output oldest to new
 	for(; refreshReadPointer < messages_.size(); ++refreshReadPointer)
@@ -1442,38 +1763,13 @@ void ConsoleSupervisor::insertMessageRefresh(HttpXmlDocument* xmlOut,
 			// continue;
 		}
 
-		// for all fields, give value
-		for(auto& field : msg.fields)
-		{
-			if(field.second.fieldName == "Source")
-				continue;  // skip, not userful
-			if(field.second.fieldName == "SourceID")
-				continue;  // skip, not userful
-			if(field.second.fieldName == "Timestamp") //use Time instead
-				continue;  // skip, not userful
+		addMessageToResponse(xmlOut, msg);
 
-			xmlOut->addTextElementToParent("message_" + field.second.fieldName,
-			                               field.second.fieldValue,
-			                               refreshParent_);
-		}
-
-
-		// give timestamp also
-		xmlOut->addTextElementToParent("message_Time", msg.getTime(), refreshParent_);
-		// // give clock also
-		// xmlOut->addTextElementToParent(
-		//     "message_Count", std::to_string(msg.getCount()), refreshParent_);
-
-		//give Custom trigger label also (i.e., which trigger this message matches, or blank "")
-		xmlOut->addTextElementToParent("message_Custom", 
-			StringMacros::vectorToString(msg.getCustomTriggerMatch().needleSubstrings,{'*'}),
-			refreshParent_);
-	}
+	} //end main message add loop
 
 	if(requestOutOfSync)  // if request was out of sync, show message
 		__SUP_COUT__ << requestOutOfSyncMsg;
 }  // end insertMessageRefresh()
-
 
 //==============================================================================
 // ConsoleSupervisor::prependHistoricMessages()
@@ -1507,8 +1803,9 @@ void ConsoleSupervisor::prependHistoricMessages(HttpXmlDocument* xmlOut,
 	// validate earliestOnhandMessageCount
 	if(earliestOnhandMessageCount >= messages_.back().getCount())
 	{
-		__SS__ << "Invalid earliestOnhandMessageCount: " << earliestOnhandMessageCount
-		       << " messagesArray size = " << messages_.back().getCount() << __E__;
+		__SS__ << "Invalid claim from user request of earliest onhand message sequence ID = " << earliestOnhandMessageCount
+		       << ". Latest existing sequence ID = " << messages_.back().getCount() 
+			   << ". Was the Console Supervisor restarted?" <<  __E__;
 		__SS_THROW__;
 	}
 
@@ -1535,7 +1832,7 @@ void ConsoleSupervisor::prependHistoricMessages(HttpXmlDocument* xmlOut,
 	if(refreshReadPointer >= messages_.size())
 		return;
 
-	xmlOut->addTextElementToData("earliest_onhand_count", //return new early onhand count
+	xmlOut->addTextElementToData("earliest_update_count", //return new early onhand count
 	                             std::to_string(readCountStart));
 
 	//messages returned will be from readCountStart to earliestOnhandMessageCount-1
@@ -1546,32 +1843,41 @@ void ConsoleSupervisor::prependHistoricMessages(HttpXmlDocument* xmlOut,
 		if(messages_[refreshReadPointer].getCount() >= earliestOnhandMessageCount)
 			break; //found last message
 		
-		// for all fields, give value
-		for(auto& field : msg.fields)
-		{
-			if(field.second.fieldName == "Source")
-				continue;  // skip, not userful
-			if(field.second.fieldName == "SourceID")
-				continue;  // skip, not userful
-			if(field.second.fieldName == "Timestamp") //use Time instead
-				continue;  // skip, not userful
+		addMessageToResponse(xmlOut, msg);
+		
+	} //end main message add loop
 
-			xmlOut->addTextElementToParent("message_" + field.second.fieldName,
-			                               field.second.fieldValue,
-			                               refreshParent_);
-		}
+}  // end prependHistoricMessages()
 
+//==============================================================================
+void ConsoleSupervisor::addMessageToResponse(HttpXmlDocument* xmlOut, ConsoleSupervisor::ConsoleMessageStruct& msg)
+{
+	// for all fields, give value
+	for(auto& field : msg.fields)
+	{
+		if(field.second.fieldName == "Source")
+			continue;  // skip, not userful
+		if(field.second.fieldName == "SourceID")
+			continue;  // skip, not userful
+		if(field.second.fieldName == "SequenceID")
+			continue;  // skip, not userful
+		if(field.second.fieldName == "Timestamp") //use Time instead
+			continue;  // skip, not userful
 
-		// give timestamp also
-		xmlOut->addTextElementToParent("message_Time", msg.getTime(), refreshParent_);
-		// // give clock also
-		// xmlOut->addTextElementToParent(
-		//     "message_Count", std::to_string(msg.getCount()), refreshParent_);
+		xmlOut->addTextElementToParent("message_" + field.second.fieldName,
+										field.second.fieldValue,
+										refreshParent_);
+	} //end msg field loop
 
-		//give Custom trigger label also (i.e., which trigger this message matches, or blank "")
-		xmlOut->addTextElementToParent("message_Custom", 
-			StringMacros::vectorToString(msg.getCustomTriggerMatch().needleSubstrings,{'*'}),
-			refreshParent_);
-	}
+	// give timestamp also
+	xmlOut->addTextElementToParent("message_Time", msg.getTime(), refreshParent_);
+	// give global count index also
+	xmlOut->addTextElementToParent(
+		"message_Count", std::to_string(msg.getCount()), refreshParent_);
 
-}  // end insertMessageRefresh()
+	//give Custom count label also (i.e., which search string this message matches, or blank "" for no match)
+	xmlOut->addTextElementToParent("message_Custom", 
+		StringMacros::vectorToString(msg.getCustomTriggerMatch().needleSubstrings,{'*'}),
+		refreshParent_);
+
+}  // end addMessageToResponse()

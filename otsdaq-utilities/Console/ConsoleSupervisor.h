@@ -26,7 +26,8 @@ class ConsoleSupervisor : public CoreSupervisorBase
 	{
 		std::vector<std::string> 	needleSubstrings; /* custom trigger needle substrings */
 		std::string 				action; /* action */
-		uint32_t					triggeredMessageID = -1; /* message that fired the trigger */
+		size_t						triggeredMessageCountIndex = -1; /* message arrival count that fired the trigger */
+		size_t						occurrences = 0; 
 	}; //end CustomTriggeredAction_t struct
 
 
@@ -57,8 +58,12 @@ class ConsoleSupervisor : public CoreSupervisorBase
 	static void 		customTriggerActionThread			(ConsoleSupervisor* cs);
 	void 				insertMessageRefresh				(HttpXmlDocument* xmldoc, const size_t lastUpdateCount);
 	void 				prependHistoricMessages				(HttpXmlDocument* xmlOut, const size_t earliestOnhandMessageCount);
+	
+	void 				addCustomTriggeredAction			(const std::string& triggerNeedle, const std::string& triggerAction, uint32_t priority = -1);
+	uint32_t			modifyCustomTriggeredAction			(const std::string& currentNeedle, const std::string& modifyType, const std::string& setNeedle, const std::string& setAction, uint32_t setPriority);
 
-	void 				addCustomTriggeredAction			(const std::string& triggerNeedle, const std::string& triggerAction);
+	void				loadCustomCountList					(void);
+	void				saveCustomCountList					(void);
 
 	// UDP Message Format:
 	// UDPMFMESSAGE|TIMESTAMP|SEQNUM|HOSTNAME|HOSTADDR|SEVERITY|CATEGORY|APPLICATION|PID|ITERATION|MODULE|(FILE|LINE)|MESSAGE
@@ -66,7 +71,7 @@ class ConsoleSupervisor : public CoreSupervisorBase
 	struct ConsoleMessageStruct
 	{
 		ConsoleMessageStruct(const std::string& msg, const size_t count,
-			const std::vector<CustomTriggeredAction_t>& priorityCustomTriggerList)
+			std::vector<CustomTriggeredAction_t>& priorityCustomTriggerList)
 		    : countStamp(count)
 		{
 			std::string hostname, category, application, message, hostaddr, file, line,
@@ -197,7 +202,7 @@ class ConsoleSupervisor : public CoreSupervisorBase
 
 			//check custom triggers
 			//Note: to avoid recursive triggers, Label=Console can not trigger			
-			for(const auto& triggeredAction : priorityCustomTriggerList)
+			for(auto& triggeredAction : priorityCustomTriggerList)
 			{
 				if(getLabel() == "Console") break; //Note: to avoid recursive triggers, Label=Console can not trigger			
 
@@ -218,8 +223,9 @@ class ConsoleSupervisor : public CoreSupervisorBase
 				{
 					// std::cout << "Full match of custom trigger! Message: " << 
 					// 	getSourceIDAsNumber() << ":" << getMsg().substr(0,100) << __E__;
+					triggeredAction.occurrences++; //increment occurrences
 					customTriggerMatch = triggeredAction;
-					customTriggerMatch.triggeredMessageID = getSourceIDAsNumber();
+					customTriggerMatch.triggeredMessageCountIndex = getCount();
 					break;
 				}
 			} //end custom trigger search
@@ -230,6 +236,7 @@ class ConsoleSupervisor : public CoreSupervisorBase
 		const CustomTriggeredAction_t& getCustomTriggerMatch() const { return customTriggerMatch; }
 		bool 		hasCustomTriggerMatchAction() const { return customTriggerMatch.action.size(); }
 		const std::string& getTime() const { return fields[FieldType::TIMESTAMP].fieldValue; }
+		void 			   setTime(time_t t) { fields[FieldType::TIMESTAMP].fieldValue = std::to_string(t); }
 		const std::string& getMsg() const { return fields[FieldType::MSG].fieldValue; }
 		const std::string& getLabel() const { return fields[FieldType::LABEL].fieldValue; }
 		const std::string& getLevel() const { return fields[FieldType::LEVEL].fieldValue; }
@@ -259,7 +266,8 @@ class ConsoleSupervisor : public CoreSupervisorBase
 			return 0;
 		}
 
-		size_t getCount() const { return countStamp; }
+		//count is incrementing number across all sources created at ConsoleSupervisor
+		size_t getCount() const { return countStamp; } 
 
 		// define field structure
 		struct FieldStruct
@@ -280,7 +288,8 @@ class ConsoleSupervisor : public CoreSupervisorBase
 		enum class FieldType
 		{  // must be in order of appearance in buffer
 			TIMESTAMP,
-			SEQID,
+			//count is incrementing number across all sources created at ConsoleSupervisor
+			SEQID,  // sequence ID is incrementing number independent from each source
 			LEVEL,  // aka SEVERITY
 			LABEL,
 			SOURCEID,
@@ -293,10 +302,12 @@ class ConsoleSupervisor : public CoreSupervisorBase
 		mutable std::unordered_map<FieldType, FieldStruct> fields;
 
 	  private:
-		size_t countStamp;
+		size_t countStamp; //count is incrementing number across all sources created at ConsoleSupervisor
 		CustomTriggeredAction_t customTriggerMatch;
 	}; //end ConsoleMessageStruct
 
+	void 				addMessageToResponse				(HttpXmlDocument* xmlOut, ConsoleSupervisor::ConsoleMessageStruct& msg);
+	
 	std::deque<ConsoleMessageStruct> messages_;
 	std::mutex                       messageMutex_;
 	size_t messageCount_;  //"unique" incrementing ID for messages

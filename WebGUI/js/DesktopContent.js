@@ -1106,6 +1106,27 @@ DesktopContent.hideLoading = function()
 //	Use ignoreSystemBlock if request is expected to meet a down server (like restarting xdaq)
 //	Use doNotOfferSequenceChange for requests that might fail based on permissions (like code editor switch to read only).
 //
+//  Here is an example for handling the error in handler if callHandlerOnErr is set true:
+//			function (req, reqParam, errStr) {
+//						
+//				var str = "";
+//			
+//				if(!errStr) 
+//					errStr = "";
+//				var err = DesktopContent.getXMLValue(req,"Error");
+//				if(err && err != "")
+//					errStr += "\n" + err;				
+//				if(errStr != "")
+//				{
+//					str += "Received error... " + getDateString(new Date);
+//					str += "<br>";
+//					Debug.log("Error while running FE Macro: " + errStr,
+//							Debug.HIGH_PRIORITY);
+//					el.innerHTML = str;
+//					return;
+//				}
+//				...
+//			}
 DesktopContent.XMLHttpRequest = function(requestURL, data, returnHandler, 
 		reqParam, progressHandler, callHandlerOnErr, doNotShowLoadingOverlay,
 		targetGatewaySupervisor, ignoreSystemBlock, doNotOfferSequenceChange) 
@@ -2296,7 +2317,17 @@ DesktopContent.getDefaultWindowColor = function() {
 
 //=====================================================================================
 //get color scheme ~~
-DesktopContent.getDefaultDashboardColor = function() { return DesktopContent.parseColor(DesktopContent._dashboardColorPostbox); }//DesktopContent.parseColor(DesktopContent._dashboardColorPostbox.innerHTML); }
+DesktopContent.getDefaultDashboardColor = function() { 
+	if(!DesktopContent._dashboardColorPostbox)
+	{
+		//likely in wizard mode
+		Debug.log("Color post boxes not setup! So giving default.",Debug.MED_PRIORITY);
+		return "rgb(0,40,85)";
+	}
+	Debug.log("Returning dashboard color");
+	return DesktopContent.parseColor(DesktopContent._dashboardColorPostbox); 
+	//DesktopContent.parseColor(DesktopContent._dashboardColorPostbox.innerHTML); }
+} //end getDefaultDashboardColor()
 DesktopContent.getDefaultDesktopColor = function() { 
 	if(!DesktopContent._desktopColor)
 	{
@@ -2306,6 +2337,27 @@ DesktopContent.getDefaultDesktopColor = function() {
 	}
 	Debug.log("Returning desktop color");
 	return DesktopContent._desktopColor;
+} //end getDefaultDesktopColor()
+DesktopContent.getInvertedColor = function(hexOrRGB) { 
+	var rgb = [];
+	if(hexOrRGB.indexOf("#") == 0)
+	{
+		rgb = [
+			parseInt(hex.substring(1, 3), 16),
+			parseInt(hex.substring(3, 5), 16),
+			parseInt(hex.substring(5, 7), 16),
+		];
+	}
+	else if(hexOrRGB.indexOf("rgb(") == 0)
+	{
+		rgb = hexOrRGB.split("(")[1].split(")")[0].split(",");
+	}
+	else
+		throw("Illegal hexOrRGB value to DesktopContent.getInvertedColor");
+
+	return "rgb(" + ((255-parseInt(rgb[0]))%256) +
+		"," + ((255-parseInt(rgb[1]))%256) +
+		"," + ((255-parseInt(rgb[2]))%256) + ")";
 } //end getDefaultDesktopColor()
 
 //=====================================================================================
