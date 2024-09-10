@@ -5,6 +5,13 @@
 # function to display otsdaq versions and qualifiers
 function displayVersionsAndQualifiers 
 {	
+	#this is TODO for the new Spack world:
+	OTS_ENV=`ls -l -rta | grep tdaq-v | rev | cut -d '/' -f1 | rev | head -1`
+	echo -e "displayVersionsAndQualifiers.sh:${LINENO} |  \t OTS_ENV=$OTS_ENV"
+	return
+
+	# this is for the old MRB world
+
 	echo
 	echo
 	echo -e "displayVersionsAndQualifiers.sh:${LINENO}  \t Note: Here are your localProducts directories..."
