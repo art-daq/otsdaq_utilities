@@ -444,8 +444,24 @@ void ConsoleSupervisor::doTriggeredAction(const CustomTriggeredAction_t& trigger
 		__SUP_SS_THROW__;
 	}
 
-	theRemoteWebUsers_.sendSystemMessage("*" /* to all users*/,
-		"In the Console Supervisor, a custom count fired on '" + StringMacros::vectorToString(triggeredAction.needleSubstrings,{'*'}) + "'");
+	//all FSM commands include a system message
+	if(triggeredAction.action != "Count Only")
+		theRemoteWebUsers_.sendSystemMessage("*" /* to all users*/,
+			"In the Console Supervisor, a custom count fired the action '" +
+			triggeredAction.action + "' on the search string '" + StringMacros::vectorToString(triggeredAction.needleSubstrings,{'*'}) + "'");
+	
+	if(triggeredAction.action == "Halt")
+	{
+		//TODO
+	}
+	else if(triggeredAction.action == "Stop")
+	{
+		//TODO
+	}
+	else if(triggeredAction.action == "Pause")
+	{
+		//TODO
+	}
 
 }  // end doTriggeredAction()
 
