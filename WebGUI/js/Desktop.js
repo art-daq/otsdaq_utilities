@@ -591,19 +591,27 @@ Desktop.createDesktop = function(security) {
 		    _lastSystemMessage = msgArr[i] + "|" + msgArr[i+1];
 	    }
 	    
+		str += "<div style='float:left; font-size:12px; margin-top:6px;'>Repeats are suppressed for 30 seconds.</div>";
+
 	    //dismiss link
 	    str += "<div style='float:right; margin-left:30px'>";
 	    str += "<a href='Javascript:Desktop.closeSystemMessage(" + _sysMsgId + ");' " +
 	    		"title='Click here to dismiss system message'>Dismiss</a></div>";
-	    	    
+
+				
+	    //play sound alert (play() is a promise, which can reject, after processing)
+		_sysMsgSound.src = _SYS_MSG_SOUND_PATH; // buffers automatically when created		
+		_sysMsgSound.play().catch(e => {
+			Debug.log("System Message Sound Play() error",e);
+			str += "<br><br><div style='font-size:12px'>(Could not play alert sound because the uesr must interact with the page first)</div>";
+			sysMsgEl.innerHTML = str;
+		});
+
 	    sysMsgEl.innerHTML = str;
 	    
 	    if(sysMsgEl.clientHeight > 300)
 	    	sysMsgEl.style.height = 300 + "px";
 
-	    //play sound alert
-	    _sysMsgSound.src = _SYS_MSG_SOUND_PATH; // buffers automatically when created
-	    _sysMsgSound.play();
 	} //end _handleSystemMessages()
 	
 	//------------------------------------------------------------------
