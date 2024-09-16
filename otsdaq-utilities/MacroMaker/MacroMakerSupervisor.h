@@ -39,6 +39,8 @@ class MacroMakerSupervisor : public CoreSupervisorBase
 	void requestWrapper(xgi::Input* in, xgi::Output* out);
 	// end MacroMaker only functions
 
+	static void 				RemoteControlWorkLoop			(MacroMakerSupervisor* supervisorPtr);
+
 	void handleRequest(const std::string                Command,
 	                   HttpXmlDocument&                 xmldoc,
 	                   cgicc::Cgicc&                    cgi,
@@ -107,7 +109,11 @@ class MacroMakerSupervisor : public CoreSupervisorBase
 	                   const std::string& username);
 	void runFEMacro(HttpXmlDocument&                 xmldoc,
 	                cgicc::Cgicc&                    cgi,
-	                const WebUsers::RequestUserInfo& username);
+	                const WebUsers::RequestUserInfo& userInfo);
+	void runFEMacro(HttpXmlDocument&                 xmldoc,
+					std::string feClassSelected, std::string feUIDSelected, const std::string& macroType,
+					const std::string& macroName, const std::string& inputArgs, const std::string outputArgs, 
+					bool        saveOutputs, const std::string& username, const std::string& userGroupPermissions);
 
 	std::string generateHexArray(const std::string& sourceHexString, int& numOfBytes);
 	bool        isArgumentVariable(const std::string& argumentString);

@@ -4,6 +4,8 @@
 #include "otsdaq/ConfigurationInterface/ConfigurationManager.h"
 #include "otsdaq/FECore/FEVInterface.h"
 
+#include "otsdaq/NetworkUtilities/TransceiverSocket.h"  // for UDP remote control
+
 #include <dirent.h>    //for DIR
 #include <stdio.h>     //for file rename
 #include <sys/stat.h>  //for mkdir
@@ -115,6 +117,30 @@ MacroMakerSupervisor::MacroMakerSupervisor(xdaq::ApplicationStub* stub)
 		__SUP_COUTV__(StringMacros::mapToString(FEPluginTypetoFEsMap_));
 		__SUP_COUTV__(StringMacros::mapToString(FEtoPluginTypeMap_));
 	}
+
+	//setup UDP interface thread if env variable set for port
+	{
+		bool enableRemoteControl = false;
+		try
+		{
+			__ENV__("OTS_MACROMAKER_UDP_PORT");
+			__ENV__("OTS_MACROMAKER_UDP_IP");
+			enableRemoteControl = true;
+		}
+		catch(...)
+		{
+			;
+		}  // ignore errors
+
+		if(enableRemoteControl)
+		{
+			__SUP_COUT__ << "Enabling remote control over UDP..." << __E__;
+			// start state changer UDP listener thread
+			std::thread([](MacroMakerSupervisor* s) { MacroMakerSupervisor::RemoteControlWorkLoop(s); }, this).detach();
+		}
+		else
+			__SUP_COUT__ << "Remote control over UDP is disabled." << __E__;
+	}  // end setting up thread for UDP drive of state machine
 
 	__SUP_COUT__ << "Constructed." << __E__;
 }  // end constructor
@@ -420,6 +446,123 @@ xoap::MessageReference MacroMakerSupervisor::supervisorSequenceCheck(xoap::Messa
 	return SOAPUtilities::makeSOAPMessageReference("SequenceResponse", retParameters);
 } //end supervisorSequenceCheck()
 
+
+
+//==============================================================================
+// RemoteControlWorkLoop
+//	child thread
+void MacroMakerSupervisor::RemoteControlWorkLoop(MacroMakerSupervisor* theSupervisor)
+{
+	// ConfigurationTree configLinkNode = theSupervisor->CorePropertySupervisorBase::getSupervisorTableNode();
+
+	std::string ipAddressForRemoteControlOverUDP = __ENV__("OTS_MACROMAKER_UDP_IP"); //configLinkNode.getNode("IPAddressForStateChangesOverUDP").getValue<std::string>();
+	int         portForRemoteControlOverUDP      = atoi(__ENV__("OTS_MACROMAKER_UDP_PORT")); //configLinkNode.getNode("PortForStateChangesOverUDP").getValue<int>();
+	bool        acknowledgementEnabled          = true; //configLinkNode.getNode("EnableAckForStateChangesOverUDP").getValue<bool>();
+
+	__COUTV__(ipAddressForRemoteControlOverUDP);
+	__COUTV__(portForRemoteControlOverUDP);
+	__COUTV__(acknowledgementEnabled);
+
+	TransceiverSocket sock(ipAddressForRemoteControlOverUDP,
+	                       portForRemoteControlOverUDP);  // Take Port from Table
+	try
+	{
+		sock.initialize();
+	}
+	catch(...)
+	{
+		// generate special message to indicate failed socket
+		__SS__ << "FATAL Console error. Could not initialize socket at ip '" << ipAddressForRemoteControlOverUDP 
+			   << "' and port " << portForRemoteControlOverUDP
+		       << ". Perhaps it is already in use? Exiting Remote Control "
+		          "SOAPUtilities::receive loop."
+		       << __E__;
+		__SS_THROW__;
+		return;
+	}
+
+	std::string              buffer;
+	__COUT__ << "UDP Remote Control workloop starting..." << __E__;
+	while(1)
+	{
+		// workloop procedure
+		//	if SOAPUtilities::receive a UDP command
+		//		execute command
+		//	else
+		//		sleep
+
+		if(sock.receive(buffer, 0 /*timeoutSeconds*/, 1 /*timeoutUSeconds*/, false /*verbose*/) != -1)
+		{
+			__COUT__ << "UDP Remote Control packet received of size = " << buffer.size() << __E__;
+			__COUTV__(buffer);
+
+			try
+			{
+				if(buffer == "GetFrontendMacroInfo")
+				{
+					HttpXmlDocument xmldoc;
+					theSupervisor->getFEMacroList(xmldoc, "NO-USER");
+
+					std::stringstream out;
+					xmldoc.outputXmlDocument((std::ostringstream*)&out, false /*dispStdOut*/, false /*allowWhiteSpace*/);
+					__COUT__ << "out: " << out.str();
+					sock.acknowledge(out.str(), true /* verbose */);
+				}
+				else if(buffer.find("RunFrontendMacro") == 0)
+				{
+					HttpXmlDocument xmldoc;
+					__COUTV__(buffer);
+					std::vector<std::string> bufferFields = StringMacros::getVectorFromString(buffer,{';'});
+					if(bufferFields.size() < 8)
+					{
+						__SS__ << "Missing input arguments for running FE Macro: " << bufferFields.size() << " vs 8 expected" << __E__; 
+						__SS_THROW__;
+					}
+
+					std::string feClassSelected = bufferFields[1];
+					std::string feUIDSelected = bufferFields[2];  // allow CSV multi-selection
+					std::string macroType =  bufferFields[3]; // "fe", "public", "private"
+					std::string macroName = StringMacros::decodeURIComponent(bufferFields[4]);
+					std::string inputArgs   = StringMacros::decodeURIComponent(bufferFields[5]); //two level ;- and ,- separated
+					std::string outputArgs  =  StringMacros::decodeURIComponent(bufferFields[6]); //,- separated
+					bool        saveOutputs = bufferFields[7] == "1";
+					std::string username = "NO-USER";
+					std::string userGroupPermission = "allUsers: 255";
+
+
+					theSupervisor->runFEMacro(xmldoc, feClassSelected, feUIDSelected, macroType, macroName,
+						inputArgs, outputArgs, saveOutputs, username, userGroupPermission);
+						
+
+					std::stringstream out;
+					xmldoc.outputXmlDocument((std::ostringstream*)&out, false /*dispStdOut*/, false /*allowWhiteSpace*/);
+					__COUT__ << "out: " << out.str();
+					sock.acknowledge(out.str(), true /* verbose */);
+				}
+				else
+				{
+					__SS__ << "Unrecognized UDP command received: " << buffer << __E__;
+					__SS_THROW__;	
+				}
+			}
+			catch(const std::runtime_error& e)
+			{
+				__COUT_ERR__ << "Error during UDP command handling: " << e.what() << __E__;
+				sock.acknowledge(std::string("Error: ") + e.what(), true /* verbose */);
+			}			
+			catch(...)
+			{
+				__COUT_ERR__ << "Unknown error caught during UDP command handling - check the logs." << __E__;
+				sock.acknowledge(std::string("Error: ") + "unknown error caught", true /* verbose */);
+			}			
+
+			__COUT__ << "Done handling command '" << buffer << "'" << __E__;		
+		}
+		else
+			usleep(1000);
+	}
+}  // end RemoteControlWorkLoop()
+
 //==============================================================================
 // requestWrapper ~
 //	wrapper for handling very-specialized MacroMaker mode Supervisor request call
@@ -705,6 +848,7 @@ xoap::MessageReference MacroMakerSupervisor::frontEndCommunicationRequest(
     xoap::MessageReference message)
 try
 {
+	__COUTT__; //mark for debugging
 	__SUP_COUT__ << "FE Request received: " << SOAPUtilities::translate(message) << __E__;
 
 	SOAPParameters typeParameter, rxParameters;  // params for xoap to recv
@@ -2599,8 +2743,6 @@ try
 {
 	__SUP_COUT__ << __E__;
 
-	// unsigned int feSupervisorID = CgiDataUtilities::getDataAsInt(cgi,
-	// "feSupervisorID");
 	std::string feClassSelected = CgiDataUtilities::getData(cgi, "feClassSelected");
 	std::string feUIDSelected =
 	    CgiDataUtilities::getData(cgi, "feUIDSelected");  // allow CSV multi-selection
@@ -2611,7 +2753,43 @@ try
 	std::string outputArgs  = CgiDataUtilities::postData(cgi, "outputArgs");
 	bool        saveOutputs = CgiDataUtilities::getDataAsInt(cgi, "saveOutputs") == 1;
 
-	//__SUP_COUTV__(feSupervisorID);
+	runFEMacro(xmldoc
+		, feClassSelected
+		, feUIDSelected
+		, macroType
+		, macroName
+		, inputArgs
+		, outputArgs
+		, saveOutputs
+		, userInfo.username_
+		, StringMacros::mapToString(userInfo.getGroupPermissionLevels()));
+}
+catch(const std::runtime_error& e)
+{
+	__SUP_SS__ << "Error processing FE communication request: " << e.what() << __E__;
+	__SUP_COUT_ERR__ << ss.str();
+	xmldoc.addTextElementToData("Error", ss.str());
+}
+catch(...)
+{
+	__SUP_SS__ << "Unknown error processing FE communication request." << __E__;
+	try	{ throw; } //one more try to printout extra info
+	catch(const std::exception &e)
+	{
+		ss << "Exception message: " << e.what();
+	}
+	catch(...){}
+	__SUP_COUT_ERR__ << ss.str();
+
+	xmldoc.addTextElementToData("Error", ss.str());
+}  // end runFEMacro() catch
+
+//==============================================================================
+void MacroMakerSupervisor::runFEMacro(HttpXmlDocument&                 xmldoc,
+    std::string feClassSelected, std::string feUIDSelected, const std::string& macroType,
+	const std::string& macroName, const std::string& inputArgs, const std::string outputArgs, 
+	bool        saveOutputs, const std::string& username, const std::string& userGroupPermissions)
+{
 	__SUP_COUTV__(feClassSelected);
 	__SUP_COUTV__(feUIDSelected);
 	__SUP_COUTV__(macroType);
@@ -2619,6 +2797,8 @@ try
 	__SUP_COUTV__(inputArgs);
 	__SUP_COUTV__(outputArgs);
 	__SUP_COUTV__(saveOutputs);
+	__SUP_COUTV__(username);
+	__SUP_COUTV__(userGroupPermissions);
 
 	appendCommandToHistory(feClassSelected, 
 						   feUIDSelected,
@@ -2627,7 +2807,7 @@ try
 						   inputArgs,
 						   outputArgs,
 						   saveOutputs,
-						   userInfo.username_);
+						   username);
 
 	std::set<std::string /*feUID*/> feUIDs;
 
@@ -2675,7 +2855,7 @@ try
 	if(macroType == "public")
 		loadMacro(macroName, macroString);
 	else if(macroType == "private")
-		loadMacro(macroName, macroString, userInfo.username_);
+		loadMacro(macroName, macroString, username);
 
 	__SUP_COUTV__(macroString);
 
@@ -2757,9 +2937,7 @@ try
 			}
 			txParameters.addParameter("inputArgs", inputArgs);
 			txParameters.addParameter("outputArgs", outputArgs);
-			txParameters.addParameter(
-			    "userPermissions",
-			    StringMacros::mapToString(userInfo.getGroupPermissionLevels()));
+			txParameters.addParameter("userPermissions",userGroupPermissions);
 
 			SOAPParameters rxParameters;  // params for xoap to recv
 			// rxParameters.addParameter("success");
@@ -2869,25 +3047,6 @@ try
 		fclose(fp);
 
 }  // end runFEMacro()
-catch(const std::runtime_error& e)
-{
-	__SUP_SS__ << "Error processing FE communication request: " << e.what() << __E__;
-	__SUP_COUT_ERR__ << ss.str();
-	xmldoc.addTextElementToData("Error", ss.str());
-}
-catch(...)
-{
-	__SUP_SS__ << "Unknown error processing FE communication request." << __E__;
-	try	{ throw; } //one more try to printout extra info
-	catch(const std::exception &e)
-	{
-		ss << "Exception message: " << e.what();
-	}
-	catch(...){}
-	__SUP_COUT_ERR__ << ss.str();
-
-	xmldoc.addTextElementToData("Error", ss.str());
-}  // end runFEMacro() catch
 
 //==============================================================================
 void MacroMakerSupervisor::getFEMacroList(HttpXmlDocument&   xmldoc,

@@ -180,6 +180,7 @@ if (typeof Globals == 'undefined')
 //	DesktopContent.tooltipConditionString(str);
 
 DesktopContent._theWindowId = -1;
+DesktopContent._theWindowTitle = -1;
 
 DesktopContent._isFocused = false;
 DesktopContent._theWindow;
@@ -198,10 +199,12 @@ DesktopContent._updateMouseOverMailboxTimer = 0;
 DesktopContent._windowMouseX = -1;
 DesktopContent._windowMouseY = -1;
 
-DesktopContent._serverOrigin = "";
+DesktopContent._localUrnLid = 0;
 DesktopContent._localOrigin = "";
 DesktopContent._serverUrnLid = 0;
-DesktopContent._localUrnLid = 0;
+DesktopContent._serverOrigin = "";
+DesktopContent._remoteServerUrnLid = 0;
+DesktopContent._remoteServerOrigin = "";
 
 DesktopContent._cookieCodeMailbox = 0;
 DesktopContent._updateTimeMailbox = 0;
@@ -313,6 +316,18 @@ DesktopContent.init = function(onloadFunction)
 	Debug.log("Local Application URN-LID #" + DesktopContent._localUrnLid);
 	Debug.log("Local Application Origin = " + DesktopContent._localOrigin);
 
+	DesktopContent._remoteServerUrnLid = DesktopContent.getParameter(0,"remoteServerUrnLid");
+	if(typeof DesktopContent._remoteServerUrnLid == 'undefined')
+		DesktopContent._remoteServerUrnLid = 0;
+	DesktopContent._remoteServerOrigin = DesktopContent.getParameter(0,"remoteServerOrigin");
+	
+	if(DesktopContent._remoteServerUrnLid)
+	{
+		Debug.log("Remote Gateway Application URN-LID #" + DesktopContent._remoteServerUrnLid);
+		Debug.log("Remote Gateway Application Origin = " + DesktopContent._remoteServerOrigin);
+	}
+
+
 	//get Wizard sequence (if in Wizard mode)
 	try
 	{
@@ -345,9 +360,8 @@ DesktopContent.init = function(onloadFunction)
 		}
 		
 		if(event.data.request == "getRequestLIDInfo")
-		{			
-			
-			Debug.log("Received info request from child page");
+		{						
+			Debug.log("Received info request from child page; localUrnLid", DesktopContent._localUrnLid);
 			event.source.postMessage(
 				{			
 					
@@ -358,6 +372,8 @@ DesktopContent.init = function(onloadFunction)
 				"gatewayURN" :	DesktopContent._serverUrnLid,
 				"gatewayOrigin":DesktopContent._serverOrigin
 				}, "*");
+			event.stopPropagation();
+			event.stopImmediatePropagation();
 			return;
 		}
 		else if(event.data.request == "getParentCookieCode")
@@ -380,6 +396,11 @@ DesktopContent.init = function(onloadFunction)
 		}	
 		else if(event.data.request == "giveRequestLIDInfo")
 		{			
+			Debug.log("Received info response from parent page; localUrnLid", DesktopContent._localUrnLid);
+
+			event.stopPropagation();
+			event.stopImmediatePropagation();
+
 			if(DesktopContent._pageInitCalled || !event.data.gatewayURN) return;
 			DesktopContent._pageInitCalled = true;
 			
@@ -390,6 +411,16 @@ DesktopContent.init = function(onloadFunction)
 			DesktopContent._cookieCodeMailbox = event.data.cookieCode;
 			
 			Debug.log("The Desktop Window ID = " + DesktopContent._theWindowId);
+			Debug.log("The Desktop Window Title = " + DesktopContent._theWindowTitle);
+			Debug.log("Local Application URN-LID #" + DesktopContent._localUrnLid);
+
+			if(DesktopContent._remoteServerUrnLid) //overwrite with remote gateway info!
+			{
+				Debug.log("Gateway Supervisor overriding with Remote Supervisor info!");
+				DesktopContent._serverUrnLid = DesktopContent._remoteServerUrnLid;
+				DesktopContent._serverOrigin = DesktopContent._remoteServerOrigin;
+			}
+
 			Debug.log("Gateway Supervisor Application URN-LID #" + DesktopContent._serverUrnLid);
 			Debug.log("Gateway Supervisor Application Origin = " + DesktopContent._serverOrigin);
 
@@ -413,7 +444,7 @@ DesktopContent.init = function(onloadFunction)
 								{
 							"windowId":			"unknown",
 							"request":  		"getParentCookieCode"
-								},"*");
+								},"*");						
 					}
 					else
 						Debug.log("No need to update deltaTime=" + deltaTime);
@@ -486,7 +517,8 @@ DesktopContent.init = function(onloadFunction)
 			
 			Debug.log("First message from Gateway Desktop received!");
 
-			DesktopContent._theWindowId		= event.data.windowId;					
+			DesktopContent._theWindowId		= event.data.windowId;	
+			DesktopContent._theWindowTitle	= event.data.windowTitle;					
 			DesktopContent._serverUrnLid 	= event.data.gatewayURN;
 			DesktopContent._serverOrigin 	= event.data.gatewayOrigin;	
 
@@ -530,7 +562,15 @@ DesktopContent.init = function(onloadFunction)
 			else if(!DesktopContent._sequence)
 				Debug.log("No cookie code and no sequence!");
 
+			if(DesktopContent._remoteServerUrnLid) //overwrite with remote gateway info!
+			{
+				Debug.log("Gateway Supervisor overriding with Remote Supervisor info!");
+				DesktopContent._serverUrnLid = DesktopContent._remoteServerUrnLid;
+				DesktopContent._serverOrigin = DesktopContent._remoteServerOrigin;
+			}
+
 			Debug.log("The Desktop Window ID = " + DesktopContent._theWindowId);
+			Debug.log("The Desktop Window Title = " + DesktopContent._theWindowTitle);
 			Debug.log("Gateway Supervisor Application URN-LID #" + DesktopContent._serverUrnLid);
 			Debug.log("Gateway Supervisor Application Origin = " + DesktopContent._serverOrigin);
 
@@ -582,7 +622,7 @@ DesktopContent.init = function(onloadFunction)
 			}
 			
 			if(DesktopContent._theWindowId != event.data.windowId)
-			{
+			{				
 				Debug.med("Impossible desktop message violation! Notify admins. May happen if users click around during window refresh?");
 				return;				
 			}
@@ -1066,6 +1106,27 @@ DesktopContent.hideLoading = function()
 //	Use ignoreSystemBlock if request is expected to meet a down server (like restarting xdaq)
 //	Use doNotOfferSequenceChange for requests that might fail based on permissions (like code editor switch to read only).
 //
+//  Here is an example for handling the error in handler if callHandlerOnErr is set true:
+//			function (req, reqParam, errStr) {
+//						
+//				var str = "";
+//			
+//				if(!errStr) 
+//					errStr = "";
+//				var err = DesktopContent.getXMLValue(req,"Error");
+//				if(err && err != "")
+//					errStr += "\n" + err;				
+//				if(errStr != "")
+//				{
+//					str += "Received error... " + getDateString(new Date);
+//					str += "<br>";
+//					Debug.log("Error while running FE Macro: " + errStr,
+//							Debug.HIGH_PRIORITY);
+//					el.innerHTML = str;
+//					return;
+//				}
+//				...
+//			}
 DesktopContent.XMLHttpRequest = function(requestURL, data, returnHandler, 
 		reqParam, progressHandler, callHandlerOnErr, doNotShowLoadingOverlay,
 		targetGatewaySupervisor, ignoreSystemBlock, doNotOfferSequenceChange) 
@@ -2256,7 +2317,17 @@ DesktopContent.getDefaultWindowColor = function() {
 
 //=====================================================================================
 //get color scheme ~~
-DesktopContent.getDefaultDashboardColor = function() { return DesktopContent.parseColor(DesktopContent._dashboardColorPostbox); }//DesktopContent.parseColor(DesktopContent._dashboardColorPostbox.innerHTML); }
+DesktopContent.getDefaultDashboardColor = function() { 
+	if(!DesktopContent._dashboardColorPostbox)
+	{
+		//likely in wizard mode
+		Debug.log("Color post boxes not setup! So giving default.",Debug.MED_PRIORITY);
+		return "rgb(0,40,85)";
+	}
+	Debug.log("Returning dashboard color");
+	return DesktopContent.parseColor(DesktopContent._dashboardColorPostbox); 
+	//DesktopContent.parseColor(DesktopContent._dashboardColorPostbox.innerHTML); }
+} //end getDefaultDashboardColor()
 DesktopContent.getDefaultDesktopColor = function() { 
 	if(!DesktopContent._desktopColor)
 	{
@@ -2266,6 +2337,27 @@ DesktopContent.getDefaultDesktopColor = function() {
 	}
 	Debug.log("Returning desktop color");
 	return DesktopContent._desktopColor;
+} //end getDefaultDesktopColor()
+DesktopContent.getInvertedColor = function(hexOrRGB) { 
+	var rgb = [];
+	if(hexOrRGB.indexOf("#") == 0)
+	{
+		rgb = [
+			parseInt(hex.substring(1, 3), 16),
+			parseInt(hex.substring(3, 5), 16),
+			parseInt(hex.substring(5, 7), 16),
+		];
+	}
+	else if(hexOrRGB.indexOf("rgb(") == 0)
+	{
+		rgb = hexOrRGB.split("(")[1].split(")")[0].split(",");
+	}
+	else
+		throw("Illegal hexOrRGB value to DesktopContent.getInvertedColor");
+
+	return "rgb(" + ((255-parseInt(rgb[0]))%256) +
+		"," + ((255-parseInt(rgb[1]))%256) +
+		"," + ((255-parseInt(rgb[2]))%256) + ")";
 } //end getDefaultDesktopColor()
 
 //=====================================================================================
@@ -2723,9 +2815,13 @@ DesktopContent.systemBlackout = function(doBlackout)
 //	returns the text in header of the current desktop window
 DesktopContent.getDesktopWindowTitle = function() 
 {
-	return DesktopContent._theWindow.parent.document.getElementById(
+	if(!DesktopContent._theWindowTitle || 
+		DesktopContent._theWindowTitle == -1)
+		return DesktopContent._theWindow.parent.document.getElementById(
 			"DesktopWindowHeader-" + 
 			DesktopContent._theWindow.name.split('-')[1]).innerHTML;
+	else
+		return DesktopContent._theWindowTitle;
 } //end getDesktopWindowTitle()
 
 DesktopContent.getExceptionLineNumber = function(e) 

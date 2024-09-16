@@ -57,6 +57,93 @@ if [[ "x${OTSDAQ_DIR}" == "x" ]]; then
 	cd -
 fi
 
+#############################
+#############################
+# function to update USER DATA configuration files and table definitions
+#NOTE: relative paths are allowed from otsdaq/data-core/TableInfo
+# for example...
+# 		ConfigCore/*
+# 		ARTDAQ/*
+# 		../../../otsdaq_mu2e_config/CoreTables/*
+# 		../../../otsdaq_mu2e_config/CoreTables/Advanced/*
+# 		ContextGroup/DesktopIconTable
+function updateTable
+{
+	line=$1
+	# echo -e "UpdateOTS.sh:${LINENO}  \t Updating table... $line"
+
+	# echo
+	# echo
+	# echo -e "UpdateOTS.sh:${LINENO}  \t line=$line"
+	# echo -e "UpdateOTS.sh:${LINENO}  \t OTSDAQ_DIR=$OTSDAQ_DIR"
+	# echo -e "UpdateOTS.sh:${LINENO}  \t OTS_SOURCE=$OTS_SOURCE"
+	BACK_COUNT=$(echo $line | sed s/\\\.\\\./\\\n/g | grep -c .)
+	# echo -e "UpdateOTS.sh:${LINENO}  \t BACK_COUNT=$BACK_COUNT"
+	BACK_COUNT=$((BACK_COUNT+1))
+	# echo -e "UpdateOTS.sh:${LINENO}  \t BACK_COUNT=$BACK_COUNT"
+
+	SLASH_COUNT=$(echo $line | sed s/\\//\\\n/g | grep -c .)
+	SLASH_COUNT=$((SLASH_COUNT-1))
+	# echo -e "UpdateOTS.sh:${LINENO}  \t SLASH_COUNT=$SLASH_COUNT"
+	
+
+	#steps:
+	#	* if SLASH_COUNT == 1, then assume otsdaq repo
+	#   * else, then assume other repo
+
+	if [[ $SLASH_COUNT == 1 ]]; then #assuming otsdaq repo
+		repo_of_line="otsdaq"
+		OTS_INSTALL_PATH="$OTSDAQ_DIR/data-core/TableInfo/"
+		OTS_SOURCE_PATH="$OTS_SOURCE/otsdaq/data-core/TableInfo/"
+		OTS_SOURCE_PATH_MOD="$OTS_SOURCE/otsdaq/data-core/TableInfo/" #same as above
+		mod_line=$line
+	elif [[ $BACK_COUNT > 3 ]]; then
+
+		repo_of_line=$(echo $line | cut -d '/' -f$BACK_COUNT)
+		# echo -e "UpdateOTS.sh:${LINENO}  \t repo_of_line=$repo_of_line"
+
+		if [[ "${last_repo_of_line}" != "${repo_of_line}" ]]; then #need to search for repo install path
+			OTS_INSTALL_PATH=$(spack cd -i $repo_of_line >/dev/null 2>&1 && echo $PWD && cd - || echo "NOT FOUND");
+			last_repo_of_line=$repo_of_line
+		fi			
+
+		OTS_SOURCE_PATH="$OTS_SOURCE/$repo_of_line/"
+		lineRepoSed=$(echo $repo_of_line | sed s/_/-/g) #need to convert repo names from _ to - for backward compatibility of .dat files
+		OTS_SOURCE_PATH_MOD="$OTS_SOURCE/$lineRepoSed/"
+		# echo -e "UpdateOTS.sh:${LINENO}  \t BACK_COUNT=$BACK_COUNT"	
+		INDEX_OF_CHAR_BACK=$(echo $line | grep -ob "/" | sed ''"$BACK_COUNT"'q;d' | cut -d ':' -f1)	
+		# echo -e "UpdateOTS.sh:${LINENO}  \t INDEX_OF_CHAR_BACK=$INDEX_OF_CHAR_BACK"	
+		mod_line=$(echo ${line:$INDEX_OF_CHAR_BACK})
+	fi 
+	# echo $OTS_INSTALL_PATH | sed s/__spack_path_placeholder__//g | sed s/\\\[padded-to-255-chars\\\]//g | sed s/\\\/tdaq-v......../\\\/tdaq-v_\ \ \ \\\//g
+	# echo $OTS_SOURCE_PATH | sed s/__spack_path_placeholder__//g | sed s/\\\[padded-to-255-chars\\\]//g | sed s/\\\/tdaq-v......../\\\/tdaq-v_\ \ \ \\\//g
+	# echo -e "UpdateOTS.sh:${LINENO}  \t DID_IT=$DID_IT"
+
+	DID_IT=0	
+	DID_IT_SOURCE="Error: NOT FOUND"
+	#verify that at least one of the copies worked! Otherwise, flag for user
+	
+	if [[ "$OTS_INSTALL_PATH" != "NOT FOUND" ]]; then
+		cp $OTS_INSTALL_PATH/${mod_line}Info.xml $USER_DATA/TableInfo/ &>/dev/null && DID_IT=1 && DID_IT_SOURCE="Installed"
+		# echo -e "UpdateOTS.sh:${LINENO}  \t install DID_IT=$DID_IT"
+	fi
+
+	# echo -e "UpdateOTS.sh:${LINENO}  \t DID_IT=$DID_IT"
+	cp $OTS_SOURCE_PATH/${mod_line}Info.xml $USER_DATA/TableInfo/ &>/dev/null && DID_IT=1 && DID_IT_SOURCE="Source"
+	# echo -e "UpdateOTS.sh:${LINENO}  \t source  DID_IT=$DID_IT"
+
+
+	if [ $DID_IT == 0 ]; then #try modified path as last resort!
+		cp $OTS_SOURCE_PATH_MOD/${mod_line}Info.xml $USER_DATA/TableInfo/ &>/dev/null && DID_IT=1 && DID_IT_SOURCE="-Source"
+		# echo -e "UpdateOTS.sh:${LINENO}  \t modsource  DID_IT=$DID_IT"
+	fi
+
+	echo -e "UpdateOTS.sh:${LINENO}  \t ============= from $DID_IT_SOURCE, Table Dependency = $repo_of_line/$mod_line"
+	if [ $DID_IT == 0 ]; then
+		echo -e "UpdateOTS.sh:${LINENO}  \t Error, table dependency copy failed! Could not find table source for ${line}"				
+	fi
+
+} #end updateTable() 
 
 #############################
 #############################
@@ -113,84 +200,18 @@ function updateUserData
 		cp -r $USER_DATA/TableInfo $USER_DATA/TableInfo.updateots.bk		
 		
 		#NOTE: relative paths are allowed from otsdaq/data-core/TableInfo
+		# for example...
+		# 		ConfigCore/*
+		# 		ARTDAQ/*
+		# 		../../../otsdaq_mu2e_config/CoreTables/*
+		# 		../../../otsdaq_mu2e_config/CoreTables/Advanced/*
+		# 		ContextGroup/DesktopIconTable
+
 		last_repo_of_line=
 		LAST_LINE=
 		while read line; do
-			if [[ "x${line}" != "x" && "${LAST_LINE}" != "${line}" ]]; then
-				
-				# echo
-				# echo
-				# echo -e "UpdateOTS.sh:${LINENO}  \t line=$line"
-				# echo -e "UpdateOTS.sh:${LINENO}  \t OTSDAQ_DIR=$OTSDAQ_DIR"
-				# echo -e "UpdateOTS.sh:${LINENO}  \t OTS_SOURCE=$OTS_SOURCE"
-				BACK_COUNT=$(echo $line | sed s/\\\.\\\./\\\n/g | grep -c .)
-				# echo -e "UpdateOTS.sh:${LINENO}  \t BACK_COUNT=$BACK_COUNT"
-				BACK_COUNT=$((BACK_COUNT+1))
-				# echo -e "UpdateOTS.sh:${LINENO}  \t BACK_COUNT=$BACK_COUNT"
-
-				SLASH_COUNT=$(echo $line | sed s/\\//\\\n/g | grep -c .)
-				SLASH_COUNT=$((SLASH_COUNT-1))
-				# echo -e "UpdateOTS.sh:${LINENO}  \t SLASH_COUNT=$SLASH_COUNT"
-				
-				
-
-
-				#steps:
-				#	* if SLASH_COUNT == 1, then assume otsdaq repo
-				#   * else, then assume other repo
-
-				if [[ $SLASH_COUNT == 1 ]]; then #assuming otsdaq repo
-					repo_of_line="otsdaq"
-					OTS_INSTALL_PATH="$OTSDAQ_DIR/data-core/TableInfo/"
-					OTS_SOURCE_PATH="$OTS_SOURCE/otsdaq/data-core/TableInfo/"
-					OTS_SOURCE_PATH_MOD="$OTS_SOURCE/otsdaq/data-core/TableInfo/" #same as above
-					mod_line=$line
-				elif [[ $BACK_COUNT > 3 ]]; then
-
-					repo_of_line=$(echo $line | cut -d '/' -f$BACK_COUNT)
-					# echo -e "UpdateOTS.sh:${LINENO}  \t repo_of_line=$repo_of_line"
-
-					if [[ "${last_repo_of_line}" != "${repo_of_line}" ]]; then #need to search for repo install path
-						OTS_INSTALL_PATH=$(spack cd -i $repo_of_line >/dev/null 2>&1 && echo $PWD && cd - || echo "NOT FOUND");
-						last_repo_of_line=$repo_of_line
-					fi			
-
-					OTS_SOURCE_PATH="$OTS_SOURCE/$repo_of_line/"
-					lineRepoSed=$(echo $repo_of_line | sed s/_/-/g) #need to convert repo names from _ to - for backward compatibility of .dat files
-					OTS_SOURCE_PATH_MOD="$OTS_SOURCE/$lineRepoSed/"
-					# echo -e "UpdateOTS.sh:${LINENO}  \t BACK_COUNT=$BACK_COUNT"	
-					INDEX_OF_CHAR_BACK=$(echo $line | grep -ob "/" | sed ''"$BACK_COUNT"'q;d' | cut -d ':' -f1)	
-					# echo -e "UpdateOTS.sh:${LINENO}  \t INDEX_OF_CHAR_BACK=$INDEX_OF_CHAR_BACK"	
-					mod_line=$(echo ${line:$INDEX_OF_CHAR_BACK})
-				fi 
-				# echo $OTS_INSTALL_PATH | sed s/__spack_path_placeholder__//g | sed s/\\\[padded-to-255-chars\\\]//g | sed s/\\\/tdaq-v......../\\\/tdaq-v_\ \ \ \\\//g
-				# echo $OTS_SOURCE_PATH | sed s/__spack_path_placeholder__//g | sed s/\\\[padded-to-255-chars\\\]//g | sed s/\\\/tdaq-v......../\\\/tdaq-v_\ \ \ \\\//g
-				# echo -e "UpdateOTS.sh:${LINENO}  \t DID_IT=$DID_IT"
-
-				DID_IT=0	
-				DID_IT_SOURCE="Error: NOT FOUND"
-				#verify that at least one of the copies worked! Otherwise, flag for user
-				
-				if [[ "$OTS_INSTALL_PATH" != "NOT FOUND" ]]; then
-					cp $OTS_INSTALL_PATH/${mod_line}Info.xml $USER_DATA/TableInfo/ &>/dev/null && DID_IT=1 && DID_IT_SOURCE="Installed"
-					# echo -e "UpdateOTS.sh:${LINENO}  \t install DID_IT=$DID_IT"
-				fi
-
-				# echo -e "UpdateOTS.sh:${LINENO}  \t DID_IT=$DID_IT"
-				cp $OTS_SOURCE_PATH/${mod_line}Info.xml $USER_DATA/TableInfo/ &>/dev/null && DID_IT=1 && DID_IT_SOURCE="Source"
-				# echo -e "UpdateOTS.sh:${LINENO}  \t source  DID_IT=$DID_IT"
-
-
-				if [ $DID_IT == 0 ]; then #try modified path as last resort!
-					cp $OTS_SOURCE_PATH_MOD/${mod_line}Info.xml $USER_DATA/TableInfo/ &>/dev/null && DID_IT=1 && DID_IT_SOURCE="-Source"
-					# echo -e "UpdateOTS.sh:${LINENO}  \t modsource  DID_IT=$DID_IT"
-				fi
-
-				echo -e "UpdateOTS.sh:${LINENO}  \t ============= from $DID_IT_SOURCE, Table Dependency = $repo_of_line/$mod_line"
-				if [ $DID_IT == 0 ]; then
-					echo -e "UpdateOTS.sh:${LINENO}  \t Error, table dependency copy failed! Could not find table source for ${line}"				
-				fi
-
+			if [[ "x${line}" != "x" && "${LAST_LINE}" != "${line}" ]]; then				
+				updateTable $line
 				LAST_LINE=${line}
 			fi
 		done < $USER_DATA/ServiceData/CoreTableInfoNames.dat
@@ -198,9 +219,9 @@ function updateUserData
 		#do one more time after loop to make sure last line is read 
 		# (even if user did not put new line) 
 		if [[ "x${line}" != "x" && "${LAST_LINE}" != "${line}" ]]; then
-			#echo -e "UpdateOTS.sh:${LINENO}  \t cp $OTSDAQ_DIR/data-core/TableInfo/${line}Info.xml $USER_DATA/TableInfo/"						
-			cp $OTSDAQ_DIR/data-core/TableInfo/${line}Info.xml $USER_DATA/TableInfo/ #do not hide failures anymore ---&>/dev/null #hide output
+			updateTable $line
 		fi
+
 	else
 		echo -e "UpdateOTS.sh:${LINENO}  \t cp -r $USER_DATA/TableInfo $USER_DATA/TableInfo_update_bk"
 		rm -rf $USER_DATA/TableInfo_update_bk

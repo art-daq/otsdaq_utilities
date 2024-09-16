@@ -34,7 +34,7 @@ cet_set_compiler_flags(
  VIGILANT
  WERROR
  NO_UNDEFINED
- EXTRA_FLAGS -pedantic -D_LIBCPP_ENABLE_CXX17_REMOVED_FEATURES=1 ${DT_FLAG}
+ EXTRA_FLAGS -Werror -pedantic -D_LIBCPP_ENABLE_CXX17_REMOVED_FEATURES=1 ${DT_FLAG}
  )
  
 # Debug streamer.
@@ -132,11 +132,11 @@ message("otsdaq_utilities WebGUI Debug Mode = ${OTS_DEBUG_MODE}")
 # WebGUI
 #FILE(REMOVE [ ${CMAKE_CURRENT_SOURCE_DIR}/WebGUI/js/Debug.js ])
 #FILE(REMOVE [ ${CMAKE_CURRENT_BINARY_DIR}/WebGUI/js/Debug.js ])
-# configure_file(${CMAKE_CURRENT_SOURCE_DIR}/WebGUI/js/Debug.js.in ${CMAKE_CURRENT_BINARY_DIR}/WebGUI/js/Debug.js @ONLY)
+# configure_file(${CMAKE_CURRENT_SOURCE_DIR}/WebGUI/js/Debug.in.js ${CMAKE_CURRENT_BINARY_DIR}/WebGUI/js/Debug.js @ONLY)
 if( $ENV{OTS_DEBUG_MODE} MATCHES "2" )
 	message("otsdaq_utilities WebGUI skipping Debug.js handling in shared srcs/")
 else()
-	configure_file(${CMAKE_CURRENT_SOURCE_DIR}/WebGUI/js/Debug.js.in ${CMAKE_CURRENT_SOURCE_DIR}/WebGUI/js/Debug.js @ONLY)
+	configure_file(${CMAKE_CURRENT_SOURCE_DIR}/WebGUI/js/Debug.in.js ${CMAKE_CURRENT_SOURCE_DIR}/WebGUI/js/Debug.js @ONLY)
 endif()
 
 	FILE(COPY WebGUI DESTINATION . PATTERN "*.in" EXCLUDE)
@@ -150,5 +150,8 @@ message("otsdaq_utilities WebGUI created Debug.js at ${CMAKE_CURRENT_SOURCE_DIR}
 # tools
 FILE(COPY tools DESTINATION .)
 INSTALL(DIRECTORY tools DESTINATION . FILE_PERMISSIONS USE_SOURCE_PERMISSIONS)
+
+# test programs
+add_subdirectory(test)
 
 cet_cmake_config()

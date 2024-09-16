@@ -377,10 +377,29 @@ function updateAppsArray()
 function restartApps(contextName, serverName)
 {
     console.log("Restart " + contextName + "s'Apps");
+    //cancel update apps timer
+    if(_updateAppsTimeout) window.clearTimeout(_updateAppsTimeout);
+
     DesktopContent.popUpVerification(
         "Restarting server " + serverName + " for 'no gateway apps'. Are you sure?",
-        function () /*yes-to-restart servers*/
+        function () /* yes-to-restart servers */
         {
+            //modify status to indicate shutting down
+            if(_arrayOnDisplayTable && _arrayOnDisplayTable.length)
+            {
+                Debug.log("Modifying status of", contextName,"to shutting down...");
+
+                for (var i = 0; i < _arrayOnDisplayTable.length; i++) 
+                {
+                    if (_arrayOnDisplayTable[i].context != contextName) continue;
+                    _arrayOnDisplayTable[i].status = "Shutting Down"; //force to shutting down
+                }
+                displayTable(_arrayOnDisplayTable);	
+
+                //return update apps timer with some extra time for user to see "Shutting Down"
+                _updateAppsTimeout = window.setTimeout(updateAppsArray, 3000 /*ms*/);
+            }
+
             DesktopContent.XMLHttpRequest(
                 "Request?RequestType=restartApps&contextName=" + contextName,
                 "", 
@@ -397,7 +416,11 @@ function restartApps(contextName, serverName)
         0,0,// val [optional], bgColor [optional], 
         0,0,0, //			textColor [optional], borderColor [optional], getUserInput [optional], 
         0, //			dialogWidth [optional], 
-        function (){}
+        function () /* no/cancel-to-restart servers */
+        {
+            //return update apps timer
+            _updateAppsTimeout = window.setTimeout(updateAppsArray, 1000 /*ms*/);
+        }
     );
 } // end of restartApps()
 
@@ -440,7 +463,8 @@ function displayTable(appsArray)
     }
 
     //Add the data rows.
-    for (var contextName in _allContextNames) {
+    for (var contextName in _allContextNames) 
+    {
 
         row = table.insertRow(-1);
         row.setAttribute("class", "collapsibleRow");
@@ -450,22 +474,26 @@ function displayTable(appsArray)
         cell.innerHTML = contextName;
 
         var appRowId = 0; //using this id to make a subRow id for apps in each context
-        for (var i = 0; i < appsArray.length; i++) {
-            if (appsArray[i].context == contextName) {
+        for (var i = 0; i < appsArray.length; i++) 
+        {
+            if (appsArray[i].context == contextName) 
+            {
                 row = table.insertRow(-1);
                 row.setAttribute("class", "subRow");
                 row.id = contextName + "-" + appRowId;
 
                 appRowId++;
 
-                for (var j = 0; j < columnKeys.length; ++j) {
+                for (var j = 0; j < columnKeys.length; ++j) 
+                {
                     cell = row.insertCell(-1);
 
                     //add mouseover tooltip
                     cell.title = appsArray[i].name + "'s " +
                         columnNames[j];
 
-                    if(columnKeys[j] == "action") {
+                    if(columnKeys[j] == "action") 
+                    {
                         var url = appsArray[i].url;
                         url = url.substring(url.indexOf("://")+3,url.lastIndexOf(":"));
                         if(!appsArray[i].class.includes("Gateway"))
@@ -474,7 +502,8 @@ function displayTable(appsArray)
                                             " no gateway apps on " + url + "' class = 'contextButton'>" +
                                             "Restart server</button>";
                     }
-                    else if (columnKeys[j] == "stale") {
+                    else if (columnKeys[j] == "stale") 
+                    {
                         cell.style.fontSize = "12px";
 
                         var staleString = "";
@@ -500,7 +529,8 @@ function displayTable(appsArray)
 
                         cell.innerHTML = staleString;
                     }
-                    else if (columnKeys[j] == "progress") {
+                    else if (columnKeys[j] == "progress") 
+                    {
                         var progressNum = appsArray[i][columnKeys[j]] | 0;
                         if (progressNum > 100)
                             progressNum = 99; //attempting to figure out max (or variable steps)
@@ -518,7 +548,8 @@ function displayTable(appsArray)
 
                         }
                     }
-                    else if (columnKeys[j] == "status") {
+                    else if (columnKeys[j] == "status") 
+                    {
                         var statusString = appsArray[i][columnKeys[j]];
 
                         try {
@@ -530,7 +561,8 @@ function displayTable(appsArray)
                         }
 
 
-                        switch (statusString) {
+                        switch (statusString) 
+                        {
                             case "Initial":
                                 cell.style.background = "radial-gradient(circle at 50% 120%, rgb(119, 208, 255), rgb(119, 208, 255) 10%, rgb(7, 105, 191) 80%, rgb(6, 39, 69) 100%)";
                                 break;
@@ -544,6 +576,7 @@ function displayTable(appsArray)
                             case "Running":
                                 cell.style.background = "radial-gradient(circle at 50% 120%, rgb(0, 255, 67), rgb(142, 255, 172) 10%, rgb(5, 148, 42) 80%, rgb(6, 39, 69) 100%)";
                                 break;
+                            case "Shutting Down":
                             case "Failed":
                             case "Error":
                             case "Soft-Error":
@@ -585,20 +618,24 @@ function displayTable(appsArray)
                         cell.style.textAlign = "center";
                 }
 
-                for (var subapp in appsArray[i].subappStatus) {
+                for (var subapp in appsArray[i].subappStatus) 
+                {
                     var subappInfo = appsArray[i].subappStatus[subapp];
                     row = table.insertRow(-1);
-                    for (var j = 0; j < columnKeys.length; ++j) {
+                    for (var j = 0; j < columnKeys.length; ++j) 
+                    {
                         cell = row.insertCell(-1);
 
                         //add mouseover tooltip
                         cell.title = subappInfo.name + "'s " +
                             columnNames[j];
 
-                        if (columnKeys[j] == "name") {
+                        if (columnKeys[j] == "name") 
+                        {
                             cell.innerHTML = "---> " + subappInfo.name;
                         }
-                        else if (columnKeys[j] == "stale") {
+                        else if (columnKeys[j] == "stale") 
+                        {
                             cell.style.fontSize = "12px";
 
                             var staleString = "";
@@ -624,7 +661,8 @@ function displayTable(appsArray)
 
                             cell.innerHTML = staleString;
                         }
-                        else if (columnKeys[j] == "progress") {
+                        else if (columnKeys[j] == "progress") 
+                        {
                             var progressNum = subappInfo[columnKeys[j]] | 0;
                             if (progressNum > 100)
                                 progressNum = 99; //attempting to figure out max (or variable steps)
@@ -642,7 +680,8 @@ function displayTable(appsArray)
 
                             }
                         }
-                        else if (columnKeys[j] == "status") {
+                        else if (columnKeys[j] == "status") 
+                        {
                             var statusString = subappInfo[columnKeys[j]];
 
                             try {
@@ -654,7 +693,8 @@ function displayTable(appsArray)
                             }
 
 
-                            switch (statusString) {
+                            switch (statusString) 
+                            {
                                 case "Initial":
                                     cell.style.background = "radial-gradient(circle at 50% 120%, rgb(119, 208, 255), rgb(119, 208, 255) 10%, rgb(7, 105, 191) 80%, rgb(6, 39, 69) 100%)";
                                     break;
@@ -668,6 +708,7 @@ function displayTable(appsArray)
                                 case "Running":
                                     cell.style.background = "radial-gradient(circle at 50% 120%, rgb(0, 255, 67), rgb(142, 255, 172) 10%, rgb(5, 148, 42) 80%, rgb(6, 39, 69) 100%)";
                                     break;
+                                case "Shutting Down":
                                 case "Failed":
                                 case "Error":
                                 case "Soft-Error":
@@ -701,7 +742,8 @@ function displayTable(appsArray)
                         else
                             cell.innerHTML = subappInfo[columnKeys[j]];
 
-                        if (columnKeys[j] == "status") {
+                        if (columnKeys[j] == "status") 
+                        {
                             cell.style.textAlign = "center";
                             cell.className = "statusCell";
 
@@ -815,7 +857,7 @@ function collapsibleList()
 
 	var collapsible = document.getElementsByClassName("collapsible");
 
-	Debug.log(collapsible.length + " collapsible lists found.");
+	// Debug.log(collapsible.length + " collapsible lists found.");
 
 	for (var i = 0; i < collapsible.length; i++) 
 	{

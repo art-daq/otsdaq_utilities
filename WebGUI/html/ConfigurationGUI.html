@@ -770,7 +770,8 @@
 				Debug.logv({activeGroups});
 
 				//get command string if opening a new window
-				var cmdStr = DesktopContent.getParameter(1); //from  location.search
+				var cmdStr = DesktopContent.getParameter(0,"cmd");
+					//DesktopContent.getParameter(1); //from  location.search				
 				if (cmdStr && cmdStr != "") 
 				{
 					//do incoming commands!
@@ -930,7 +931,8 @@
 			if (req) //if supervisor is killed, then req will be 0, which is a good sign of progress
 			{ 	//else check error response
 				var err = DesktopContent.getXMLValue(req, "Error");
-				if (err) {
+				if (err) 
+				{
 					Debug.log(err, Debug.HIGH_PRIORITY);
 					return;
 				}
@@ -942,7 +944,8 @@
 					"\n\n Please wait " + countDown +
 					" seconds and then reload the System View to verify changes.",
 					Debug.INFO_PRIORITY);
-			else {
+			else 
+			{
 				countDown = 20;
 				if (!isOther)
 					Debug.log("Attempting to restart your system in Normal Mode... " +
@@ -958,7 +961,7 @@
 			localCountDown();
 			//=================
 			function localCountDown() {
-				Debug.log("Waiting " + countDown + " seconds operation...",
+				Debug.log("Waiting " + countDown + " seconds for startup operation...",
 					Debug.INFO_PRIORITY);
 
 				window.setTimeout(function () {
@@ -968,7 +971,7 @@
 						//end blackout
 						DesktopContent.systemBlackout(false);
 						//DesktopContent._blockSystemCheckMailbox.innerHTML = "";
-						Debug.log("And we are back!<br>If you are switching modes, you will need to manually change the URL in your browser.", Debug.INFO_PRIORITY);
+						Debug.log("And we are back!<br>If you are switching ots operating modes, you may need to manually change the URL in your browser.", Debug.INFO_PRIORITY);
 						setupSystemViewMode();
 						DesktopContent.XMLHttpRequest("Request?" +
 							"RequestType=clearTableCachedVersions" +
