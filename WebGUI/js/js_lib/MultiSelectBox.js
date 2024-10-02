@@ -388,8 +388,10 @@ MultiSelectBox.createSelectBox = function(el,name,title,vals,keys,types,
 				str += "<img style='width:32px; height:32px; margin: 0px 5px -8px 0;' " +
 					"src='" + 
 					iconURLs[i] + "' />";
-			else //alt text
-				str += iconURLs[i].substr(1) + " - ";
+			else //alt text (like an icon)
+				str += "<div style='width:32px; height:32px; margin: 0px 5px -12px 0; overflow: hidden; background-color: rgba(255, 255, 255, .2);" +
+					" font-size: 10px; white-space: normal; display: inline-block; text-align: center; padding-top: 4px;' " +
+					">" + iconURLs[i].substr(1) + "</div>";   
 		}
 		
 		str += vals[i];

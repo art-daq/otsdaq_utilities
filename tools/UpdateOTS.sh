@@ -195,9 +195,9 @@ function updateUserData
 		cat $USER_DATA/ServiceData/CoreTableInfoNames.dat
 		echo
 		
-		echo -e "UpdateOTS.sh:${LINENO}  \t cp -r $USER_DATA/TableInfo $USER_DATA/TableInfo.updateots.bk"
-		rm -rf $USER_DATA/TableInfo.updateots.bk
-		cp -r $USER_DATA/TableInfo $USER_DATA/TableInfo.updateots.bk		
+		echo -e "UpdateOTS.sh:${LINENO}  \t cp -r $USER_DATA/TableInfo $USER_DATA/TableInfo.updateots.bk.<timestamp>"
+		# rm -rf $USER_DATA/TableInfo.updateots.bk
+		cp -r $USER_DATA/TableInfo $USER_DATA/TableInfo.updateots.bk.$(date +"%Y%m%d_%H%M%S")		
 		
 		#NOTE: relative paths are allowed from otsdaq/data-core/TableInfo
 		# for example...

@@ -88,6 +88,8 @@ if (typeof DesktopContent == 'undefined' &&
 ConfigurationAPI._activeGroups = {}; //to fill, call ConfigurationAPI.getActiveGroups() or ConfigurationAPI.extractActiveGroups()
 ConfigurationAPI._activeTables = {}; //to fill, call ConfigurationAPI.getFieldsOfRecords() among others
 
+ConfigurationAPI._configUsername = "";  //to fill, call ConfigurationAPI.getActiveGroups() or ConfigurationAPI.extractActiveGroups()
+ConfigurationAPI._versionTracking = "ON";  //to fill, call ConfigurationAPI.getActiveGroups() or ConfigurationAPI.extractActiveGroups()
 
 ConfigurationAPI._contextMemberNames 	= [];
 ConfigurationAPI._backboneMemberNames 	= [];
@@ -261,6 +263,9 @@ ConfigurationAPI.extractActiveGroups = function(req)
 	
 	ConfigurationAPI._activeGroups = {};
 	ConfigurationAPI._activeGroups = retObj;
+
+	ConfigurationAPI._configUsername = DesktopContent.getXMLValue(req,"configUsername");
+	ConfigurationAPI._versionTracking = DesktopContent.getXMLValue(req,"versionTracking");
 	
 	return retObj;
 } // end extractActiveGroups()

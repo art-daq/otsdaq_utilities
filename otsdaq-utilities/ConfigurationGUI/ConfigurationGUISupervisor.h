@@ -260,7 +260,6 @@ class ConfigurationGUISupervisor : public CoreSupervisorBase
 	};
 
 	ConfigurationManagerRW* refreshUserSession						(std::string username,
-																	uint64_t    activeSessionIndex,
 																	bool        refresh);
 
 	std::map<std::string, ConfigurationManagerRW*> userConfigurationManagers_;

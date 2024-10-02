@@ -1266,7 +1266,7 @@ SmartLaunch.create = function() {
 	} //end handleCheckbox()
 
 	//=====================================================================================
-	//handleCheckbox(i) ~~
+	//getFsmName() ~~
 	this.getFsmName = function() { Debug.logv({_fsmName}); return _fsmName; }
 
 
@@ -1338,7 +1338,7 @@ SmartLaunch.helperGetConfigurationAliases = function(returnHandler)
 			if(returnHandler)
 				returnHandler({
 						"aliasMap" : aliasTranslationMap,
-						"aliasMetaDataMa" : aliasTranslationMetaDataMap,
+						"aliasMetaDataMap" : aliasTranslationMetaDataMap,
 						"lastUsedAlias" : userLastConfigAlias 
 					});
 

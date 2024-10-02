@@ -42,6 +42,7 @@ class ConsoleSupervisor : public CoreSupervisorBase
 	             		       								cgicc::Cgicc&                    cgiIn,
 	             		       								HttpXmlDocument&                 xmlOut,
 	             		       								const WebUsers::RequestUserInfo& userInfo) override;
+	virtual std::string getStatusProgressDetail				(void) override;
 
 	virtual void 		forceSupervisorPropertyValues		(void) override;  // override to force
 	                                                            // supervisor property
@@ -65,6 +66,7 @@ class ConsoleSupervisor : public CoreSupervisorBase
 	void				loadCustomCountList					(void);
 	void				saveCustomCountList					(void);
 
+  public:
 	// UDP Message Format:
 	// UDPMFMESSAGE|TIMESTAMP|SEQNUM|HOSTNAME|HOSTADDR|SEVERITY|CATEGORY|APPLICATION|PID|ITERATION|MODULE|(FILE|LINE)|MESSAGE
 	// FILE and LINE are only printed for s67+
@@ -74,12 +76,12 @@ class ConsoleSupervisor : public CoreSupervisorBase
 			std::vector<CustomTriggeredAction_t>& priorityCustomTriggerList)
 		    : countStamp(count)
 		{
-			std::string hostname, category, application, message, hostaddr, file, line,
-			    module, eventID;
-			mf::ELseverityLevel sev;
-			timeval             tv     = {0, 0};
-			int                 pid    = 0;
-			int                 seqNum = 0;
+			// std::string hostname, category, application, message, hostaddr, file, line,
+			//     module, eventID;
+			// mf::ELseverityLevel sev;
+			// timeval             tv     = {0, 0};
+			// int                 pid    = 0;
+			// int                 seqNum = 0;
 
 			boost::regex timestamp_regex_("(\\d{2}-[^-]*-\\d{4}\\s\\d{2}:\\d{2}:\\d{2})");
 			boost::regex file_line_regex_("^\\s*([^:]*\\.[^:]{1,3}):(\\d+)(.*)");
@@ -97,19 +99,22 @@ class ConsoleSupervisor : public CoreSupervisorBase
 			}
 
 			struct tm   tm;
-			time_t      t;
+			// time_t      t;
 			std::string value(res[1].first, res[1].second);
 			strptime(value.c_str(), "%d-%b-%Y %H:%M:%S", &tm);
 			tm.tm_isdst = -1;
-			t           = mktime(&tm);
-			tv.tv_sec   = t;
-			tv.tv_usec  = 0;
+			// t           = mktime(&tm);
+			// tv.tv_sec   = t;
+			// tv.tv_usec  = 0;
+			fields[FieldType::TIMESTAMP] = std::to_string(mktime(&tm));
+
 			auto prevIt = it;
 			try
 			{
 				if(it != tokens.end() && ++it != tokens.end() /* Advances it */)
 				{
-					seqNum = std::stoi(*it);
+					// seqNum = std::stoi(*it);
+					fields[FieldType::SEQID] = *it;
 				}
 			}
 			catch(const std::invalid_argument& e)
@@ -118,30 +123,35 @@ class ConsoleSupervisor : public CoreSupervisorBase
 			}
 			if(it != tokens.end() && ++it != tokens.end() /* Advances it */)
 			{
-				hostname = *it;
+				// hostname = *it;
+				fields[FieldType::HOSTNAME] = *it; 
 			}
 			if(it != tokens.end() && ++it != tokens.end() /* Advances it */)
 			{
-				hostaddr = *it;
+				; //not needed (yet): hostaddr = *it;
 			}
 			if(it != tokens.end() && ++it != tokens.end() /* Advances it */)
 			{
-				sev = mf::ELseverityLevel(*it);
+				// sev = mf::ELseverityLevel(*it);
+				fields[FieldType::LEVEL] = mf::ELseverityLevel(*it).getName();
 			}
 			if(it != tokens.end() && ++it != tokens.end() /* Advances it */)
 			{
-				category = *it;
+				// category = *it;
+				fields[FieldType::LABEL] = *it;
 			}
 			if(it != tokens.end() && ++it != tokens.end() /* Advances it */)
 			{
-				application = *it;
+				// application = *it;
+				fields[FieldType::SOURCE] = *it;
 			}
 			prevIt = it;
 			try
 			{
 				if(it != tokens.end() && ++it != tokens.end() /* Advances it */)
 				{
-					pid = std::stol(*it);
+					// pid = std::stol(*it);
+					fields[FieldType::SOURCEID] = *it;
 				}
 			}
 			catch(const std::invalid_argument& e)
@@ -150,19 +160,21 @@ class ConsoleSupervisor : public CoreSupervisorBase
 			}
 			if(it != tokens.end() && ++it != tokens.end() /* Advances it */)
 			{
-				eventID = *it;
+				; //not needed (yet): eventID = *it;
 			}
 			if(it != tokens.end() && ++it != tokens.end() /* Advances it */)
 			{
-				module = *it;
+				; //not needed (yet): module = *it;
 			}
 			if(it != tokens.end() && ++it != tokens.end() /* Advances it */)
 			{
-				file = *it;
+				// file = *it;
+				fields[FieldType::FILE] = *it;
 			}
 			if(it != tokens.end() && ++it != tokens.end() /* Advances it */)
 			{
-				line = *it;
+				// line = *it;
+				fields[FieldType::LINE] = *it;
 			}
 			std::ostringstream oss;
 			bool               first = true;
@@ -178,20 +190,32 @@ class ConsoleSupervisor : public CoreSupervisorBase
 				}
 				oss << *it;
 			}
-			message = oss.str();
+			fields[FieldType::MSG] = oss.str();
+			// message = oss.str();
 
-			// init fields to position -1 (for unknown)s
-			// NOTE: must be in order of appearance in buffer
-			fields[FieldType::TIMESTAMP].set("Timestamp", 1, std::to_string(tv.tv_sec));
-			fields[FieldType::SEQID].set("SequenceID", 2, std::to_string(seqNum));
-			fields[FieldType::LEVEL].set("Level", 5, sev.getName());
-			fields[FieldType::LABEL].set("Label", 6, category);
-			fields[FieldType::SOURCEID].set(
-			    "SourceID", 7, std::to_string(pid));  // number
-			fields[FieldType::SOURCE].set("Source", 9, application);
-			fields[FieldType::FILE].set("File", 10, file);
-			fields[FieldType::LINE].set("Line", 11, line);
-			fields[FieldType::MSG].set("Msg", 12, message);
+
+			// fields[FieldType::TIMESTAMP] = std::to_string(tv.tv_sec);
+			// // fields[FieldType::SOURCEID] = std::to_string(seqNum);
+			// fields[FieldType::LEVEL] = sev.getName();
+			// fields[FieldType::LABEL] = category;
+			// // fields[FieldType::SOURCEID] = std::to_string(pid));  // number
+			// fields[FieldType::SOURCE] = application;
+			// fields[FieldType::FILE] = file;
+			// fields[FieldType::LINE] = line;
+			// fields[FieldType::MSG] = message;
+
+			// // init fields to position -1 (for unknown)s
+			// // NOTE: must be in order of appearance in buffer
+			// fields[FieldType::TIMESTAMP].set("Timestamp", 1, std::to_string(tv.tv_sec));
+			// fields[FieldType::SEQID].set("SequenceID", 2, std::to_string(seqNum));
+			// fields[FieldType::LEVEL].set("Level", 5, sev.getName());
+			// fields[FieldType::LABEL].set("Label", 6, category);
+			// fields[FieldType::SOURCEID].set(
+			//     "SourceID", 7, std::to_string(pid));  // number
+			// fields[FieldType::SOURCE].set("Source", 9, application);
+			// fields[FieldType::FILE].set("File", 10, file);
+			// fields[FieldType::LINE].set("Line", 11, line);
+			// fields[FieldType::MSG].set("Msg", 12, message);
 
 #if 0
 			for (auto& field : fields) {
@@ -235,30 +259,39 @@ class ConsoleSupervisor : public CoreSupervisorBase
 		void setCustomTriggerMatch(const CustomTriggeredAction_t& forcedCustomTriggerMatch) { customTriggerMatch = forcedCustomTriggerMatch; }
 		const CustomTriggeredAction_t& getCustomTriggerMatch() const { return customTriggerMatch; }
 		bool 		hasCustomTriggerMatchAction() const { return customTriggerMatch.action.size(); }
-		const std::string& getTime() const { return fields[FieldType::TIMESTAMP].fieldValue; }
-		void 			   setTime(time_t t) { fields[FieldType::TIMESTAMP].fieldValue = std::to_string(t); }
-		const std::string& getMsg() const { return fields[FieldType::MSG].fieldValue; }
-		const std::string& getLabel() const { return fields[FieldType::LABEL].fieldValue; }
-		const std::string& getLevel() const { return fields[FieldType::LEVEL].fieldValue; }
+		const std::string& getTime() const { return fields.at(FieldType::TIMESTAMP); }
+		void 			   setTime(time_t t) { fields[FieldType::TIMESTAMP] = std::to_string(t); }
+		const std::string& getMsg() const { return fields.at(FieldType::MSG); }
+		const std::string& getLabel() const { return fields.at(FieldType::LABEL); }
+		const std::string& getLevel() const { 
+			//identify 9+ levels as TRACE (mf calls them DEBUG)
+			if(getMsg().size() > 4)
+			{
+				if(getMsg()[0] == '9' && getMsg()[1] == ':') return ConsoleMessageStruct::LABEL_TRACE;
+				if(getMsg()[0] >= '1' && getMsg()[0] <= '3' &&
+					getMsg()[1] >= '0' && getMsg()[1] <= '9' &&
+				 	getMsg()[2] == ':') return ConsoleMessageStruct::LABEL_TRACE_PLUS;
+			}
+			return fields.at(FieldType::LEVEL); 
+		}
+		const std::string& getFile() const { return fields.at(FieldType::FILE); }
+		const std::string& getLine() const { return fields.at(FieldType::LINE); }
 
-		const std::string& getFile() const { return fields[FieldType::FILE].fieldValue; }
-		const std::string& getLine() const { return fields[FieldType::LINE].fieldValue; }
-
-		const std::string& getSourceID() const { return fields[FieldType::SOURCEID].fieldValue; }
+		const std::string& getSourceID() const { return fields.at(FieldType::SOURCEID); }
 		uint32_t    getSourceIDAsNumber() const
 		{
-			auto val = fields[FieldType::SOURCEID].fieldValue;
+			auto val = fields.at(FieldType::SOURCEID);
 			if(val != "")
 			{
 				return std::stoul(val);
 			}
 			return 0;
 		}
-		const std::string& getSource() const { return fields[FieldType::SOURCE].fieldValue; }
-		const std::string& getSequenceID() const { return fields[FieldType::SEQID].fieldValue; }
+		const std::string& getSource() const { return fields.at(FieldType::SOURCE); }
+		const std::string& getSequenceID() const { return fields.at(FieldType::SEQID); }
 		size_t      getSequenceIDAsNumber() const
 		{
-			auto val = fields[FieldType::SEQID].fieldValue;
+			auto val = fields.at(FieldType::SEQID);
 			if(val != "")
 			{
 				return std::stoul(val);
@@ -269,20 +302,20 @@ class ConsoleSupervisor : public CoreSupervisorBase
 		//count is incrementing number across all sources created at ConsoleSupervisor
 		size_t getCount() const { return countStamp; } 
 
-		// define field structure
-		struct FieldStruct
-		{
-			void set(const std::string& fn, const int mc, const std::string& fv)
-			{
-				fieldName   = fn;
-				fieldValue  = fv;
-				markerCount = mc;
-			}
+		// // define field structure
+		// struct FieldStruct
+		// {
+		// 	void set(const std::string& fn, const int mc, const std::string& fv)
+		// 	{
+		// 		fieldName   = fn;
+		// 		fieldValue  = fv;
+		// 		markerCount = mc;
+		// 	}
 
-			std::string fieldName;
-			std::string fieldValue;
-			int         markerCount;
-		};
+		// 	// std::string fieldName;
+		// 	std::string fieldValue;
+		// 	// int         markerCount;
+		// };
 
 		// define field index enum alias
 		enum class FieldType
@@ -293,19 +326,24 @@ class ConsoleSupervisor : public CoreSupervisorBase
 			LEVEL,  // aka SEVERITY
 			LABEL,
 			SOURCEID,
+			HOSTNAME,
 			SOURCE,
 			FILE,
 			LINE,
 			MSG,
 		};
 
-		mutable std::unordered_map<FieldType, FieldStruct> fields;
+		mutable std::unordered_map<FieldType, std::string /* fieldValue */> fields;
+		static const std::map<FieldType, std::string /* fieldNames */> fieldNames;
 
 	  private:
 		size_t countStamp; //count is incrementing number across all sources created at ConsoleSupervisor
 		CustomTriggeredAction_t customTriggerMatch;
+
+		static const std::string LABEL_TRACE, LABEL_TRACE_PLUS;
 	}; //end ConsoleMessageStruct
 
+  private:
 	void 				addMessageToResponse				(HttpXmlDocument* xmlOut, ConsoleSupervisor::ConsoleMessageStruct& msg);
 	
 	std::deque<ConsoleMessageStruct> messages_;
@@ -320,7 +358,12 @@ class ConsoleSupervisor : public CoreSupervisorBase
 	xercesc::DOMElement* 					refreshParent_;
 
 	std::vector<CustomTriggeredAction_t>  		priorityCustomTriggerList_;
-	std::queue<CustomTriggeredAction_t>	 		customTriggerActionQueue_;			
+	std::queue<CustomTriggeredAction_t>	 		customTriggerActionQueue_;	
+
+	//for system status:
+	size_t 			errorCount_ = 0, warnCount_ = 0, infoCount_ = 0;
+	std::string 	lastErrorMessage_, lastWarnMessage_, lastInfoMessage_;
+	time_t			lastErrorMessageTime_ = 0, lastWarnMessageTime_ = 0, lastInfoMessageTime_ = 0;
 };
 
 // clang-format on

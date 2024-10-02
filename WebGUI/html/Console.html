@@ -405,7 +405,8 @@
 				//clearConsoleMessages()
 				//downloadMessages()
 				//requestOlderMessages()
-				//setMessageAchor()
+				//toggleMessageAnchor()
+				//scrollMessageAnchorIntoView()
 				
 				//toggleAdvancedControls()
 				//handleAdvancedGetTraceLevels(req)
@@ -479,6 +480,7 @@
 									"Line",
 									// "SequenceID", //not useful, increments for each source
 									"Custom",
+									"Hostname",
 									"Count" //global incrementing counter across all sources
 								  ];
 			var _MESSAGE_FIELD_LEVEL = _consoleMessageFields.indexOf("Level"),
@@ -488,6 +490,7 @@
 					_MESSAGE_FIELD_FILE = _consoleMessageFields.indexOf("File"), 
 					_MESSAGE_FIELD_COUNT = _consoleMessageFields.indexOf("Count"), 
 					_MESSAGE_FIELD_CUSTOM = _consoleMessageFields.indexOf("Custom"), 
+					_MESSAGE_FIELD_HOSTNAME = _consoleMessageFields.indexOf("Hostname"), 
 					_MESSAGE_FIELD_LINE = _consoleMessageFields.indexOf("Line");
 
 			var _consoleMessageArray; 			
@@ -502,7 +505,7 @@
 								 ["transparent", DesktopContent.getDefaultDesktopColor(), DesktopContent.getInvertedColor(DesktopContent.getDefaultDesktopColor())]
 								];
 			
-			var _FIELDS_TO_OBSERVE = ["Level", "Label", "Custom"];
+			var _FIELDS_TO_OBSERVE = ["Level", "Label", "Custom", "Hostname"];
 			var _FIELDS_TO_OBSERVE_CUSTOM = _FIELDS_TO_OBSERVE.indexOf("Custom");
 			var _observed = {}; 
 			for(var f in _FIELDS_TO_OBSERVE) //accumulate field values and their counts
@@ -932,6 +935,8 @@
 			         .replace(/%26/g, "&amp;")  			//&
 			         .replace(/%3C/g, "&lt;") 				//<
 			         .replace(/%3E/g, "&gt;")				//>
+			         .replace(/</g, "&lt;") 				//< (double check depending on how data was inserted by user)
+			         .replace(/>/g, "&gt;")					//> (double check depending on how data was inserted by user)
 			         .replace(/%22/g, "&quot;")				//"
 			         .replace(/%27/g, "&#039;")				//'
 			         .replace(/%0A%0D/g, "<br>")			//newline
@@ -987,6 +992,8 @@
 			var _localRefreshTimeout = _REFRESH_INTERVAL;
 			function handleRefreshConsole(req, param) 
 			{
+				Debug.logv({_scrollWithNewChats});
+
 				if(param && param == "prepend")
 				{
 					Debug.log("Prepending older messages!");				
@@ -1129,6 +1136,7 @@
 					
 					var labelKeys = Object.keys(_observed[_FIELDS_TO_OBSERVE[f]]);
 					var labelKey; //modify for Custom field
+					var anySelected = (MultiSelectBox.getSelectedCount(sel) > 0);
 					for(var i=0; i < labelKeys.length; ++i)
 					{
 						if(labelKeys[i].length == 0 || labelKeys[i][0] != '_')
@@ -1151,7 +1159,9 @@
 							selForFilter = true;
 
 						if(selForFilter) //bold and underline
-							fieldStr += "<a style='text-decoration:underline;font-weight:bold;'";
+							fieldStr += "<a style='text-decoration:underline; font-weight:bold;'";
+						else if(anySelected) //fade if unselected
+							fieldStr += "<a style='font-weight:normal; color:rgb(99 148 197);'";
 						else
 							fieldStr += "<a style='font-weight:normal;'";
 
@@ -1218,7 +1228,7 @@
 
 				updateSideBarCounts();
 
-				scrollMessageAchorIntoView();
+				scrollMessageAnchorIntoView();									
 
 			} //end toggleSideBarLabelFilter()
 			
@@ -1382,6 +1392,7 @@
 					tmp.Label = _consoleMessageArray[_MESSAGE_FIELD_LABEL][i].getAttribute('value');
 					tmp.Level = _consoleMessageArray[_MESSAGE_FIELD_LEVEL][i].getAttribute('value');
 					tmp.Custom = _consoleMessageArray[_MESSAGE_FIELD_CUSTOM][i].getAttribute('value');
+					tmp.Hostname = _consoleMessageArray[_MESSAGE_FIELD_HOSTNAME][i].getAttribute('value');
 					tmp.Count = _consoleMessageArray[_MESSAGE_FIELD_COUNT][i].getAttribute('value');
 					
 					firstMsg = _consoleMessageArray[_MESSAGE_FIELD_FILE][i].getAttribute('value') +
@@ -1405,7 +1416,7 @@
 					
 					//important to only have one /div> per entry for truncate
 					str += "<div class='consoleEntry consoleEntryId-" +
-						tmp.Count + "' onmouseup='setMessageAchor(this);' " + //" style='color:" + 
+						tmp.Count + "' onmouseup='toggleMessageAnchor(this);' " + //" style='color:" + 
 						//getColorForLevel(tmp.Level) +  //CHANGED to css based
 						"'>" +
 						"<span class='" + tmp.Label + "_LabelEntry'>" + 
@@ -1792,23 +1803,38 @@
 			} //end requestOlderMessages()
 
 			//=====================================================================================
-			function setMessageAchor(el) 
+			function toggleMessageAnchor(el) 
 			{				
-				Debug.log("setMessageAchor...",el.className);
+				Debug.log("toggleMessageAnchor...",el.className);
+
+				_scrollWithNewChats = false;
 
 				//clear existing anchor color
 				var els = document.getElementsByClassName(_messageAnchorClassname);
 				if (els.length) els[0].style.background = "transparent"; //return to default
+
+				if(_messageAnchorClassname == el.className) //then just toggle off
+				{
+					_messageAnchorClassname = "";
+					return;
+				}
+				//else new anchor
 				
 				_messageAnchorClassname = el.className;
 				el.style.background = _colorSchemes[_chosenColorScheme][2];
-			} //end setMessageAchor()
+			} //end toggleMessageAnchor()
 			//=====================================================================================
-			function scrollMessageAchorIntoView() 
+			function scrollMessageAnchorIntoView() 
 			{				
-				if(!_messageAnchorClassname || _messageAnchorClassname == "") return;
+				if(!_messageAnchorClassname || _messageAnchorClassname == "")
+				{
+					if(_scrollWithNewChats)
+						_historyEl.scrollTop = _historyEl.scrollHeight;
+					 return;
+				}
+				_scrollWithNewChats = false; //force to follow anchor
 
-				Debug.log("scrollMessageAchorIntoView...",_messageAnchorClassname);
+				Debug.log("scrollMessageAnchorIntoView...",_messageAnchorClassname);
 				// Select the element by class name
 				var els = document.getElementsByClassName(_messageAnchorClassname);
 
@@ -1816,7 +1842,7 @@
 				if (els.length)
 					els[0].scrollIntoView({ behavior: 'smooth', block: 'start' });
 				
-			} //end setMessageAchor()
+			} //end scrollMessageAnchorIntoView()
 
 			//=====================================================================================
 			function toggleAdvancedControls() 

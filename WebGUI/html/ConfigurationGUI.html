@@ -679,7 +679,8 @@
 			
 			var windowTooltip = "Welcome to the <b>Configuration GUI</b>. Here you can manipulate every configuration " +
 				"parameter in your entire <i>otsdaq</i> system. \n\n" +
-				"If you are new to configuring <i>otsdaq</i>, take a look at the <a href='https://otsdaq.fnal.gov/tutorials/first_demo/topics/configuration_primer.html' target='_blank'>otsdaq Configuration Primer</a>. There are also many helpful <a href='https://otsdaq.fnal.gov/tutorials_v2/' target='_blank'>tutorials</a> on configuring <i>otsdaq</i>.\n\n" +
+				"If you are new to configuring <i>otsdaq</i>, take a look at the " + 
+				"<a href='https://otsdaq.fnal.gov/tutorials/first_demo/topics/configuration_primer.html' target='_blank'>otsdaq Configuration Primer</a>. There are also many helpful <a href='https://otsdaq.fnal.gov/tutorials_v2/' target='_blank'>tutorials</a> on configuring <i>otsdaq</i>.\n\n" +
 				"The organization of the <b>Configuration GUI</b> is as follows:\n" +
 				"There are links at the top of the page to switch between the main views" +
 				" '<b>System View</b>', '<b>Group View</b>', and " +
@@ -688,13 +689,13 @@
 				"and then below that is the view content.\n\n" +
 				
 				"Briefly, here is a description of the main views: " +
-				"\n\t- <b>System View:</b>\n<INDENT>This view is for viewing and editing the translation from System Aliases to groups.</INDENT>" +
+				"\n\t- <b>System View:</b>\n<INDENT>This view is for viewing and editing the translation from System Aliases to groups of tables, and for viewing the latest activity of your system and other subsystems sharing your configuration database.</INDENT>" +
 				"\n\t- <b>Group View:</b>\n<INDENT>This view is for viewing and editing groups of tables.</INDENT>" +
 				"\n\t- <b>Table View:</b>\n<INDENT>This view is for viewing and editing tables.</INDENT>" +
 				"\n\n" +
 				"There is one more type of view you will frequent as you grow familiar with the Configuration GUI and that is the '<b>Tree-view</b>'. " +
-				"Briefly, the 'Tree-view' is a way of viewing tables that are linked together - " +
-				"each group can be viewed in 'Tree-view' format. The tree-view is hierarchical abstraction from the collection of row and column data from multiple tables.";
+				"Briefly, the 'Tree-view' is a way of viewing linked together tables  - " +
+				"any group of tables can be viewed in 'Tree-view' format. The tree-view is a hierarchical abstraction, a parent-child view, of the row and column data from the selected tables.";
 
 
 			DesktopContent.tooltip("Configuration GUI Introduction",
@@ -1045,53 +1046,72 @@
 			}
 
 			DesktopContent.tooltip("System View",
-				"You are currently looking at your configuration through the 'System View.' " +
-				"From this view you can see existing System Aliases, edit them, " +
-				"and create new ones." +
-				"\n\n" +
-				"It is important to note that the Backbone group has a table called " +
+				"You are currently looking at your configuration through the '<b>System View</b>.'  " +
+				"From this view you can see existing System Aliases (as defined by your Active Backbone group), edit them, " +
+				"and create new ones; you can also see the latest activity of your system and other subsystems sharing your configuration database. Let's rundown the '<b>System View</b>' page:" +
+				"\n" +
+				"\n\t- <b>System View Menu:</b>\n<INDENT>" +
+				"At the top-left of the page, there is a <b>&gt;&gt;</b> menu icon where there is access to some powerful system level macros. " +
+				"Be careful with these, as they can shutdown or collapse your entire ots system or configuration database." +
+				"</INDENT>" +
+				"\n\t- <b>Latest Activity Section:</b>\n<INDENT>" +
+				"The top section of the page shows the latest table group activity of your system. " +
+				"<li>It shows you the last Configuration-type table group that was used during the <b>configure</b> and <b>run</b> transitions of your FSM (Finite State Machine). " +
+				"<li>Then it shows the last successfully <b>Activated</b> table groups of each type (i.e. Configure, Iterate, Backbone, and Context), and the time each group was activated. " +
+				"<li>Finally it shows the currently <b>Selected</b> table groups, which would be the default table groups on ots restart. " +
+				"</INDENT>" +
+				"\n\t- <b>(Optional) Other Subsystems Section:</b>\n<INDENT>" +
+				"If you have enabled other subsystems, by including the '<b>SubsystemUserDataPaths</b>' table in your active Context Group, then the next section down will be a view of the other subsystems you are tracking. " +
+				"At the top of this section, is a list of subsystem names. If you click a subsyste name, it will generate a view of that subsystems table group activity (similar to your latest system activity view above)." +
+				"</INDENT>" +
+				"\n\t- <b>System Alias Section:</b>\n<INDENT>" +
+				"<li>This section shows all of the System Aliases defined in your Active Backbone group. " +
+				"<li>It is important to note that the Backbone group has a table called " +
 				"'GroupAliases' and this is the table that defines your " +
-				"System Aliases (Clicking <i>Edit System Aliases</i> at the top of " +
-				"this view will take you to the 'GroupAliases' table). " +
-				"The System Aliases defined in the Active Backbone group are what you " +
-				"are seeing now!\n\n" +
-				"You can edit and create System Aliases from this view. All of the links " +
-				"with <i>Wiz-</i> in the name will either edit or create a System Alias for you. " +
-				"The wiz process you select, under the hood, will modify the currently active " +
-				"'GroupAliases' table, save it, create a new Backbone group with the new 'GroupAliases' " +
-				"table as a member, and activate the new Backbone group. Handling many steps for you " +
-				"like a wiz!" +
-				"\n\n" +
-				"There are two key terms you will find in the 'System View' involving 'Latest' and " +
-				"'Active'; here is a brief " +
-				"description of each: " +
-				"<INDENT>" +
-				"- <b>Wiz-to-Latest:</b>" +
-				"<INDENT>" +
-				"This will setup a System Alias to refer to a group comprised " +
-				"of the latest/newest versions of each table in the group. When you select this route, you will " +
-				"be prompted for the group type: Context, Backbone, or Configuration. " +
-				"For example, if you select the table group type, then a table group consisting of the " +
-				"latest versions of each table, that are not members of Context or Backbone table groups, will be " +
-				"created, the active 'GroupAliases' table will be modified to include a System Alias to the" +
-				"new table group, the modified 'GroupAlias' table will saved as a new version, " +
-				"and a new Backbone table group (with that new 'GroupAlias' table as a member) will be created and activated. Very handy!" +
+				"System Aliases (Clicking any of the <b>System Aliases</b> will take you to the 'GroupAliases' table and allow editing). " +
+				"<li>In order to launch the configure transition of your FSM, you must provide the name of a " +
+				"<b>System Alias</b> as an input - this System Alias name, which is easier to remember than a particular table group name, will translate to a Configure-type table group as shown in this view for every configurable entity in your <i>ots</i> system." +
 				"</INDENT>" +
-				"</INDENT>" +
-				"<INDENT>" +
-				"- <b>Wiz-to-Active:</b>" +
-				"<INDENT>" +
-				"This will setup a System Alias to refer to one of the Active groups. " +
-				"When you select this route, you will " +
-				"be prompted for the table group type: Context, Backbone, or Configuration." +
-				"For example, if you select the table group type, then the active 'GroupAliases' table " +
-				"will be modified to include a System Alias to the" +
-				"currently Active table group, the modified 'GroupAlias' table will saved as a new version, " +
-				"and a new Backbone group (with that new 'GroupAlias' table as a member) will be created and activated. Also very handy!" +
-				"</INDENT>" +
-				"</INDENT>" +
-				"\n\nRemember, if you would like to take a look at the available online documentation, " +
-				"click the question mark at the top of the page.\n\n"
+				// "\n\n" +
+				// "You can edit and create System Aliases from this view. All of the links " +
+				// "with <i>Wiz-</i> in the name will either edit or create a System Alias for you. " +
+				// "The wiz process you select, under the hood, will modify the currently active " +
+				// "'GroupAliases' table, save it, create a new Backbone group with the new 'GroupAliases' " +
+				// "table as a member, and activate the new Backbone group. Handling many steps for you " +
+				// "like a wiz!" +
+				// "\n\n" +
+				// "There are two key terms you will find in the 'System View' involving 'Latest' and " +
+				// "'Active'; here is a brief " +
+				// "description of each: " +
+				// "<INDENT>" +
+				// "- <b>Wiz-to-Latest:</b>" +
+				// "<INDENT>" +
+				// "This will setup a System Alias to refer to a group comprised " +
+				// "of the latest/newest versions of each table in the group. When you select this route, you will " +
+				// "be prompted for the group type: Context, Backbone, or Configuration. " +
+				// "For example, if you select the table group type, then a table group consisting of the " +
+				// "latest versions of each table, that are not members of Context or Backbone table groups, will be " +
+				// "created, the active 'GroupAliases' table will be modified to include a System Alias to the" +
+				// "new table group, the modified 'GroupAlias' table will saved as a new version, " +
+				// "and a new Backbone table group (with that new 'GroupAlias' table as a member) will be created and activated. Very handy!" +
+				// "</INDENT>" +
+				// "</INDENT>" +
+				// "<INDENT>" +
+				// "- <b>Wiz-to-Active:</b>" +
+				// "<INDENT>" +
+				// "This will setup a System Alias to refer to one of the Active groups. " +
+				// "When you select this route, you will " +
+				// "be prompted for the table group type: Context, Backbone, or Configuration." +
+				// "For example, if you select the table group type, then the active 'GroupAliases' table " +
+				// "will be modified to include a System Alias to the" +
+				// "currently Active table group, the modified 'GroupAlias' table will saved as a new version, " +
+				// "and a new Backbone group (with that new 'GroupAlias' table as a member) will be created and activated. Also very handy!" +
+				// "</INDENT>" +
+				// "</INDENT>" +
+				"\n\nRemember, there is the <a href='https://otsdaq.fnal.gov/tutorials/first_demo/topics/configuration_primer.html' target='_blank'>otsdaq Configuration Primer</a> " +
+				"and <a href='https://otsdaq.fnal.gov/tutorials_v2/' target='_blank'>tutorials</a> on configuring <i>otsdaq</i>. " +
+				"If you want to reach out with questions or suggestions, you can open an <a href='https://github.com/art-daq/otsdaq/issues' target='_blank'>issue</a>." +				
+				"\n\n"
 			);
 
 			activateTableGroupHandler(req); //display active config groups			
@@ -1133,7 +1153,7 @@
 			//show active backbone and config
 			function localShowActiveBackboneAndConfig() 
 			{
-				var activeConfigHeaders = ["Context", "Backbone", "Iterate Group", "Configuration"];
+				var activeConfigHeaders = ["Context", "Backbone", "Iterate Group", "Configure Group"];
 
 				str += "<table id='systemViewActiveTable' cellpadding='0' cellspacing='0' border='0' >"; //open active groups table
 
@@ -1146,10 +1166,10 @@
 					//if (i == activeConfigHeaders.length - 1) //for last configured 
 					//	str += "Last Activated " + activeConfigHeaders[i] + ": ";
 					//else	//for backbone, iterate
-					if(i != 3)
-						str += "Currently Active " + activeConfigHeaders[i] + ": ";
-					else
-						str += "Current Editor " + activeConfigHeaders[i] + ": ";
+					// if(i != 3)
+						str += "Selected " + activeConfigHeaders[i] + ": ";
+					// else
+					// 	str += "Current Editor " + activeConfigHeaders[i] + ": ";
 
 					str += "</td><td style='text-align:left; padding-left:20px;'>";
 
@@ -1211,7 +1231,7 @@
 								str += "Last Run Started by FSM: ";
 								break;
 							case 2:
-								str += "Last Editor Config: ";
+								str += "Last Activated Configure Group: ";
 								break;
 							case 3:
 								str += "Last Activated Iterate Group: ";
@@ -1237,10 +1257,10 @@
 								str += "Last Run Started by FSM ";
 								break;
 							case 2:
-								str += "Last Activated Config ";
+								str += "Last Activated Configure Group ";
 								break;
 							case 3:
-								str += "Last Activated Iterate ";
+								str += "Last Activated Iterate Group ";
 								break;
 							case 4:
 								str += "Last Activated Backbone ";
@@ -1307,14 +1327,14 @@
 				str += DesktopContent.htmlOpen("div",
 					{
 						"id": "subsystemTable",	
-						"style" : "background-color: 	rgb(218, 194, 194);",
+						"style" : "background-color: 	rgb(218, 194, 194); padding-left: 30px",
 					},
 					"" /*innerHTML*/,
 					false /*doCloseTag*/);
 				str += "</br>";
 				for(var i=0;i<_subsystemNames.length;++i)
 				{
-					str +=  "&nbsp;&nbsp; ";
+					if(i) str +=  "&nbsp;&nbsp; ";
 					str += DesktopContent.htmlOpen("a",
 						{
 							"onclick": "loadSubsystemFocus(\"" + _subsystemNames[i] + "\");",
@@ -1346,13 +1366,13 @@
 			str += "<u>System Alias</u>";
 			str += "</th><th>";
 			str += "<u>Translation</u>";
-			str += "</th><th colspan='4'>";
+			str += "</th><th colspan='2'>";//"</th><th colspan='4'>";
 			str += "";
 			str += "<th style='text-align:left;padding-left: 20px;'>";
-			str += "<u>Alias Comment</u>";
+			str += "<u>Group Comment</u>";
 			str += "</th>";
 			str += "<th style='text-align:left;padding-left: 20px;'>";
-			str += "<u>Group Comment</u>";
+			str += "<u>Alias Comment</u>";
 			str += "</th>";
 			str += "</tr>";
 
@@ -1413,7 +1433,7 @@
 				str += "Tree-view</a>";
 
 
-				str += "</td><td style='text-align:left; padding: 0 0 0 10px;'>";
+				str += "</td><td style='text-align:left; padding: 0 10px 0 10px;'>";
 
 
 				//add Activate link
@@ -1424,30 +1444,39 @@
 				str += "Activate</a>";
 
 
-				str += "</td><td style='text-align:left; padding: 0 0 0 10px;'>";
+				// str += "</td><td style='text-align:left; padding: 0 0 0 10px;'>";
 
 
-				//Wiz to latest of all tables
-				str += " <a onclick='" +
-					//"wizToLatestTableGroup(\"" + groupAlias + "\"); return false;' "+
-					"popUpGroupAliasForm(1,\"" + groupAlias + "\"); return false;' " +
-					"title='Automatically assign this System Alias to a Group comprised of the latest table versions.'" +
-					">";
-				str += "Wiz-to-Latest</a>";
+				// //Wiz to latest of all tables
+				// str += " <a onclick='" +
+				// 	//"wizToLatestTableGroup(\"" + groupAlias + "\"); return false;' "+
+				// 	"popUpGroupAliasForm(1,\"" + groupAlias + "\"); return false;' " +
+				// 	"title='Automatically assign this System Alias to a Group comprised of the latest table versions.'" +
+				// 	">";
+				// str += "Wiz-to-Latest</a>";
 
 
-				str += "</td><td style='text-align:left; padding: 0 10px 0 10px;'>";
+				// str += "</td><td style='text-align:left; padding: 0 10px 0 10px;'>";
 
 
-				//Wiz to active config group
-				str += " <a onclick='" +
-					//"wizToInitializedConfigGroup(\"" + groupAlias + "\"); return false;' " +
-					"popUpGroupAliasForm(0,\"" + groupAlias + "\"); return false;' " +
-					"title='Automatically assign this System Alias to the Active Group.'" +
-					">";
-				str += "Wiz-to-Active</a>";
+				// //Wiz to active config group
+				// str += " <a onclick='" +
+				// 	//"wizToInitializedConfigGroup(\"" + groupAlias + "\"); return false;' " +
+				// 	"popUpGroupAliasForm(0,\"" + groupAlias + "\"); return false;' " +
+				// 	"title='Automatically assign this System Alias to the Active Group.'" +
+				// 	">";
+				// str += "Wiz-to-Active</a>";
 
 
+				// str += "</td>";
+
+
+				//add group comment
+				str += "<td style='border-left: 2px solid rgb(140, 86, 86); " +
+						"text-align:left; padding: 0 10px 0 10px;' " +
+						"title='For...    " + groupName + "(" + groupKey + ")' " +
+						">"
+				str += "<pre style='white-space:nowrap;'>//" + groupComment + "</pre>";
 				str += "</td>";
 
 				//add alias comment
@@ -1457,14 +1486,6 @@
 						groupName + "(" + groupKey + ")>' " +
 						">"
 				str += "<pre style='white-space:nowrap;'>//" + aliasComment + "</pre>";
-				str += "</td>";
-
-				//add group comment
-				str += "<td style='border-left: 2px solid rgb(140, 86, 86); " +
-						"text-align:left; padding: 0 10px 0 10px;' " +
-						"title='For...    " + groupName + "(" + groupKey + ")' " +
-						">"
-				str += "<pre style='white-space:nowrap;'>//" + groupComment + "</pre>";
 				str += "</td>";
 
 				str += "</tr>";
@@ -1533,7 +1554,7 @@
 
 					var el = document.getElementById("subsystemTableFocusDiv");
 
-					var activeConfigHeaders = ["Context", "Backbone", "Iterate Group", "Configuration"];
+					var activeConfigHeaders = ["Context", "Backbone", "Iterate Group", "Configure Group"];
 
 					var str = "";
 					str += "<table id='subsystemViewActiveTable' cellpadding='0' cellspacing='0' border='0' >"; //open active groups table
@@ -1547,10 +1568,10 @@
 						//if (i == activeConfigHeaders.length - 1) //for last configured 
 						//	str += "Last Activated " + activeConfigHeaders[i] + ": ";
 						//else	//for backbone, iterate
-						if(i != 3)
-							str += "Currently Active " + activeConfigHeaders[i] + ": ";
-						else
-							str += "Current Editor " + activeConfigHeaders[i] + ": ";
+						// if(i != 3)
+							str += "Selected " + activeConfigHeaders[i] + ": ";
+						// else
+						// 	str += "Current Editor " + activeConfigHeaders[i] + ": ";
 
 						str += "</td><td style='text-align:left; padding-left:20px;'>";
 
@@ -1612,7 +1633,7 @@
 									str += "Last Run Started by FSM: ";
 									break;
 								case 2:
-									str += "Last Editor Config: ";
+									str += "Last Activated Configure Group: ";
 									break;
 								case 3:
 									str += "Last Activated Iterate Group: ";
@@ -1638,10 +1659,10 @@
 									str += "Last Run Started by FSM ";
 									break;
 								case 2:
-									str += "Last Activated Config ";
+									str += "Last Activated Configure Group ";
 									break;
 								case 3:
-									str += "Last Activated Iterate ";
+									str += "Last Activated Iterate Group ";
 									break;
 								case 4:
 									str += "Last Activated Backbone ";
@@ -6018,6 +6039,15 @@
 			versionTrackingHandler(req);
 
 			ConfigurationAPI.extractActiveGroups(req); //also capture active groups in API members for future compatibility
+
+			if(ConfigurationAPI._configUsername)
+			{
+				//add to title header
+				var el = document.getElementById("configHeader");
+				if(el)
+					el.innerHTML = "Configuration Editor" + " <label style='font-size:12px'>user: " + ConfigurationAPI._configUsername + "</label>";
+			}
+
 			_activeTableGroups = [
 				DesktopContent.getXMLValue(req, "Context-ActiveGroupName"),
 				DesktopContent.getXMLValue(req, "Context-ActiveGroupKey"),
@@ -6048,7 +6078,7 @@
 			{
 				if(i == 1 || i == 2) continue; //only context and config
 				
-				str += "<tr><td style='text-align:left'>";
+				str += "<tr><td style='text-align:left; white-space: nowrap;'>";
 
 				if(i != 3) //not config		
 					str += "Active ";
@@ -6057,12 +6087,12 @@
 
 				str += activeConfigHeaders[i] + ": ";
 
-				str += "</td><td style='text-align:left; padding-left:20px;'>";
+				str += "</td><td style='text-align:left; padding-left:20px; white-space: nowrap;'>";
 
 				if(activeTableGroupAliases[i] && activeTableGroupAliases[i] != "")
 					str += "&quot;" + activeTableGroupAliases[i] + "&quot; ";
 
-				str += "</td><td style='text-align:left; padding-left:20px;'>";
+				str += "</td><td style='text-align:left; padding-left:20px; white-space: nowrap;'>";
 
 				if (!_activeTableGroups[i * 2] || _activeTableGroups[i * 2] == "") 
 				{
@@ -8015,6 +8045,9 @@
 						if (ww < 150) ww = 150;
 						str += "<input type='text' " +
 							"id='fixedChoice-editTextBox' " +
+							"onkeydown='keyHandler(event)' " +
+							"onmouseup='event.stopPropagation();' " +
+							"onclick='event.stopPropagation();' " +
 							"style='display:none;" +
 							"float:left;" +
 							"margin:-2px 0 -" + (el.offsetHeight + 6) + "px 0;" +
@@ -8978,6 +9011,9 @@
 						{
 							str += "<input type='text' " +
 								"id='fixedChoice-editTextBox' " +
+								"onkeydown='keyHandler(event)' " +
+								"onmouseup='event.stopPropagation();' " +
+								"onclick='event.stopPropagation();' " +
 								"style='display:none;" +
 								"float:left;" +
 								"margin:-2px 0 -" + (el.offsetHeight - 10) + "px 0;" +
@@ -9160,6 +9196,9 @@
 							{
 								str += "<input type='text' " +
 									"id='fixedChoice-editTextBox' " +
+									"onkeydown='keyHandler(event)' " +
+									"onmouseup='event.stopPropagation();' " +
+									"onclick='event.stopPropagation();' " +
 									"style='display:none;" +
 									"float:left;" +
 									"margin:-2px 0 -" + (el.offsetHeight - 10) + "px 0;" +
@@ -9265,6 +9304,9 @@
 				{
 					str += "<input type='text' " +
 						"id='fixedChoice-editTextBox' " +
+						"onkeydown='keyHandler(event)' " +
+						"onmouseup='event.stopPropagation();' " +
+						"onclick='event.stopPropagation();' " +
 						"style='display:none;" +
 						"float:left;" +
 						"margin:-2px 0 -" + (el.offsetHeight - 10) + "px 0;" +
@@ -9399,6 +9441,9 @@
 				{
 					str += "<input type='text' " +
 						"id='fixedChoice-editTextBox' " +
+						"onkeydown='keyHandler(event)' " +
+						"onmouseup='event.stopPropagation();' " +
+						"onclick='event.stopPropagation();' " +
 						"style='display:none;" +
 						"float:left;" +
 						"margin:-2px 0 -" + (el.offsetHeight - 10) + "px 0;" +
@@ -18186,7 +18231,7 @@
 
 <body onload='//init() called by DesktopContent.js'>
 
-	<h1>Configuration Editor</h1>
+	<h1 id='configHeader'>Configuration Editor</h1>
 
 	<div style='width:550px'>
 

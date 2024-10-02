@@ -34,15 +34,15 @@ function init()
 		"will be treated as though they come from fully priveleged administrators. " +
 		"The only security is afforded by keeping your URL unknown (like on a private network)." +
 		"\n\n" +
-		"This mode is usually convenient during development when no hardware is at stake." +
+		"This mode is usually convenient during development or when there are only a few users, and " +
+		"there is no need for permissions restrictions or tracking individual user activity." +
 		"</INDENT>" +
 		"\n\t- <b>Digest Access Authentication:</b>\n<INDENT>" +
-		"This is a straightforward username and password approach to security. " +
-		"Included in this selection, when using a HTTPS gateway, is CILOGON certificate access if users associate and email " +
-		"address with their accounts." +
-		"Users can be assigned different levels of access individually." +
+		"This is a straightforward username and password approach to security. " +		
+		"Users can be assigned different levels of access individually. " +
+		"If users associate an email address with their username, then alerts, alarms, and system messages can be sent to a selection of users." +
 		"\n\n" +
-		"This mode, behind the ots HTTPS nodejs gateway, is the recommended <i>otsdaq</i> security approach." +
+		"This mode is the recommended <i>otsdaq</i> security approach to enable individual user access and accountability." +
 		"</INDENT>";
 	console.log("init()");
 	DesktopContent.tooltip("Security in the Wiz-Mode",
@@ -336,6 +336,7 @@ function editSecurityHandler(req)
 		Debug.log("Digest Access Authentication was enabled successfully!" + 
 				"\n\n NOTE: If this is the first time you are enabling users and passwords, " +
 				"then you must get the New Account Code for the admin account from " +
+				"the Edit User Accounts window (in User Settings folder of wiz mode) or " +
 				"the printouts in normal mode. In verbose mode ('ots -v'), the admin New Account Code will be in the linux console; " +
 				"otherwise ('ots'), the admin New Account Code can be retrieved in the Gateway log file. " +
 				"\n\nAfter the admin account has been setup, new accounts can be made and " +

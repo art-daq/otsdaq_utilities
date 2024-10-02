@@ -60,11 +60,12 @@ function init()
     
     collapsibleList();
 
+    //define relogin handler
     DesktopContent._loginNotifyHandler = function()
     {    	
     	Debug.log("Handling login notification...");
 		Debug.closeErrorPop();
-    	//updateAppsArray(); //define relogin handler
+    	//updateAppsArray(); 
     	init();
     } //end login notify handler
 	
@@ -459,6 +460,8 @@ function displayTable(appsArray)
     {
         var headerCell = document.createElement("TH");
         headerCell.innerHTML = columnNames[i];
+        if(columnNames[i] == "Detail")
+            headerCell.style = 'text-align: left; padding-left: 50px;';
         row.appendChild(headerCell);
     }
 
@@ -537,7 +540,8 @@ function displayTable(appsArray)
 
                         if (progressNum == 100)
                             cell.innerHTML = "Done";
-                        else {
+                        else 
+                        {
                             //scale progress bar to width of cell (66px)
 
                             var progressPX = ((66 * progressNum / 100) | 0);
@@ -552,12 +556,11 @@ function displayTable(appsArray)
                     {
                         var statusString = appsArray[i][columnKeys[j]];
 
-                        try {
+                        try { //some states can provide error detail after ":::" marker (ignore extra detail for now)
                             statusString = statusString.split(":::")[0];
                         }
-                        catch (e) {
-                            str = "UNKNOWN";
-                            Debug.log("What happened? " + e);
+                        catch (e) { //ignore split error
+                            ; // Debug.log("What happened? " + e);
                         }
 
 
@@ -601,15 +604,22 @@ function displayTable(appsArray)
 
                         cell.innerHTML = statusString;
                     }
-                    else if (columnKeys[j] == "detail") {
-                        cell.innerHTML = decodeURIComponent(appsArray[i][columnKeys[j]]);
-                    } else if (columnKeys[j] == "context") {
+                    else if (columnKeys[j] == "detail") 
+                    {
+                        var tmpDetail = decodeURIComponent(appsArray[i][columnKeys[j]]);
+                        if(tmpDetail.length > 150)
+                            tmpDetail = tmpDetail.substr(0,150) + "...";
+                        cell.innerHTML = tmpDetail;
+                    } 
+                    else if (columnKeys[j] == "context") 
+                    {
                         // Skip to make things look better
                     }
                     else
                         cell.innerHTML = appsArray[i][columnKeys[j]];
 
-                    if (columnKeys[j] == "status") {
+                    if (columnKeys[j] == "status") 
+                    {
                         cell.style.textAlign = "center";
                         cell.className = "statusCell";
 
@@ -684,10 +694,12 @@ function displayTable(appsArray)
                         {
                             var statusString = subappInfo[columnKeys[j]];
 
-                            try {
+                            try 
+                            {
                                 statusString = statusString.split(":::")[0];
                             }
-                            catch (e) {
+                            catch (e) 
+                            {
                                 str = "UNKNOWN";
                                 Debug.log("What happened? " + e);
                             }
@@ -733,10 +745,12 @@ function displayTable(appsArray)
 
                             cell.innerHTML = statusString;
                         }
-                        else if (columnKeys[j] == "detail") {
+                        else if (columnKeys[j] == "detail") 
+                        {
                             cell.innerHTML = decodeURIComponent(subappInfo[columnKeys[j]]);
                         }
-                        else if (columnKeys[j] == "context" || columnKeys[j] == "id") {
+                        else if (columnKeys[j] == "context" || columnKeys[j] == "id" || columnKeys[j] == "action") 
+                        {
                             // Subapps don't have these
                         }
                         else
@@ -864,6 +878,8 @@ function collapsibleList()
 		collapsible[i].addEventListener("click", 
 				function(e) 
 				{
+            e.stopImmediatePropagation();
+            e.stopPropagation();
 			Debug.log("click handler " + this.nextElementSibling.id);
 
 			this.firstElementChild.style.visibility = "hidden";  // make help tooltip hidden
@@ -1032,7 +1048,6 @@ function getFilteredArray(filterName, type)
 // generic function that can be used to get union/intersection of two arrays of objects
 function setIntersection(list1, list2) 
 {
-
     result = [];
     for (let i = 0; i < list1.length; i++) 
     {
@@ -1055,9 +1070,10 @@ function setIntersection(list1, list2)
 //	save one check user preference to server
 function saveCheckedUserPreferences(className, elementName, checked)
 {
-    DesktopContent.XMLHttpRequest("Request?RequestType=SaveAppsStatusUserPreferences", 
-    "className=" + className +
-    "&elementName=" + elementName +
-    "&checked=" + (checked?1:0));
-    console.log(className, elementName, checked);
+    //TODO if wanted
+    // DesktopContent.XMLHttpRequest("Request?RequestType=SaveAppsStatusUserPreferences", 
+    //     "className=" + className +
+    //     "&elementName=" + elementName +
+    //     "&checked=" + (checked?1:0));
+    Debug.log(className, elementName, checked);
 } // end of saveCheckedUserPreferences()

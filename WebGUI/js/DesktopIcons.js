@@ -154,7 +154,10 @@ else {
 		    	var err;
 		    	if((err = Desktop.getXMLValue(req,"Error")) && err != "")
 		    	{
-		    		Debug.log("Error: " + err, Debug.HIGH_PRIORITY);
+					if(err.indexOf("Remote Desktop Icons") > 0) //demote to warning
+						Debug.warn("Warning: " + err);
+		    		else					
+						Debug.err("Error: " + err, Debug.HIGH_PRIORITY);
 		    		//try to power through error //return;		    		
 		    	}
 		    	
@@ -265,6 +268,8 @@ else {
 
 			while(folderPath.length && folderPath[0] == '/') //remove leading '/'s
 				folderPath = folderPath.substr(1);
+			while(folderPath.length && folderPath[folderPath.length-1] == '/') //remove trailing '/'s
+				folderPath = folderPath.substr(0,folderPath.length-1);
 			
 			var folderSplit = folderPath.split('/'); //root folder is first non empty index			
 			var rootFolderIndex;
@@ -726,8 +731,11 @@ else {
             if(type == "icon")
             {
             	var target = _openFolderPtr[1][key];
-            	//Icon object array (0-subtext, 1-altText, 2-linkurl, 3-uniqueWin, 4-picfn)            	           	
-            	Desktop.desktop.addWindow(target[0],"",target[2],target[3]);
+            	//Icon object array (0-subtext, 1-altText, 2-linkurl, 3-uniqueWin, 4-picfn)     
+				
+				//add folder path - to name
+				var folderPath = _openFolderPath.length > 1?(_openFolderPath + "/"):"";
+            	Desktop.desktop.addWindow(folderPath + target[0],"",target[2],target[3]);
             	//this.closeFolder(); 
             }
             else
