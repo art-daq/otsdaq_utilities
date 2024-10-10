@@ -82,6 +82,8 @@ ConsoleSupervisor::ConsoleSupervisor(xdaq::ApplicationStub* stub)
 	// attempt to make directory structure (just in case)
 	mkdir(((std::string)USER_CONSOLE_PREF_PATH).c_str(), 0755);
 	mkdir(((std::string)USER_CONSOLE_SNAPSHOT_PATH).c_str(), 0755);
+	
+	xoap::bind(this, &ConsoleSupervisor::resetConsoleCounts, "ResetConsoleCounts", XDAQ_NS_URI);
 
 	init();
 
@@ -128,6 +130,25 @@ void ConsoleSupervisor::destroy(void)
 {
 	// called by destructor
 }  // end destroy()
+
+
+//==============================================================================
+xoap::MessageReference ConsoleSupervisor::resetConsoleCounts(xoap::MessageReference /*message*/)
+{
+	__COUT_INFO__ << "Resetting Console Error/Warn/Info counts and preparing for new first messages." << __E__;
+
+	// lockout the messages array for the remainder of the scope
+	// this guarantees the reading thread can safely access the messages
+	std::lock_guard<std::mutex> lock(messageMutex_);
+	errorCount_ = 0;
+	firstErrorMessageTime_ = 0;	lastErrorMessageTime_= 0;
+	warnCount_ = 0;
+	firstWarnMessageTime_ = 0;	lastWarnMessageTime_= 0;
+	infoCount_ = 0;
+	firstInfoMessageTime_ = 0;	lastInfoMessageTime_= 0;
+
+	return SOAPUtilities::makeSOAPMessageReference("Done");
+}  // end resetConsoleCounts()
 
 //==============================================================================
 // messageFacilityReceiverWorkLoop ~~
@@ -276,18 +297,34 @@ try
 				//update system status
 				if(cs->messages_.back().getLevel() == "Error")
 				{
+					if(cs->errorCount_ == 0)
+					{
+						cs->firstErrorMessageTime_ = time(0);
+						cs->firstErrorMessage_ = cs->messages_.back().getMsg();
+					}
+
 					cs->lastErrorMessageTime_ = time(0);
 					++cs->errorCount_;
 					cs->lastErrorMessage_ = cs->messages_.back().getMsg();
 				}
 				else if(cs->messages_.back().getLevel() == "Warning")
 				{
+					if(cs->warnCount_ == 0)
+					{
+						cs->firstWarnMessageTime_ = time(0);
+						cs->firstWarnMessage_ = cs->messages_.back().getMsg();
+					}
 					cs->lastWarnMessageTime_ = time(0);
 					++cs->warnCount_;
 					cs->lastWarnMessage_ = cs->messages_.back().getMsg();
 				}
 				else if(cs->messages_.back().getLevel() == "Info")
 				{
+					if(cs->infoCount_ == 0)
+					{
+						cs->firstInfoMessageTime_ = time(0);
+						cs->firstInfoMessage_ = cs->messages_.back().getMsg();
+					}
 					cs->lastInfoMessageTime_ = time(0);
 					++cs->infoCount_;
 					cs->lastInfoMessage_ = cs->messages_.back().getMsg();
@@ -1760,6 +1797,12 @@ std::string ConsoleSupervisor::getStatusProgressDetail(void)
 	ss << ", Last Info (" << (lastInfoMessageTime_?StringMacros::getTimestampString(lastInfoMessageTime_):"0") << 
 		"): " << (lastInfoMessageTime_?StringMacros::encodeURIComponent(lastInfoMessage_):"");
 	ss << ", Info #: " <<  infoCount_;
+	ss << ", First Error (" << (firstErrorMessageTime_?StringMacros::getTimestampString(firstErrorMessageTime_):"0") << 
+		"): " << (firstErrorMessageTime_?StringMacros::encodeURIComponent(firstErrorMessage_):"");
+	ss << ", First Warn (" << (firstWarnMessageTime_?StringMacros::getTimestampString(firstWarnMessageTime_):"0") << 
+		"): " << (firstWarnMessageTime_?StringMacros::encodeURIComponent(firstWarnMessage_):"");
+	ss << ", First Info (" << (firstInfoMessageTime_?StringMacros::getTimestampString(firstInfoMessageTime_):"0") << 
+		"): " << (firstInfoMessageTime_?StringMacros::encodeURIComponent(firstInfoMessage_):"");
 
 	return ss.str();
 }  // end getStatusProgressDetail()

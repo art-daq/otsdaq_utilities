@@ -31,40 +31,42 @@ class ConsoleSupervisor : public CoreSupervisorBase
 	}; //end CustomTriggeredAction_t struct
 
 
-						ConsoleSupervisor					(xdaq::ApplicationStub* s);
-	virtual 			~ConsoleSupervisor					(void);
+								ConsoleSupervisor					(xdaq::ApplicationStub* s);
+	virtual 					~ConsoleSupervisor					(void);
 
-	void 				init								(void);
-	void 				destroy								(void);
+	void 						init								(void);
+	void 						destroy								(void);
 
-	virtual void		defaultPage							(xgi::Input* in, xgi::Output* out) override;
-	virtual void 		request								(const std::string&               requestType,
-	             		       								cgicc::Cgicc&                    cgiIn,
-	             		       								HttpXmlDocument&                 xmlOut,
-	             		       								const WebUsers::RequestUserInfo& userInfo) override;
-	virtual std::string getStatusProgressDetail				(void) override;
+	xoap::MessageReference 		resetConsoleCounts					(xoap::MessageReference message);
 
-	virtual void 		forceSupervisorPropertyValues		(void) override;  // override to force
-	                                                            // supervisor property
-	                                                            // values (and ignore user
-	                                                            // settings)
+	virtual void				defaultPage							(xgi::Input* in, xgi::Output* out) override;
+	virtual void 				request								(const std::string&               requestType,
+	             				       								cgicc::Cgicc&                    cgiIn,
+	             				       								HttpXmlDocument&                 xmlOut,
+	             				       								const WebUsers::RequestUserInfo& userInfo) override;
+	virtual std::string 		getStatusProgressDetail				(void) override;
 
-	void 				doTriggeredAction					(const CustomTriggeredAction_t& triggeredAction);
+	virtual void 				forceSupervisorPropertyValues		(void) override;  // override to force
+	                    		                                        // supervisor property
+	                    		                                        // values (and ignore user
+	                    		                                        // settings)
+
+	void 						doTriggeredAction					(const CustomTriggeredAction_t& triggeredAction);
 
 	std::atomic<bool>						customTriggerActionThreadExists_ = false;	
 	static const std::set<std::string> 		CUSTOM_TRIGGER_ACTIONS;
 
   private:
-	static void 		messageFacilityReceiverWorkLoop		(ConsoleSupervisor* cs);
-	static void 		customTriggerActionThread			(ConsoleSupervisor* cs);
-	void 				insertMessageRefresh				(HttpXmlDocument* xmldoc, const size_t lastUpdateCount);
-	void 				prependHistoricMessages				(HttpXmlDocument* xmlOut, const size_t earliestOnhandMessageCount);
-	
-	void 				addCustomTriggeredAction			(const std::string& triggerNeedle, const std::string& triggerAction, uint32_t priority = -1);
-	uint32_t			modifyCustomTriggeredAction			(const std::string& currentNeedle, const std::string& modifyType, const std::string& setNeedle, const std::string& setAction, uint32_t setPriority);
+	static void 				messageFacilityReceiverWorkLoop		(ConsoleSupervisor* cs);
+	static void 				customTriggerActionThread			(ConsoleSupervisor* cs);
+	void 						insertMessageRefresh				(HttpXmlDocument* xmldoc, const size_t lastUpdateCount);
+	void 						prependHistoricMessages				(HttpXmlDocument* xmlOut, const size_t earliestOnhandMessageCount);
 
-	void				loadCustomCountList					(void);
-	void				saveCustomCountList					(void);
+	void 						addCustomTriggeredAction			(const std::string& triggerNeedle, const std::string& triggerAction, uint32_t priority = -1);
+	uint32_t					modifyCustomTriggeredAction			(const std::string& currentNeedle, const std::string& modifyType, const std::string& setNeedle, const std::string& setAction, uint32_t setPriority);
+
+	void						loadCustomCountList					(void);
+	void						saveCustomCountList					(void);
 
   public:
 	// UDP Message Format:
@@ -362,8 +364,8 @@ class ConsoleSupervisor : public CoreSupervisorBase
 
 	//for system status:
 	size_t 			errorCount_ = 0, warnCount_ = 0, infoCount_ = 0;
-	std::string 	lastErrorMessage_, lastWarnMessage_, lastInfoMessage_;
-	time_t			lastErrorMessageTime_ = 0, lastWarnMessageTime_ = 0, lastInfoMessageTime_ = 0;
+	std::string 	lastErrorMessage_, lastWarnMessage_, lastInfoMessage_, firstErrorMessage_, firstWarnMessage_, firstInfoMessage_;
+	time_t			lastErrorMessageTime_ = 0, lastWarnMessageTime_ = 0, lastInfoMessageTime_ = 0, firstErrorMessageTime_ = 0, firstWarnMessageTime_ = 0, firstInfoMessageTime_ = 0;
 };
 
 // clang-format on

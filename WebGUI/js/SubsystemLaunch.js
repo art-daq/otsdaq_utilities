@@ -33,10 +33,12 @@ else if (typeof Globals == 'undefined')
 SubsystemLaunch.MENU_PRIMARY_COLOR = "rgb(220, 187, 165)";
 SubsystemLaunch.MENU_SECONDARY_COLOR = "rgb(130, 51, 51)";
 	
-SubsystemLaunch.SUBSYSTEM_FIELDS = ["name","url","status","progress","detail","lastStatusTime","configAlias","configAliasChoices","fsmMode"];
+SubsystemLaunch.SUBSYSTEM_FIELDS = ["name","url","status","progress","detail","lastStatusTime","configAlias","configAliasChoices","fsmMode","fsmIncluded"];
 SubsystemLaunch.SUBSYSTEM_FIELDS_NAME = SubsystemLaunch.SUBSYSTEM_FIELDS.indexOf("name");
-SubsystemLaunch.SUBSYSTEM_STATUS_FIELDS = ["name","url","status","progress","detail","lastStatusTime","configAlias","configAliasChoices","fsmMode","consoleErrCount","consoleWarnCount"];
+SubsystemLaunch.SUBSYSTEM_STATUS_FIELDS = ["name","url","status","progress","detail","lastStatusTime","configAlias","configAliasChoices","fsmMode","fsmIncluded","consoleErrCount","consoleWarnCount"];
 SubsystemLaunch.SUBSYSTEM_STATUS_FIELDS_STATUS = SubsystemLaunch.SUBSYSTEM_STATUS_FIELDS.indexOf("status");
+SubsystemLaunch.SUBSYSTEM_STATUS_FIELDS_INCLUDED = SubsystemLaunch.SUBSYSTEM_STATUS_FIELDS.indexOf("fsmIncluded");
+SubsystemLaunch.SUBSYSTEM_STATUS_FIELDS_ALIASES = SubsystemLaunch.SUBSYSTEM_STATUS_FIELDS.indexOf("configAliasChoices");
 SubsystemLaunch.subsystems = [];
 SubsystemLaunch.system = {};
 
@@ -55,6 +57,7 @@ SubsystemLaunch.create = function() {
 	//	init()
 	//	SubsystemLaunch.initSubsystemRecords()
 	//	SubsystemLaunch.extractSystemStatus(req)
+	//	SubsystemLaunch.resetConsoleCounts()
 	//
 
 	
@@ -68,7 +71,9 @@ SubsystemLaunch.create = function() {
 	//	displayStatus()
 	//
 	//		'public' member functions: -------
-	//	this.handleSubsystemActionSelect()
+	//	this.handleSubsystemActionSelect(el, subsystemIndex)
+	//	this.handleSubsystemConfigAliasSelect(value, subsystemIndex)
+	//	this.handleSubsystemFsmModeSelect(value, subsystemIndex)
 	//	this.launch()
 	//		- localLaunch()
 	//		- localSetSequenceOfRecords()
@@ -79,16 +84,15 @@ SubsystemLaunch.create = function() {
 	//		- localStop()	
 	//		- localRun()
 	//
-	//	this.toggleCheckboxDiv(i)
 	//	this.handleCheckbox(c)
 	
 
 	
 	
 	//for display
-	var _CHECKBOX_H = 40;
-	var _CHECKBOX_MIN_W = 240;
-	var _CHECKBOX_MAX_W = 540;
+	// var _CHECKBOX_H = 40;
+	// var _CHECKBOX_MIN_W = 240;
+	// var _CHECKBOX_MAX_W = 540;
 	var _LAUNCH_MIN_W = 525;
 	var _MARGIN = 20;
 
@@ -391,17 +395,32 @@ SubsystemLaunch.create = function() {
 				str += "</td></tr>";
 
 				//console err/warn count
-				str += "<tr><td id='systemStatus_consoleInfoCount' style='text-align: right; padding-right: 5px; padding-left: 5px; white-space: nowrap;'>";
+				str += "<tr><td rowspan=1 style='text-align: right; padding-right: 5px; padding-left: 5px; white-space: nowrap;'>";				
+				str += "<a onclick='SubsystemLaunch.resetConsoleCounts(-1);' id='systemStatus_consoleInfoCount' class='hover_link' title='Click to reset Console counts and relatch first messages'>";
 				str += SubsystemLaunch.system.consoleInfoCount;
-				str += "</td><td colspan=" + (numOfCols-1) + " style='text-align: left'>Last Console Info: <label id='systemStatus_consoleInfoMessage' class='subtext'></label>";
+				str += "</a>";
+				str += "</td><td colspan=" + (numOfCols-1) + " style='text-align: left'>First Console Info: <label id='systemStatus_consoleFirstInfoMessage' class='subtext'></label>";
+				// str += "</td></tr><tr><td colspan=" + (numOfCols-1) + " style='text-align: left'>";
+				str += "<br>";
+				str += "Last Console Info: <label id='systemStatus_consoleInfoMessage' class='subtext'></label>";
 				str += "</td></tr>";
-				str += "<tr><td id='systemStatus_consoleWarnCount' style='text-align: right; padding-right: 5px; padding-left: 5px; white-space: nowrap;'>";
+				str += "<tr><td rowspan=1 style='text-align: right; padding-right: 5px; padding-left: 5px; white-space: nowrap;'>";
+				str += "<a onclick='SubsystemLaunch.resetConsoleCounts(-1);' id='systemStatus_consoleWarnCount' class='hover_link' title='Click to reset Console counts and relatch first messages'>";
 				str += SubsystemLaunch.system.consoleWarnCount;
-				str += "</td><td colspan=" + (numOfCols-1) + " style='text-align: left'>Last Console Warning: <label id='systemStatus_consoleWarnMessage' class='subtext'></label>";
+				str += "</a>";
+				str += "</td><td colspan=" + (numOfCols-1) + " style='text-align: left'>First Console Warning: <label id='systemStatus_consoleFirstWarnMessage' class='subtext'></label>";
+				// str += "</td></tr><tr><td colspan=" + (numOfCols-1) + " style='text-align: left'>";
+				str += "<br>";
+				str += "Last Console Warning: <label id='systemStatus_consoleWarnMessage' class='subtext'></label>";
 				str += "</td></tr>";
-				str += "<tr><td id='systemStatus_consoleErrCount' style='text-align: right; padding-right: 5px; white-space: nowrap;'>";
+				str += "<tr><td rowspan=1 style='text-align: right; padding-right: 5px; white-space: nowrap;'>";
+				str += "<a onclick='SubsystemLaunch.resetConsoleCounts(-1);' id='systemStatus_consoleErrCount' class='hover_link' title='Click to reset Console counts and relatch first messages'>";
 				str += SubsystemLaunch.system.consoleErrCount;
-				str += "</td><td colspan=" + (numOfCols-1) + " style='text-align: left'>Last Console Error: <label id='systemStatus_consoleErrMessage' class='subtext'></label>";
+				str += "</a>";
+				str += "</td><td colspan=" + (numOfCols-1) + " style='text-align: left'>First Console Error: <label id='systemStatus_consoleFirstErrMessage' class='subtext'></label>";
+				// str += "</td></tr><tr><td colspan=" + (numOfCols-1) + " style='text-align: left'>";
+				str += "<br>";
+				str += "Last Console Error: <label id='systemStatus_consoleErrMessage' class='subtext'></label>";
 				str += "</td></tr>";
 
 
@@ -415,8 +434,8 @@ SubsystemLaunch.create = function() {
 
 			{ //subsystem control div -------------------------
 
-				var fields = ["Subsystem", "Configure Alias", "State", "Console", "Detail", "FSM Mode", "Manual FSM Action"];
-				var fieldIds = ["name", "configAlias", "status", "console", "detail", "fsmMode", "action"];
+				var fields = ["Included", "Subsystem", "Configure Alias", "State", "Console", "Detail", "FSM Mode", "Manual FSM Action"];
+				var fieldIds = ["fsmIncluded", "name", "configAlias", "status", "console", "detail", "fsmMode", "action"];
 
 				el = document.createElement("div");
 				el.setAttribute("id","subsystemDiv");
@@ -425,7 +444,50 @@ SubsystemLaunch.create = function() {
 				//make field header row
 				str += "<tr>";
 				for(var i=0; i<fieldIds.length; ++i)
-					str += "<th>" + fields[i] + "</th>";
+				{
+					if(fieldIds[i] == "fsmIncluded")
+					{
+						var allSubsystemsChecked = true;
+						for(var s=0; s<SubsystemLaunch.subsystems.length; ++s)
+							if(!SubsystemLaunch.subsystems[s].fsmIncluded) { allSubsystemsChecked = false; break; }
+
+						str += "<th onclick='var el = document.getElementById(\"subsystem_" + fieldIds[i] + "_checkbox_all\");" +
+									"var forFirefox = (el.checked = !el.checked); " +
+									"SubsystemLaunch.launcher.handleCheckbox(" + 
+									-1 + ", el);' style='cursor: pointer;' " +
+									"title='Click to include/exclude all Subsystems from the next run transition.' " +
+									">";						
+							str += "<div class='ssCheckbox' style='height: 20px; width: 20px;" +
+								"' >";
+								str += "<div class='pretty p-icon p-round p-smooth' >"; //p-smooth for slow transition
+									str += " <input type='checkbox' id='subsystem_" + fieldIds[i] + "_checkbox_all' " + 
+											"onclick='SubsystemLaunch.launcher.handleCheckbox(" + 
+											-1 + ", this);' " +
+											(allSubsystemsChecked?"checked":"") +
+											"/>";
+									str += "<div class='state p-success'>";
+										str += "<i class='icon mdi mdi-check'></i>";
+										str += "<label>" + "" + "</label>";
+									str += "</div>";
+								str += "</div>";
+							str += "</div>";
+						str += "</th>";
+
+						
+						// //create global toggle checkbox
+						// str += DesktopContent.htmlOpen("input",
+						// 	{
+						// 			"style" : 	"",									
+						// 			"type"	: 	"checkbox",
+						// 			"id"	: 	"subsystem_all_checkbox",
+						// 			"class" :	"pretty p-icon p-round p-smooth",
+						// 			"title" : 	"Click to include/exclude all Subsystems from the next run transition.",
+						// 			"onclick" : SubsystemLaunch.launcher.handleCheckbox(-1 /* for all */ ),
+						// 	},"",true);
+					}
+					else
+						str += "<th>" + fields[i] + "</th>";
+				}
 				str += "</tr>";
 				//make entry for each subsystem
 				for(var s=0; s<SubsystemLaunch.subsystems.length; ++s)
@@ -433,10 +495,62 @@ SubsystemLaunch.create = function() {
 					str += "<tr>";
 					for(var i=0; i<fieldIds.length; ++i)
 					{
-						str += "<td id='subsystem_" + s + "_" + fieldIds[i] +
-							"' class='subsystem_" + fieldIds[i] + "'>";
 
-						if(fieldIds[i] == "name")
+						if(fieldIds[i] == "fsmIncluded")
+							str += "<td id='subsystem_" + s + "_" + fieldIds[i] +
+								"' class='subsystem_" + fieldIds[i] + 
+								"' onclick='var el = document.getElementById(\"subsystem_" + fieldIds[i] + "_checkbox_" + s + "\");" +
+								"var forFirefox = (el.checked = !el.checked); " +
+								"SubsystemLaunch.launcher.handleCheckbox(" + 
+								s + ", el);' style='cursor: pointer;' " +
+								"title='Click to include/exclude the Subsystem &apos;" + 
+									SubsystemLaunch.subsystems[s].name +
+									"&apos; from the next run transition.' " +
+								">";			
+						else if(fieldIds[i] == "console")
+							str += "<td id='subsystem_" + s + "_" + fieldIds[i] +
+								"' class='subsystem_" + fieldIds[i] + 
+								"' onclick='SubsystemLaunch.resetConsoleCounts(" + s + ");' " +
+								"style='cursor: pointer' " +
+								"title='Click to reset Subsystem &apos;" + 
+								SubsystemLaunch.subsystems[s].name +
+								"&apos; Console counts and relatch first messages'" +								
+								"'>";
+						else //other field <td>s 
+							str += "<td id='subsystem_" + s + "_" + fieldIds[i] +
+								"' class='subsystem_" + fieldIds[i] + "'>";
+
+						if(fieldIds[i] == "fsmIncluded")
+						{
+							//create subsystem toggle checkbox
+					
+							str += "<div class='ssCheckbox' style='height: 20px; width: 20px;" +
+								"' >";
+								str += "<div class='pretty p-icon p-round p-smooth' >"; //p-smooth for slow transition
+									str += " <input type='checkbox' class='subsystemCheckboxes' id='subsystem_" + fieldIds[i] + "_checkbox_" + s + "' " +
+											"onclick='SubsystemLaunch.launcher.handleCheckbox(" + 
+											s + ", this);' " +
+											(SubsystemLaunch.subsystems[s].fsmIncluded?"checked":"") +
+											"/>";
+									str += "<div class='state p-success'>";
+										str += "<i class='icon mdi mdi-check'></i>";
+										str += "<label>" + "" + "</label>";
+									str += "</div>";
+								str += "</div>";
+							str += "</div>";
+											
+
+							// str += DesktopContent.htmlOpen("input",
+							// 	{
+							// 			"style" : 	"",									
+							// 			"type"	: 	"checkbox",
+							// 			"id"	: 	"subsystem_" + fieldIds[i] + "_checkbox_" + s,
+							// 			"class" :	"pretty p-icon p-round p-smooth",
+							// 			"title" : 	"Click to include/exclude all Subsystems from the next run transition.",
+							// 			"onclick" : SubsystemLaunch.launcher.handleCheckbox(s),
+							// 	},"",true);
+						}
+						else if(fieldIds[i] == "name")
 							str += SubsystemLaunch.subsystems[s].name + " at " + SubsystemLaunch.subsystems[s].url;
 						else if(fieldIds[i] == "action")
 						{
@@ -454,7 +568,7 @@ SubsystemLaunch.create = function() {
 						{
 							str += "<select id='subsystem_" + fieldIds[i] + 
 								"_select_" + s + "' style='padding: 4px; font-size: 14px;' "+ 
-								"onchange='SubsystemLaunch.launcher.handleSubsystemConfigAliasSelect(this.value);'>";
+								"onchange='SubsystemLaunch.launcher.handleSubsystemConfigAliasSelect(this.value, " + s + ");'>";
 							var csvSplit = SubsystemLaunch.subsystems[s].configAliasChoices.split(',');
 							Debug.logv({csvSplit});
 							str += "<option ></option>"; //empty option to start
@@ -469,7 +583,7 @@ SubsystemLaunch.create = function() {
 						{
 							str += "<select id='subsystem_" + fieldIds[i] + 
 								"_select_" + s + "' style='padding: 4px; font-size: 14px;' "+ 
-								"onchange='SubsystemLaunch.launcher.handleSubsystemFsmModeSelect(this.value);'>";							
+								"onchange='SubsystemLaunch.launcher.handleSubsystemFsmModeSelect(this.value, " + s + ");'>";							
 							for(var c=0; c < SubsystemLaunch.SUBSYSTEM_FSM_MODES.length; ++c)							
 								str += "<option " + (SubsystemLaunch.subsystems[s].fsmMode == 
 									SubsystemLaunch.SUBSYSTEM_FSM_MODES[c]?"selected":"") + ">" +
@@ -532,239 +646,8 @@ SubsystemLaunch.create = function() {
 		tdiv.style.display = "block"; 
 	
 		sdiv.style.display = "block"; 
-
-		return;
-
-		var runStatusDiv, runConfigAliasDiv;
-		_runStatusDiv = runStatusDiv = document.getElementById("runStatusDiv");
-		_runConfigAliasDiv = runConfigAliasDiv = document.getElementById("runConfigAliasDiv");
-
-		var chkH = _CHECKBOX_H;
-		var chkW = (w/3)|0; 
-		if(chkW < _CHECKBOX_MIN_W) chkW = _CHECKBOX_MIN_W;
-		if(chkW > _CHECKBOX_MAX_W) chkW = _CHECKBOX_MAX_W;
 		
-		var sdivH = 66 + chkH*SubsystemLaunch.subsystems.length; //header + chkboxes
-		
-		if(SubsystemLaunch.doShowContexts)
-		{
-			sdivH += 66 + chkH*_contextRecords.length;	//header + chkboxes 	
-		}
-		if(sdivH > 2/3*h)
-			sdivH = 2/3*h; //clip height
-		if(sdivH < 100)
-			sdivH = 100; //clip min
-		
-		var sdivW = chkW;
-		
-		var sdivX = _MARGIN;
-		var sdivY = (h-sdivH)/2;
-		if(sdivY < _MARGIN)
-			sdivY = _MARGIN;
-
-//		var ldivX = _MARGIN + chkW;
-//		var ldivSz = h;		
-//		if(ldivSz > w - ldivX - _MARGIN*3) //pick min of w/h
-//			ldivSz = w - ldivX - _MARGIN*3;
-//		if(ldivSz < 120) //clip min
-//			ldivSz = 120; 
-//		var ldivY = (h-ldivSz)/2;
-//		
-//		var rdivX = _MARGIN + chkW;
-//		var rdivSz = ldivSz;
-//		var rdivY = ldivY + ldivSz;
-//		var rratio = 180/300;
-
-		var ldivX = _MARGIN + chkW;
-		var ldivSz = h/2;		
-		if(ldivSz > w - ldivX - _MARGIN*3) //pick min of w/h
-			ldivSz = w - ldivX - _MARGIN*3;
-		ldivSz *= 0.9;
-		var ldivY = (h-ldivSz)/2 - ldivSz/2;
-		var lratio = 180/300;
-
-		var rdivX = _MARGIN + chkW;
-		var rdivSz = ldivSz;
-		var rdivY = ldivY + ldivSz;
-		var rratio = 180/300;
-
-
-		//draw checkboxes
-		{			
-			var str = "";
-			var statusIndex = 0;
-			
-			var hideableSubsystems = SubsystemLaunch.subsystems.length && SubsystemLaunch.doShowContexts;
-			var hideableContexts = SubsystemLaunch.subsystems.length;
-			
-			if(SubsystemLaunch.subsystems.length)
-			{			
-				if(hideableSubsystems)
-					str += "<a onclick='SubsystemLaunch.launcher.toggleCheckboxDiv(0);' title='Hide/Show Subsystems'>";
-				str += "<h3>Subsystems</h3>";
-				if(hideableSubsystems)
-					str += "</a>";
-				
-				str += "<div id='ssCheckboxDiv'>";
-				for(var i=0;i<SubsystemLaunch.subsystems.length;++i,++statusIndex)
-				{
-					str += "<div class='ssCheckbox' style='height:" + chkH + "px;" +
-							"' >";
-					str += "<div class='pretty p-icon p-round p-smooth' onclick='SubsystemLaunch.launcher.handleCheckbox(" + 
-							statusIndex + ");' >"; //p-smooth for slow transition
-					str += " <input type='checkbox' class='subsystemCheckboxes' " +
-							(_systemStatusArray[statusIndex]?"checked":"") +
-							"/>";
-					str += "<div class='state p-success'>";
-					str += "<i class='icon mdi mdi-check'></i>";
-					str += "<label>" + SubsystemLaunch.subsystems[i] + "</label>";
-					str += "</div>";
-					str += "</div>";
-					str += "</div>";
-					str += "<div id='clearDiv'></div>";
-				}
-				str += "</div>";
-			}
-			else if(!SubsystemLaunch.doShowContexts)
-			{
-				str += "No subsystem configuration definition found.";
-			}
-			
-
-			if(SubsystemLaunch.doShowContexts)
-			{
-				if(hideableContexts)
-					str += "<a onclick='SubsystemLaunch.launcher.toggleCheckboxDiv(1);' title='Hide/Show Contexts'>";
-				str += "<h3>Individual Contexts</h3>";
-				if(hideableContexts)
-					str += "</a>";
-				
-				if(!_contextRecords.length)
-					str += "No contexts found.";
-					
-
-				str += "<div id='ctxCheckboxDiv'>";
-				for(var i=0; i<_contextRecords.length; ++i,++statusIndex)
-				{
-					str += "<div class='ssCheckbox' style='height:" + chkH + "px;" +
-							"' >";
-					str += "<div class='pretty p-icon p-round p-smooth' onclick='SubsystemLaunch.launcher.handleCheckbox(" + 
-							statusIndex + ");' >"; //p-smooth for slow transition
-					str += " <input type='checkbox' class='subsystemCheckboxes' " +
-							(_systemStatusArray[statusIndex]?"checked":"") +
-							"/>";
-					str += "<div class='state p-success'>";
-					str += "<i class='icon mdi mdi-check'></i>";
-					str += "<label>" + _contextRecords[i] + "</label>";
-					str += "</div>";
-					str += "</div>";
-					str += "</div>";
-					str += "<div id='clearDiv'></div>";				
-				}
-				str += "</div>"
-			}
-
-
-			sdiv.style.left = (sdivX-20) + "px";
-			sdiv.style.top = sdivY + "px";
-			sdiv.style.height = sdivH + "px";
-			sdiv.style.width = sdivW + "px";		
-			sdiv.style.display = "block"; 
-			
-
-			sdiv = document.getElementById("subsystemDivContainer");
-			sdiv.style.left = (sdivX-20) + "px";
-			sdiv.style.top = sdivY + "px";
-			sdiv.style.height = sdivH + "px";
-			sdiv.style.width = sdivW + "px";
-			sdiv.innerHTML = "";
-			sdiv.innerHTML = str;	
-			sdiv.style.display = "block"; 
-		}		
-
-		//draw launch button
-		{			
-
-//			ldiv.style.left = (ldivX + (w - ldivX - _MARGIN*2 - ldivSz)/2) + "px";
-//			ldiv.style.top = (ldivY+((ldivSz-ldivSz*200/300)/2)) + "px";
-//			
-//			ldiv.style.width = ldivSz + "px";
-//			var fontSize = ldivSz/10;
-//			if(fontSize < 30) fontSize = 30;
-//			ldiv.style.fontSize = (fontSize) + "px";
-//			ldiv.style.paddingTop = (ldivSz*200/300/2 - (fontSize+6)/2) + "px"; //ratio of size minus font size
-//			ldiv.style.paddingBottom = (ldivSz*200/300/2- (fontSize+6)/2) + "px";
-//			ldiv.style.borderRadius = (ldivSz*300/100) + "px/" + (ldivSz*200/100) + "px";
-//			
-//			ldiv.style.display = "block";
-			ldiv.style.left = (ldivX + (w - ldivX - _MARGIN*2 - ldivSz)/2) + "px";
-			ldiv.style.top = (ldivY+((ldivSz-ldivSz*lratio)/2)) + "px";
-			//ldiv.style.height = (ldivSz*200/300) + "px";
-			ldiv.style.width = ldivSz + "px";
-			ldiv.style.paddingTop = (ldivSz*lratio/2 - 36/2) + "px"; //ratio of size minus font size
-			ldiv.style.paddingBottom = (ldivSz*lratio/2- 36/2) + "px";
-			//ldiv.style.paddingLeft = (ldivSz/2) + "px";
-			//ldiv.style.paddingRight = (ldivSz/2) + "px";
-
-			ldiv.style.borderRadius = ldivSz + "px/" + (ldivSz*200/300) + "px";
-			ldiv.style.fontSize = ldivSz/10 + "px";
-
-			ldiv.style.display = "block"; 
-		}
-
-
-		//draw run button
-		{			
-			var rTop = (rdivY+((rdivSz-rdivSz*rratio)/2));
-			rdiv.style.left = (rdivX + (w - rdivX - _MARGIN*2 - rdivSz)/2) + "px";
-			rdiv.style.top = rTop + "px";
-			//rdiv.style.height = (rdivSz*200/300) + "px";
-			rdiv.style.width = rdivSz + "px";
-			rdiv.style.paddingTop = (rdivSz*rratio/2 - 36/2) + "px"; //ratio of size minus font size
-			rdiv.style.paddingBottom = (rdivSz*rratio/2- 36/2) + "px";
-			//rdiv.style.paddingLeft = (rdivSz/2) + "px";
-			//rdiv.style.paddingRight = (rdivSz/2) + "px";
-			
-			rdiv.style.borderRadius = rdivSz + "px/" + (rdivSz*200/300) + "px";
-			rdiv.style.fontSize = rdivSz/10 + "px";
-			
-			rdiv.style.display = "block"; 
-			//ldiv.innerHTML = str;		
-			
-			runStatusDiv.style.left = (rdivX + _MARGIN + (w - rdivX - _MARGIN*2 - rdivSz)/2) + "px";
-			runStatusDiv.style.top = (h/2 - 50) + "px";
-			runStatusDiv.style.width = (rdivSz + _MARGIN) + "px";
-			runStatusDiv.style.fontSize = rdivSz/15 + "px";
-
-			//draw config alias select box
-			if(SubsystemLaunch.getConfigAliases)
-			{
-				runConfigAliasDiv.style.left = (rdivX + _MARGIN + (w - rdivX - _MARGIN*4 - rdivSz)/2) + "px";
-				runConfigAliasDiv.style.top = (rTop + _MARGIN/2 + rdivSz*200/300) + "px";
-				runConfigAliasDiv.style.width = (rdivSz + _MARGIN) + "px";
-				runConfigAliasDiv.style.fontSize = rdivSz/15 + "px";
-
-				var str = "";
-				str += "Configuration Alias: <select id='runConfigAliasSelect' style='font-family: \"Comfortaa\", arial; padding: 2px; font-size: 16px;'>";
-				
-				for(alias in _configAliasesObj.aliasMap)
-				{
-					str += "<option value='" + alias + "' ";
-
-					//otherwise, as priority, choose last alias (the first init)
-					if(_configAliasesObj.lastUsedAlias == alias)
-						str += "selected";
-					
-					str += ">" + alias + "</option>";
-				} //end alias map loop
-				runConfigAliasDiv.innerHTML = str;
-				runConfigAliasDiv.style.display = "block";
-			} //end draw config alias select box
-		} //end draw run buton
-
-		
-	} //end redrawWindow()
-	
+	} //end redrawWindow()	
 
 	//=====================================================================================
 	//getCurrentStatus ~~
@@ -811,6 +694,7 @@ SubsystemLaunch.create = function() {
 					_dotDotDot += ".";
 
 				//migrate xml values to subsystem struct
+				var allFsmIncluded = true;
 				for(var j=0; !foundSubsystemChange && j < subsystemArrs[fields[0]].length; ++j) 
 				{               
 					if( SubsystemLaunch.subsystems[j][fields[SubsystemLaunch.SUBSYSTEM_FIELDS_NAME]] !=
@@ -819,6 +703,14 @@ SubsystemLaunch.create = function() {
 						foundSubsystemChange = true; //name mismatch
 						break;
 					}
+
+					if( SubsystemLaunch.subsystems[j][fields[SubsystemLaunch.SUBSYSTEM_STATUS_FIELDS_ALIASES]] !=
+						subsystemArrs[fields[SubsystemLaunch.SUBSYSTEM_STATUS_FIELDS_ALIASES]][j].getAttribute('value'))				
+					{
+						foundSubsystemChange = true; //config alias list mismatch
+						break;
+					}					
+
 					for(var i=0; i<fields.length; ++i)
 					{
 						if(i == SubsystemLaunch.SUBSYSTEM_STATUS_FIELDS_STATUS)
@@ -832,14 +724,35 @@ SubsystemLaunch.create = function() {
 							}
 							else if(SubsystemLaunch.subsystems[j][fields[i]] != status &&
 									(status.indexOf("Fail") == 0 || status.indexOf("Error") == 0 || status.indexOf("Soft") == 0))
-								Debug.err(status); //show error to user
+								Debug.err("From Subsystem '" +
+									SubsystemLaunch.subsystems[j].name + "'... " + 
+									status); //show error to user
 							
 							SubsystemLaunch.subsystems[j][fields[i]] = status;
+							continue;
+						}
+						else if(i == SubsystemLaunch.SUBSYSTEM_STATUS_FIELDS_INCLUDED)
+						{
+							//force fsmIncluded to bool AND warn if changed
+							var fsmIncluded = subsystemArrs[fields[i]][j].getAttribute('value') | 0;
+							if((fsmIncluded?1:0) != (SubsystemLaunch.subsystems[j].fsmIncluded?1:0))
+								Debug.warn("There was a change identified at the server-side in the included Subsystems. Subsystem '" + 
+									SubsystemLaunch.subsystems[j].name + "' is now " + 
+									(fsmIncluded?"INCLUDED":"EXCLUDED") + "!"
+									);
+							SubsystemLaunch.subsystems[j].fsmIncluded = fsmIncluded;
+							if(!fsmIncluded)
+								allFsmIncluded  = false;
 							continue;
 						}
 						
 						SubsystemLaunch.subsystems[j][fields[i]] = subsystemArrs[fields[i]][j].getAttribute('value');
 					} //end field/value push loop
+
+					//change the all el based on allFsmIncluded
+					var el = document.getElementById("subsystem_" + "fsmIncluded" + "_checkbox_" + "all");
+					if(el) el.checked = allFsmIncluded;
+					
 				} //end subsystem loop
 
 				if(foundSubsystemChange)
@@ -857,15 +770,14 @@ SubsystemLaunch.create = function() {
 				SubsystemLaunch.extractSystemStatus(req);
 			} //end system state ----------
 			
-			displayStatus();
-			
-			
-			//on success, get state again
-			window.clearTimeout(_getStatusTimer);
-			_getStatusTimer = window.setTimeout(getCurrentStatus,1000); //in 1 sec
+			if(displayStatus())
+			{
+				//on success, get state again
+				window.clearTimeout(_getStatusTimer);
+				_getStatusTimer = window.setTimeout(getCurrentStatus,1000); //in 1 sec
+			}
 		}
 	} //end getCurrentStatus()
-
 
 	//=====================================================================================
 	//displayStatus ~~
@@ -877,7 +789,9 @@ SubsystemLaunch.create = function() {
 		//Display System Status ---------
 		el = document.getElementById("systemStatusState");
 		localDisplayState(el, 
-			SubsystemLaunch.system.state, 
+			(SubsystemLaunch.system.inTransition?
+				SubsystemLaunch.system.transition:
+				SubsystemLaunch.system.state), 
 			SubsystemLaunch.system.progress);
 
 		el = document.getElementById("systemStatusTimeInState");
@@ -901,7 +815,8 @@ SubsystemLaunch.create = function() {
 		el.innerText = 	"# of Active Users: " + SubsystemLaunch.system.activeUserCount;
 
 		var fieldIds = ["runNumber", "lastRunLogEntry", "lastLogbookEntry", "lastSystemMessage", "consoleWarnCount", 
-			"consoleWarnMessage", "consoleErrCount", "consoleErrMessage", "consoleInfoCount", "consoleInfoMessage"];		
+			"consoleWarnMessage", "consoleErrCount", "consoleErrMessage", "consoleInfoCount", "consoleInfoMessage",
+			"consoleFirstErrMessage", "consoleFirstWarnMessage", "consoleFirstInfoMessage"];		
 		for(var i=0; i<fieldIds.length; ++i)
 		{
 			el = document.getElementById("systemStatus_" + fieldIds[i]);
@@ -911,7 +826,7 @@ SubsystemLaunch.create = function() {
 		
 
 		//Display Subystem Status ---------
-		var fieldIds = ["configAlias", "status", "console", "detail", "fsmMode"];		
+		var fieldIds = ["configAlias", "status", "console", "detail", "fsmMode", "fsmIncluded"];		
 		for(var s=0; s<SubsystemLaunch.subsystems.length; ++s)
 		{
 			for(var i=0; i<fieldIds.length; ++i)
@@ -927,10 +842,13 @@ SubsystemLaunch.create = function() {
 							SubsystemLaunch.subsystems[s].name + "' has changed from '" +
 							el.value + "' to '" + SubsystemLaunch.subsystems[s][fieldIds[i]] + ".'");
 
-						//find selected index amd select!
+						//find selected index and select!
 						for(var f=0; f < el.options.length; ++f)
-							if(el.options.value == SubsystemLaunch.subsystems[s][fieldIds[i]])
+							if(el.options[f].value == SubsystemLaunch.subsystems[s][fieldIds[i]])
+							{
 								el.selectedIndex = f;
+								break;
+							}
 
 						if(f == el.options.length)
 						{
@@ -939,7 +857,7 @@ SubsystemLaunch.create = function() {
 								SubsystemLaunch.subsystems[s].name + "!' Please fix the issue and refresh this page, or notify admins.");
 							//stop updates, something is wrong!
 							window.clearTimeout(_getStatusTimer);
-							return;						
+							return false;						
 						}
 					}
 				} //end select box update
@@ -948,6 +866,12 @@ SubsystemLaunch.create = function() {
 					el = document.getElementById("subsystem_" + s + "_" + fieldIds[i]);
 					el.innerText = SubsystemLaunch.subsystems[s].consoleErrCount + " Errs / " +
 						SubsystemLaunch.subsystems[s].consoleWarnCount + " Warns";
+				}
+				else if(fieldIds[i] == "fsmIncluded")
+				{
+					el = document.getElementById("subsystem_" + fieldIds[i] + 
+						"_checkbox_" + s);
+					el.checked = SubsystemLaunch.subsystems[s][fieldIds[i]];
 				}
 				else
 				{
@@ -969,6 +893,8 @@ SubsystemLaunch.create = function() {
 				
 			} //end field update loop
 		} //end subsystem update loop
+
+		return true;
 
 		//////////////////////////////
 		function localDisplayState(cell, statusString, progressNum)
@@ -1022,14 +948,17 @@ SubsystemLaunch.create = function() {
 
 								if(this.id == "systemStatusState")
 								{			
-									Debug.err(SubsystemLaunch.system.status);
+									Debug.err("Current State: " + SubsystemLaunch.system.state + "\n\n" + 
+										(SubsystemLaunch.system.error?SubsystemLaunch.system.error:""));
 									return;
 								}
 								//else subsystem div
 
 								//id example: subsystem_0_status
 								var s = this.id.split('_')[1] | 0;								
-								Debug.err(SubsystemLaunch.subsystems[s].status);
+								Debug.err("From Subsystem '" +
+									SubsystemLaunch.subsystems[s].name + "'... " + 
+									SubsystemLaunch.subsystems[s].status);
 							};
 						break;
 					default: cell.style.background = "";
@@ -1040,7 +969,7 @@ SubsystemLaunch.create = function() {
 				cell.style.background = "";
 				statusString += " " + progressNum + " %";
 			}
-			cell.innerHTML = "<div style='position:relative; z-index:2'>" + statusString + "</div>";
+			cell.innerHTML = "<div style='position:relative; z-index:2; white-space: nowrap;'>" + statusString + "</div>";
 			
 			// Debug.log("Status",progressNum, statusString, cell.offsetWidth, cell.offsetHeight);
 				
@@ -1060,6 +989,56 @@ SubsystemLaunch.create = function() {
 		} //end localDisplayState()
 	}	//end displayStatus()
 	
+
+	//=====================================================================================     
+	this.handleSubsystemConfigAliasSelect = function(value, subsystemIndex)
+	{
+		Debug.log("handleSubsystemConfigAliasSelect()", value, subsystemIndex);
+		if(value == "") return; //assume user is clearing
+		
+		var targetSubsystem = SubsystemLaunch.subsystems[s].name;
+
+		window.clearTimeout(_getStatusTimer);
+
+		DesktopContent.XMLHttpRequest("Request?RequestType=setRemoteSubsystemFsmControl" + 
+				"&targetSubsystem=" + targetSubsystem + 
+				"&setValue=" + (val?1:0) +
+				"&controlType=configAlias",
+				"", //end post data, 
+				function(req)
+				{
+					_getStatusTimer = window.setTimeout(getCurrentStatus,1000); //in 1 sec
+				},  //end handler				
+				0, 0, false,//reqParam, progressHandler, callHandlerOnErr, 
+				false,//doNotShowLoadingOverlay,
+				true //targetGatewaySupervisor
+		); //end setRemoteSubsystemFsmControl request	
+
+	}	//end handleSubsystemConfigAliasSelect()
+
+	//=====================================================================================     
+	this.handleSubsystemFsmModeSelect = function(value, subsystemIndex)
+	{
+		Debug.log("handleSubsystemFsmModeSelect()", value, subsystemIndex);
+		if(value == "") return; //assume user is clearing
+
+		window.clearTimeout(_getStatusTimer);
+
+		DesktopContent.XMLHttpRequest("Request?RequestType=setRemoteSubsystemFsmControl" + 
+				"&targetSubsystem=" + targetSubsystem + 
+				"&setValue=" + (val?1:0) +
+				"&controlType=configAlias",
+				"", //end post data, 
+				function(req)
+				{
+					_getStatusTimer = window.setTimeout(getCurrentStatus,1000); //in 1 sec
+				},  //end handler				
+				0, 0, false,//reqParam, progressHandler, callHandlerOnErr, 
+				false,//doNotShowLoadingOverlay,
+				true //targetGatewaySupervisor
+		); //end setRemoteSubsystemFsmControl request	
+
+	}	//end handleSubsystemFsmModeSelect()
 
 	//=====================================================================================     
 	this.handleSubsystemActionSelect = function(el, subsystemIndex)
@@ -1439,98 +1418,56 @@ SubsystemLaunch.create = function() {
 		}
 
 	} //end run()
-
-	//=====================================================================================
-	//toggleCheckboxDiv(i) ~~
-	this.toggleCheckboxDiv = function(i)
-	{
-		Debug.log("toggleCheckboxDiv(i) " + i);
-		return;
-		
-		var el;
-		if(i == 0) //toggle subsystems
-		{
-			el = document.getElementById("ssCheckboxDiv");
-			el.style.display = (el.style.display == "none")?"block":"none";
-		}
-		else if(i == 1) //toggle contextx
-		{
-			el = document.getElementById("ctxCheckboxDiv");
-			el.style.display = (el.style.display == "none")?"block":"none";
-		}	
-		else throw("Invalid index checkbox div " + i);
-	} //end toggleCheckboxDiv()
 	
 	//=====================================================================================
 	//handleCheckbox(i) ~~
-	this.handleCheckbox = function(c)
-	{
-		Debug.log("handleCheckbox(c) " + c);
-		return;
-
-		var checkboxes = document.getElementsByClassName('subsystemCheckboxes'); 
-		console.log("checkboxes",checkboxes);
-		var checkedArray = [];
-		for(var i=0;i<checkboxes.length;++i)
-			checkedArray.push(checkboxes[i].checked);
-		console.log("checkedArray",checkedArray);
-
-		Debug.log("set to " + checkedArray[c]);
+	//	checkbox value already set when this function is called
+	this.handleCheckbox = function(c, el)
+	{		
+		var val = el.checked;
+		Debug.log("handleCheckbox", c, val);
+		event.stopPropagation();
 		
-		//create a context map
-		var contextEnabledMap = {}; //map to [enabled, index]
-		for(var i=0; i<_contextRecords.length; ++i)
-			contextEnabledMap[_contextRecords[i]] = [checkedArray[SubsystemLaunch.subsystems.length+i],
-													 SubsystemLaunch.subsystems.length+i];
-				
-		//update for each context that was just affected
-		if(c < SubsystemLaunch.subsystems.length)
+		var field = "fsmIncluded";
+		var targetSubsystem = "";
+		if(c == -1) //toggle all
 		{
-			//dealing with a subsystem
-			for(var j=0; j<SubsystemLaunch.systemToContextMap[SubsystemLaunch.subsystems[c]].length; ++j)
+			for(var s=0; s<SubsystemLaunch.subsystems.length; ++s)
 			{
-				//update map
-				contextEnabledMap[ //context name
-								  SubsystemLaunch.systemToContextMap[SubsystemLaunch.subsystems[c]][j]
-																 ][0] = checkedArray[c]; //set to checked value
-				//and set checkbox
-				checkboxes[contextEnabledMap[ //context name
-											  SubsystemLaunch.systemToContextMap[SubsystemLaunch.subsystems[c]][j]
-																			 ][1]].checked = checkedArray[c];
+				el = document.getElementById("subsystem_" + field + "_checkbox_" + s);
+				el.checked = val;
+				SubsystemLaunch.subsystems[s].fsmIncluded = val;
 			}
-		}
-		else
-		{
-			//dealing with a context
-			
-			//update map			
-			contextEnabledMap[_contextRecords[c - SubsystemLaunch.subsystems.length]][0] = checkedArray[c]; //set to checked value			
-														  
-		}
-		console.log("contextEnabledMap",contextEnabledMap);
-		
-		
-		//update all subsystems based on this change
-		for(var i=0;i<SubsystemLaunch.subsystems.length;++i)
-		{
-			if(i==c) continue; //skip box that was changed
 
-			var enabled = true;
-			//if any member contexts are disabled then disable subsystem
-			for(var j=0; j<SubsystemLaunch.systemToContextMap[SubsystemLaunch.subsystems[i]].length; ++j)
-			{
-				if(!contextEnabledMap[
-									 SubsystemLaunch.systemToContextMap[SubsystemLaunch.subsystems[i]][j]][0])
-				{
-					enabled = false;
-					break;
-				}
-			}
-			
-			//set checkbox
-			checkboxes[i].checked = enabled;			
+			targetSubsystem = "*";
 		}
-		
+		else //toggle one
+		{
+			targetSubsystem = SubsystemLaunch.subsystems[c].name;
+			SubsystemLaunch.subsystems[c].fsmIncluded = val;
+
+			var allTrue = true;
+			for(var s=0; s<SubsystemLaunch.subsystems.length; ++s)
+			{
+				el = document.getElementById("subsystem_" + field + "_checkbox_" + s);
+				if(el && !el.checked) { allTrue = false; break; }
+			}
+
+			//change the all el based on allTrue
+			el = document.getElementById("subsystem_" + field + "_checkbox_" + "all");
+			el.checked = allTrue;
+		}
+
+		DesktopContent.XMLHttpRequest("Request?RequestType=setRemoteSubsystemFsmControl" + 
+				"&targetSubsystem=" + targetSubsystem + 
+				"&setValue=" + (val?1:0) +
+				"&controlType=include",
+				"", //end post data, 
+				undefined /* function(req) */,  //end handler				
+				0, 0, false,//reqParam, progressHandler, callHandlerOnErr, 
+				false,//doNotShowLoadingOverlay,
+				true //targetGatewaySupervisor
+		); //end setRemoteSubsystemFsmControl request	
 		
 	} //end handleCheckbox()
 
@@ -1582,6 +1519,10 @@ SubsystemLaunch.initSubsystemRecords = function(returnHandler)
 					{
 						SubsystemLaunch.subsystems[j][fields[i]] = subsystemArrs[fields[i]][j].getAttribute('value');
 					} //end field/value push loop
+
+					//force fsmInclude to bool
+					SubsystemLaunch.subsystems[j].fsmIncluded |= 0;
+					
 				} //end subsystem loop
 
 				Debug.log("subsystem obj", SubsystemLaunch.subsystems);	
@@ -1653,11 +1594,21 @@ SubsystemLaunch.extractSystemStatus = function(req)
 {
 	SubsystemLaunch.system.state = DesktopContent.getXMLValue(req,"current_state");
 	SubsystemLaunch.system.inTransition = DesktopContent.getXMLValue(req,"in_transition") == "1";
+	SubsystemLaunch.system.transition = DesktopContent.getXMLValue(req,"current_transition");
 	SubsystemLaunch.system.timeInState = DesktopContent.getXMLValue(req,"time_in_state") | 0;
-	SubsystemLaunch.system.runNumber = DesktopContent.getXMLValue(req,"run_number");			
+	var tmpRunNumber = DesktopContent.getXMLValue(req,"run_number"); //undefined during transitions
+	if(tmpRunNumber) SubsystemLaunch.system.runNumber = tmpRunNumber;
 	SubsystemLaunch.system.progress = DesktopContent.getXMLValue(req,"transition_progress") | 0; 
 
 	var err = DesktopContent.getXMLValue(req,"system_error"); 
+	var fsmErr = DesktopContent.getXMLValue(req,"current_error");
+	if(fsmErr && fsmErr)
+	{
+		if(err && err != "")
+		{	err += "\n\n"; err += fsmErr; }
+		else
+			err = fsmErr;		
+	}
 	if(err && err != "" && SubsystemLaunch.system.error != err)		
 		Debug.err(err);
 
@@ -1687,6 +1638,12 @@ SubsystemLaunch.extractSystemStatus = function(req)
 	else
 		SubsystemLaunch.system.consoleErrMessage += " " + DesktopContent.getXMLValue(req,"last_console_err_msg_time") + "";  	
 
+	SubsystemLaunch.system.consoleErrMessage = decodeURIComponent(DesktopContent.getXMLValue(req,"last_console_err_msg"));
+	if(SubsystemLaunch.system.consoleErrMessage == "")
+		SubsystemLaunch.system.consoleErrMessage = "No console err message found.";
+	else
+		SubsystemLaunch.system.consoleErrMessage += " " + DesktopContent.getXMLValue(req,"last_console_err_msg_time") + ""; 
+	
 	SubsystemLaunch.system.consoleWarnMessage = decodeURIComponent(DesktopContent.getXMLValue(req,"last_console_warn_msg"));
 	if(SubsystemLaunch.system.consoleWarnMessage == "")
 		SubsystemLaunch.system.consoleWarnMessage = "No console err message found.";
@@ -1698,11 +1655,76 @@ SubsystemLaunch.extractSystemStatus = function(req)
 		SubsystemLaunch.system.consoleInfoMessage = "No console err message found.";
 	else
 		SubsystemLaunch.system.consoleInfoMessage += " " + DesktopContent.getXMLValue(req,"last_console_info_msg_time") + "";  	
+
+		
+	SubsystemLaunch.system.consoleFirstErrMessage = decodeURIComponent(DesktopContent.getXMLValue(req,"first_console_err_msg"));
+	if(SubsystemLaunch.system.consoleFirstErrMessage == "")
+		SubsystemLaunch.system.consoleFirstErrMessage = "No console err message found.";
+	else
+		SubsystemLaunch.system.consoleFirstErrMessage += " " + DesktopContent.getXMLValue(req,"first_console_err_msg_time") + ""; 
 	
+	SubsystemLaunch.system.consoleFirstWarnMessage = decodeURIComponent(DesktopContent.getXMLValue(req,"first_console_warn_msg"));
+	if(SubsystemLaunch.system.consoleFirstWarnMessage == "")
+		SubsystemLaunch.system.consoleFirstWarnMessage = "No console err message found.";
+	else
+		SubsystemLaunch.system.consoleFirstWarnMessage += " " + DesktopContent.getXMLValue(req,"first_console_warn_msg_time") + "";  	
+
+	SubsystemLaunch.system.consoleFirstInfoMessage = decodeURIComponent(DesktopContent.getXMLValue(req,"first_console_info_msg"));
+	if(SubsystemLaunch.system.consoleFirstInfoMessage == "")
+		SubsystemLaunch.system.consoleFirstInfoMessage = "No console err message found.";
+	else
+		SubsystemLaunch.system.consoleFirstInfoMessage += " " + DesktopContent.getXMLValue(req,"first_console_info_msg_time") + "";  	
+
 	// Debug.log("system obj", SubsystemLaunch.system);
 
 } //end SubsystemLaunch.extractSystemStatus()
 
+//=====================================================================================     
+SubsystemLaunch.resetConsoleCounts = function(s)
+{
+	Debug.log("SubsystemLaunch.resetConsoleCounts()", s);
 
+	if(s == -1) //system console reset
+		DesktopContent.popUpVerification( 
+			"Are you sure you want to reset the Console Error/Warn/Info counts and relatch first messages?",
+			localReset,
+			0,"#efeaea",0,"#770000");
+	else //subsystem console reset
+	{
+		targetSubsystem = SubsystemLaunch.subsystems[s].name;
 
+		DesktopContent.popUpVerification( 
+			"Are you sure you want to reset the Subsystem '" + 
+			targetSubsystem +
+			"' Console Error/Warn/Info counts and relatch first messages?",
+			localSubsystemReset,
+			0,"#efeaea",0,"#770000");
+	}
 
+	return;
+
+	//============
+	function localReset()
+	{
+		DesktopContent.XMLHttpRequest("Request?RequestType=resetConsoleCounts",
+			"", //post data 
+			undefined, //request handler	
+			0 /*reqParam*/, 0 /*progressHandler*/, false /*callHandlerOnErr*/, 
+			false /*doNoShowLoadingOverlay*/,
+			true /*targetGatewaySupervisor*/);
+	} //end localReset()
+
+	//============
+	function localSubsystemReset()
+	{
+		DesktopContent.XMLHttpRequest("Request?RequestType=commandRemoteSubsystem" +
+			"&targetSubsystem=" + targetSubsystem + 
+			"&command=ResetConsoleCounts",
+			"", //post data 
+			undefined, //request handler	
+			0 /*reqParam*/, 0 /*progressHandler*/, false /*callHandlerOnErr*/, 
+			false /*doNoShowLoadingOverlay*/,
+			true /*targetGatewaySupervisor*/);
+	} //end localSubsystemReset()
+
+} //end SubsystemLaunch.resetConsoleCounts()

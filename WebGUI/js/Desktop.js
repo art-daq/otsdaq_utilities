@@ -983,16 +983,49 @@ Desktop.createDesktop = function(security) {
 	//	Handle window selection using dashboard
 	this.clickedWindowDashboard = function(id) 
 	{
+		if(0)
+		{
+			var win = this.getWindowById(id);
+			if(win == -1) return -1;
+			if(_getForeWindow() != win) 
+			{ //if not currently foreground window, set as only
+				if(_getForeWindow().isMaximized()) this.toggleFullScreen(); //if old foreground is full screen, toggle
+				this.setForeWindow(win);
+				if(_getForeWindow().isMinimized()) this.toggleMinimize(); //if new foreground is minimized, toggle
+				return;
+			}
+			//else minimize
+			this.toggleMinimize();
+			return;
+		}
+
+		//old functionality above acted more like Windows (removing Maximize if clicking)
+		//new functionality below acts like full screen tab system, to just select which window to show maximized
+
+
         var win = this.getWindowById(id);
 		if(win == -1) return -1;
-        if(_getForeWindow() != win) { //if not currently foreground window, set as only
-            if(_getForeWindow().isMaximized()) this.toggleFullScreen(); //if old foreground is full screen, toggle
+        if(_getForeWindow() != win)
+		{ //if not currently foreground window, set as only
+			var inMaxMode = false;
+            if(_getForeWindow().isMaximized()) 
+			{ 
+				this.toggleFullScreen(); //if old foreground is full screen, toggle
+				inMaxMode = true;
+			}
+
             this.setForeWindow(win);
-            if(_getForeWindow().isMinimized()) this.toggleMinimize(); //if new foreground is minimized, toggle
+            
+			if(_getForeWindow().isMinimized()) this.toggleMinimize(); //if new foreground is minimized, toggle
+			if(inMaxMode) this.toggleFullScreen();
+			
             return;
         }
-        //else minimize
-        this.toggleMinimize();
+        //else minimize if not maximized
+
+		if(!_getForeWindow().isMaximized()) 
+        	this.toggleMinimize();
+
     } //end clickedWindowDashboard()
 
 	//==============================================================================

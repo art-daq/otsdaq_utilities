@@ -1020,8 +1020,19 @@ try
 			TableGroupKey(tableGroupKey),
 			modifiedTables);
 
-		xmlOut.addTextElementToData("StructureStatusAsJSON", 
-			cfgMgr->getTableByName(tableName)->getStructureStatusAsJSON(cfgMgr));
+		try
+		{
+			xmlOut.addTextElementToData("StructureStatusAsJSON", 
+				cfgMgr->getTableByName(tableName)->getStructureStatusAsJSON(cfgMgr));
+		}
+		catch(const std::runtime_error& e)
+		{
+			__SUP_SS__ << "The table plugin feature getStructureStatusAsJSON(), does not seem to be supported for the table '" <<
+				tableName << ".' Make sure you have the expected table plugin in your path, or contact system admins." << __E__;
+			ss << "Here is the error: " << e.what() << __E__;
+			__SUP_SS_THROW__;
+		}
+		
 	}
 	else if(requestType == "getArtdaqNodes")
 	{

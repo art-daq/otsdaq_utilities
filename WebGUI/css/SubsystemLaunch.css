@@ -10,11 +10,19 @@
 		a {
 			cursor: pointer;
 		}
+
+		.hover_link:hover {
+			text-decoration: underline;
+			cursor: pointer;
+		}
 		
 		h3 {
 			font-family: "Comfortaa";
 		}
-				
+
+		#DesktopContent-verifyPopUp * {
+			font-family: "Comfortaa";
+		}				
 
 
 		#runDiv, #systemStatusDiv, #subsystemDiv {
@@ -152,6 +160,9 @@
 			border-radius: 6px;
 			background-color: lightgrey;	
 			white-space: nowrap;		
+		}
+		.subsystem_fsmIncluded {
+			background-color: white !important;
 		}
 		#subsystemDiv select {
 			text-align: center;
