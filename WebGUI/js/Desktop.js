@@ -651,6 +651,16 @@ Desktop.createDesktop = function(security) {
 	this.addWindow = function(name,subname,url,unique,extraStep) 
 	{		
 		Debug.log(name + " - " + subname + " - " + url + " - " + unique);
+
+		if(name.indexOf("icons loading...") > 0)
+		{
+			Debug.log("Assuming user is trying to reload icons!");
+			
+			//reset icons, if permissions undefined, keep permissions from before
+			Desktop.desktop.icons.resetWithPermissions(
+				undefined /*undefined permissions*/, true /*keepSamePermissions*/);
+			return;
+		}
 		
 		if(unique == 2) //open as stand-alone new tab page
 		{
