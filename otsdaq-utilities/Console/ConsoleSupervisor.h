@@ -78,13 +78,6 @@ class ConsoleSupervisor : public CoreSupervisorBase
 			std::vector<CustomTriggeredAction_t>& priorityCustomTriggerList)
 		    : countStamp(count)
 		{
-			// std::string hostname, category, application, message, hostaddr, file, line,
-			//     module, eventID;
-			// mf::ELseverityLevel sev;
-			// timeval             tv     = {0, 0};
-			// int                 pid    = 0;
-			// int                 seqNum = 0;
-
 			boost::regex timestamp_regex_("(\\d{2}-[^-]*-\\d{4}\\s\\d{2}:\\d{2}:\\d{2})");
 			boost::regex file_line_regex_("^\\s*([^:]*\\.[^:]{1,3}):(\\d+)(.*)");
 
@@ -101,13 +94,9 @@ class ConsoleSupervisor : public CoreSupervisorBase
 			}
 
 			struct tm   tm;
-			// time_t      t;
 			std::string value(res[1].first, res[1].second);
 			strptime(value.c_str(), "%d-%b-%Y %H:%M:%S", &tm);
 			tm.tm_isdst = -1;
-			// t           = mktime(&tm);
-			// tv.tv_sec   = t;
-			// tv.tv_usec  = 0;
 			fields[FieldType::TIMESTAMP] = std::to_string(mktime(&tm));
 
 			auto prevIt = it;
@@ -193,32 +182,7 @@ class ConsoleSupervisor : public CoreSupervisorBase
 				oss << *it;
 			}
 			fields[FieldType::MSG] = oss.str();
-			// message = oss.str();
-
-
-			// fields[FieldType::TIMESTAMP] = std::to_string(tv.tv_sec);
-			// // fields[FieldType::SOURCEID] = std::to_string(seqNum);
-			// fields[FieldType::LEVEL] = sev.getName();
-			// fields[FieldType::LABEL] = category;
-			// // fields[FieldType::SOURCEID] = std::to_string(pid));  // number
-			// fields[FieldType::SOURCE] = application;
-			// fields[FieldType::FILE] = file;
-			// fields[FieldType::LINE] = line;
-			// fields[FieldType::MSG] = message;
-
-			// // init fields to position -1 (for unknown)s
-			// // NOTE: must be in order of appearance in buffer
-			// fields[FieldType::TIMESTAMP].set("Timestamp", 1, std::to_string(tv.tv_sec));
-			// fields[FieldType::SEQID].set("SequenceID", 2, std::to_string(seqNum));
-			// fields[FieldType::LEVEL].set("Level", 5, sev.getName());
-			// fields[FieldType::LABEL].set("Label", 6, category);
-			// fields[FieldType::SOURCEID].set(
-			//     "SourceID", 7, std::to_string(pid));  // number
-			// fields[FieldType::SOURCE].set("Source", 9, application);
-			// fields[FieldType::FILE].set("File", 10, file);
-			// fields[FieldType::LINE].set("Line", 11, line);
-			// fields[FieldType::MSG].set("Msg", 12, message);
-
+			
 #if 0
 			for (auto& field : fields) {
 				std::cout << "Field " << field.second.fieldName << ": " << field.second.fieldValue
@@ -238,7 +202,7 @@ class ConsoleSupervisor : public CoreSupervisorBase
 					if((pos = getMsg().find(needleSubstring)) == std::string::npos)
 					{
 						foundAll = false;
-						// std::cout << "Not a full match on '" << needleSubstring << ".' Message: " << 
+						//FOR DEBUGGING std::cout << "Not a full match on '" << needleSubstring << ".' Message: " << 
 						// 	getSourceIDAsNumber() << ":" << getMsg().substr(0,100) << __E__;
 						break; //not a full match
 					}
@@ -247,7 +211,7 @@ class ConsoleSupervisor : public CoreSupervisorBase
 					
 				if(foundAll) //trigger fired so copy triggeredAction and tag with message sequence ID
 				{
-					// std::cout << "Full match of custom trigger! Message: " << 
+					//FOR DEBUGGING std::cout << "Full match of custom trigger! Message: " << 
 					// 	getSourceIDAsNumber() << ":" << getMsg().substr(0,100) << __E__;
 					triggeredAction.occurrences++; //increment occurrences
 					customTriggerMatch = triggeredAction;
@@ -303,21 +267,6 @@ class ConsoleSupervisor : public CoreSupervisorBase
 
 		//count is incrementing number across all sources created at ConsoleSupervisor
 		size_t getCount() const { return countStamp; } 
-
-		// // define field structure
-		// struct FieldStruct
-		// {
-		// 	void set(const std::string& fn, const int mc, const std::string& fv)
-		// 	{
-		// 		fieldName   = fn;
-		// 		fieldValue  = fv;
-		// 		markerCount = mc;
-		// 	}
-
-		// 	// std::string fieldName;
-		// 	std::string fieldValue;
-		// 	// int         markerCount;
-		// };
 
 		// define field index enum alias
 		enum class FieldType
