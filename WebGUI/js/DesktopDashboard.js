@@ -238,7 +238,7 @@ else
 		
 			//reset mode after 10 seconds
 			clearTimeout(_windowOrganizeModeTimeout);
-			_windowOrganizeModeTimeout = setTimeout(function() {_windowOrganizeMode = -1; Debug.log("Reseting _windowOrganizeMode.");},10000);
+			_windowOrganizeModeTimeout = setTimeout(function() {_windowOrganizeMode = -1; Debug.log("Resetting _windowOrganizeMode.");},10000);
 
 			
 			var win;
@@ -664,7 +664,7 @@ else
        		else //this is user so can unlock
        		{
 				str += "<a href='javascript:" + jsReq + "' " +
-						"title='Click to unlock the system and release the ots Lock'>";
+						"title='You have the Lock. Click to unlock the system and release the ots Lock'>";
 				str += "<img " +	
 						"src='/WebPath/images/dashboardImages/icon-Settings-Lock.png'>";
 				str += "</a>";

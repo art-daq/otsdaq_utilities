@@ -51,6 +51,23 @@ XDAQ_INSTANTIATOR_IMPL(ConsoleSupervisor)
 //Count always happens, and System Message always happens for FSM commands
 const std::set<std::string> ConsoleSupervisor::CUSTOM_TRIGGER_ACTIONS({"Count Only","System Message","Halt","Stop","Pause","Soft Error","Hard Error"});
 
+const std::string ConsoleSupervisor::ConsoleMessageStruct::LABEL_TRACE = "TRACE";
+const std::string ConsoleSupervisor::ConsoleMessageStruct::LABEL_TRACE_PLUS = "TRACE+";
+const std::map<ConsoleSupervisor::ConsoleMessageStruct::FieldType, std::string /* fieldNames */> ConsoleSupervisor::ConsoleMessageStruct::fieldNames(
+	{
+		{FieldType::TIMESTAMP,"Timestamp"},
+		{FieldType::SEQID,"SequenceID"},
+		{FieldType::LEVEL,"Level"},
+		{FieldType::LABEL,"Label"},
+		{FieldType::SOURCEID,"SourceID"},
+		{FieldType::HOSTNAME,"Hostname"},
+		{FieldType::SOURCE,"Source"},
+		{FieldType::FILE,"File"},
+		{FieldType::LINE,"Line"},
+		{FieldType::MSG,"Msg"},
+	}
+);
+
 //==============================================================================
 ConsoleSupervisor::ConsoleSupervisor(xdaq::ApplicationStub* stub)
     : CoreSupervisorBase(stub)
@@ -65,6 +82,8 @@ ConsoleSupervisor::ConsoleSupervisor(xdaq::ApplicationStub* stub)
 	// attempt to make directory structure (just in case)
 	mkdir(((std::string)USER_CONSOLE_PREF_PATH).c_str(), 0755);
 	mkdir(((std::string)USER_CONSOLE_SNAPSHOT_PATH).c_str(), 0755);
+	
+	xoap::bind(this, &ConsoleSupervisor::resetConsoleCounts, "ResetConsoleCounts", XDAQ_NS_URI);
 
 	init();
 
@@ -111,6 +130,25 @@ void ConsoleSupervisor::destroy(void)
 {
 	// called by destructor
 }  // end destroy()
+
+
+//==============================================================================
+xoap::MessageReference ConsoleSupervisor::resetConsoleCounts(xoap::MessageReference /*message*/)
+{
+	__COUT_INFO__ << "Resetting Console Error/Warn/Info counts and preparing for new first messages." << __E__;
+
+	// lockout the messages array for the remainder of the scope
+	// this guarantees the reading thread can safely access the messages
+	std::lock_guard<std::mutex> lock(messageMutex_);
+	errorCount_ = 0;
+	firstErrorMessageTime_ = 0;	lastErrorMessageTime_= 0;
+	warnCount_ = 0;
+	firstWarnMessageTime_ = 0;	lastWarnMessageTime_= 0;
+	infoCount_ = 0;
+	firstInfoMessageTime_ = 0;	lastInfoMessageTime_= 0;
+
+	return SOAPUtilities::makeSOAPMessageReference("Done");
+}  // end resetConsoleCounts()
 
 //==============================================================================
 // messageFacilityReceiverWorkLoop ~~
@@ -255,16 +293,52 @@ try
 				cs->messages_.emplace_back(&(buffer.c_str()[c]), cs->messageCount_++, cs->priorityCustomTriggerList_);
 				if(cs->messages_.back().hasCustomTriggerMatchAction())
 					cs->customTriggerActionQueue_.push(cs->messages_.back().getCustomTriggerMatch());
+
+				//update system status
+				if(cs->messages_.back().getLevel() == "Error")
+				{
+					if(cs->errorCount_ == 0)
+					{
+						cs->firstErrorMessageTime_ = time(0);
+						cs->firstErrorMessage_ = cs->messages_.back().getMsg();
+					}
+
+					cs->lastErrorMessageTime_ = time(0);
+					++cs->errorCount_;
+					cs->lastErrorMessage_ = cs->messages_.back().getMsg();
+				}
+				else if(cs->messages_.back().getLevel() == "Warning")
+				{
+					if(cs->warnCount_ == 0)
+					{
+						cs->firstWarnMessageTime_ = time(0);
+						cs->firstWarnMessage_ = cs->messages_.back().getMsg();
+					}
+					cs->lastWarnMessageTime_ = time(0);
+					++cs->warnCount_;
+					cs->lastWarnMessage_ = cs->messages_.back().getMsg();
+				}
+				else if(cs->messages_.back().getLevel() == "Info")
+				{
+					if(cs->infoCount_ == 0)
+					{
+						cs->firstInfoMessageTime_ = time(0);
+						cs->firstInfoMessage_ = cs->messages_.back().getMsg();
+					}
+					cs->lastInfoMessageTime_ = time(0);
+					++cs->infoCount_;
+					cs->lastInfoMessage_ = cs->messages_.back().getMsg();
+				}
 				
 				// check if sequence ID is out of order
 				newSourceId   = cs->messages_.back().getSourceIDAsNumber();
 				newSequenceId = cs->messages_.back().getSequenceIDAsNumber();
 
-				//__COUT__ << "newSourceId: " << newSourceId << __E__;
-				//__COUT__ << "newSequenceId: " << newSequenceId << __E__;
-
-				//if
-				if( newSequenceId%1000 == 0 || //for debugging missed!
+				// std::cout << rsock.getLastIncomingIPAddress() << ":" <<
+				// 	rsock.getLastIncomingPort() << ":newSourceId: " << newSourceId << 
+				// 	":" << newSequenceId << __E__;
+				
+				if( // newSequenceId%1000 == 0 || //for debugging missed!
 				(newSourceId != -1 &&
 				   sourceLastSequenceID.find(newSourceId) !=
 				       sourceLastSequenceID.end() &&  // ensure not first packet received
@@ -402,7 +476,7 @@ try
 		
 		if(triggeredAction.action.size())
 		{
-			__COUT__ << "Handling action '" << triggeredAction.action <<
+			__COUT_TYPE__(TLVL_DEBUG+2) << __COUT_HDR__ << "Handling action '" << triggeredAction.action <<
 				 "' on custom count search string: " << StringMacros::vectorToString(triggeredAction.needleSubstrings,{'*'}) << __E__;
 			cs->doTriggeredAction(triggeredAction);
 		}
@@ -485,7 +559,7 @@ void ConsoleSupervisor::addCustomTriggeredAction(const std::string& triggerNeedl
 	uint32_t currentPriority = -1;
 	for(const auto& customTrigger : priorityCustomTriggerList_)
 	{
-		++currentPriority; //inc first to get to 0, -1 indicates not found
+		++currentPriority; //inc first to get to 0
 		if(StringMacros::vectorToString(
 			customTrigger.needleSubstrings,{'*'}) == triggerNeedle)
 		{
@@ -555,16 +629,20 @@ uint32_t ConsoleSupervisor::modifyCustomTriggeredAction(const std::string& curre
 
 	//find current priority position of currentNeedle
 	uint32_t currentPriority = -1;
+	bool found = false;
 	for(const auto& customTrigger : priorityCustomTriggerList_)
 	{
 		++currentPriority; //inc first to get to 0, -1 indicates not found
 		if(StringMacros::vectorToString(
 			customTrigger.needleSubstrings,{'*'}) == currentNeedle)
+		{
+			found = true;
 			break; //found
+		}
 	}
 
 	__SUP_COUTV__(currentPriority);
-	if(currentPriority >= priorityCustomTriggerList_.size())
+	if(!found)
 	{
 		__SUP_SS__ << "Attempt to modify Custom Count Search String failed. Could not find specified Search String '" << currentNeedle << "' in prioritized list." << __E__;
 		__SUP_SS_THROW__;
@@ -624,6 +702,7 @@ uint32_t ConsoleSupervisor::modifyCustomTriggeredAction(const std::string& curre
 	if(modifyType == "Search String" || modifyType == "All")
 	{
 		//modify existing needle
+		priorityCustomTriggerList_[currentPriority].needleSubstrings.clear();
 		StringMacros::getVectorFromString(setNeedle, 
 			priorityCustomTriggerList_[currentPriority].needleSubstrings,
 			{'*'} /* delimiter */, {} /* do not ignore whitespace */);
@@ -944,7 +1023,10 @@ void ConsoleSupervisor::request(const std::string&               requestType,
 				           << appInfo.second.getId()
 				           << " name = " << appInfo.second.getName() << ". \n\n"
 				           << e.what() << __E__;
-				__SUP_SS_THROW__;
+				//do not throw exception, because unable to set levels when some Supervisors are down
+				//__SUP_SS_THROW__; 
+				__SUP_COUT_ERR__ << ss.str();
+				continue; //skip bad Supervisor
 			}
 
 			std::vector<std::string> traceHostnameArr;
@@ -1677,6 +1759,55 @@ void ConsoleSupervisor::request(const std::string&               requestType,
 }  // end request()
 
 //==============================================================================
+// virtual progress string that can be overridden with more info
+//	like Console Error and Warning count
+std::string ConsoleSupervisor::getStatusProgressDetail(void)
+{
+	//Console Supervisor status detatil format is:
+	//	uptime, Err count, Warn count, Last Error msg, Last Warn msg
+
+	//return uptime detail
+	std::stringstream ss;
+	time_t t = getSupervisorUptime();
+	ss << "Uptime: ";
+	int days = t/60/60/24;
+	if(days > 0)
+	{
+		ss << days << " day" << (days>1?"s":"") << ", ";
+		t -= days * 60*60*24;
+	}
+
+	//HH:MM:SS
+	ss << std::setw(2) << std::setfill('0') << (t/60/60) << ":" <<
+		std::setw(2) << std::setfill('0') << ((t % (60*60))/60) << ":" << 
+		std::setw(2) << std::setfill('0') << (t % 60);
+
+	//return Err count, Warn count, Last Error msg, Last Warn msg, Last Info msg, Info count
+
+	// size_t 			errorCount_ = 0, warnCount_ = 0;
+	// std::string 	lastErrorMessage_, lastWarnMessage_;
+	// time_t			lastErrorMessageTime_ = 0, lastWarnMessageTime_ = 0;
+
+	ss << ", Error #: " <<  errorCount_;
+	ss << ", Warn #: " <<  warnCount_;
+	ss << ", Last Error (" << (lastErrorMessageTime_?StringMacros::getTimestampString(lastErrorMessageTime_):"0") << 
+		"): " << (lastErrorMessageTime_?StringMacros::encodeURIComponent(lastErrorMessage_):"");
+	ss << ", Last Warn (" << (lastWarnMessageTime_?StringMacros::getTimestampString(lastWarnMessageTime_):"0") << 
+		"): " << (lastWarnMessageTime_?StringMacros::encodeURIComponent(lastWarnMessage_):"");
+	ss << ", Last Info (" << (lastInfoMessageTime_?StringMacros::getTimestampString(lastInfoMessageTime_):"0") << 
+		"): " << (lastInfoMessageTime_?StringMacros::encodeURIComponent(lastInfoMessage_):"");
+	ss << ", Info #: " <<  infoCount_;
+	ss << ", First Error (" << (firstErrorMessageTime_?StringMacros::getTimestampString(firstErrorMessageTime_):"0") << 
+		"): " << (firstErrorMessageTime_?StringMacros::encodeURIComponent(firstErrorMessage_):"");
+	ss << ", First Warn (" << (firstWarnMessageTime_?StringMacros::getTimestampString(firstWarnMessageTime_):"0") << 
+		"): " << (firstWarnMessageTime_?StringMacros::encodeURIComponent(firstWarnMessage_):"");
+	ss << ", First Info (" << (firstInfoMessageTime_?StringMacros::getTimestampString(firstInfoMessageTime_):"0") << 
+		"): " << (firstInfoMessageTime_?StringMacros::encodeURIComponent(firstInfoMessage_):"");
+
+	return ss.str();
+}  // end getStatusProgressDetail()
+
+//==============================================================================
 // ConsoleSupervisor::insertMessageRefresh()
 //	if lastUpdateClock is current, return nothing
 //	else return new messages
@@ -1871,25 +2002,31 @@ void ConsoleSupervisor::addMessageToResponse(HttpXmlDocument* xmlOut, ConsoleSup
 	// for all fields, give value
 	for(auto& field : msg.fields)
 	{
-		if(field.second.fieldName == "Source")
+		if(field.first == ConsoleMessageStruct::FieldType::SOURCE)
 			continue;  // skip, not userful
-		if(field.second.fieldName == "SourceID")
+		if(field.first == ConsoleMessageStruct::FieldType::SOURCEID)
 			continue;  // skip, not userful
-		if(field.second.fieldName == "SequenceID")
+		if(field.first == ConsoleMessageStruct::FieldType::SEQID)
 			continue;  // skip, not userful
-		if(field.second.fieldName == "Timestamp") //use Time instead
+		if(field.first == ConsoleMessageStruct::FieldType::TIMESTAMP) //use Time instead
+			continue;  // skip, not userful
+		if(field.first == ConsoleMessageStruct::FieldType::LEVEL) //use modified getLevel instead
 			continue;  // skip, not userful
 
-		xmlOut->addTextElementToParent("message_" + field.second.fieldName,
-										field.second.fieldValue,
-										refreshParent_);
+		xmlOut->addTextElementToParent("message_" + 
+			ConsoleMessageStruct::fieldNames.at(field.first),
+												field.second,
+												refreshParent_);
 	} //end msg field loop
+
+	// give modified level also
+	xmlOut->addTextElementToParent("message_Level", msg.getLevel(), refreshParent_);
 
 	// give timestamp also
 	xmlOut->addTextElementToParent("message_Time", msg.getTime(), refreshParent_);
+
 	// give global count index also
-	xmlOut->addTextElementToParent(
-		"message_Count", std::to_string(msg.getCount()), refreshParent_);
+	xmlOut->addTextElementToParent("message_Count", std::to_string(msg.getCount()), refreshParent_);
 
 	//give Custom count label also (i.e., which search string this message matches, or blank "" for no match)
 	xmlOut->addTextElementToParent("message_Custom", 

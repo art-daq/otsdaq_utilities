@@ -1313,6 +1313,8 @@ DesktopContent.XMLHttpRequest = function(requestURL, data, returnHandler,
 
 							if(ignoreSystemBlock || !DesktopContent._blockSystemCheckMailbox)  //make sure system is alive
 							{
+								console.log(errStr); //make sure there is some record of this need-to-login!
+								
 								DesktopContent._needToLoginMailbox = true; //force to login screen on server failure 
 								if(DesktopContent._theDesktopWindow)
 									DesktopContent._theDesktopWindow.postMessage(

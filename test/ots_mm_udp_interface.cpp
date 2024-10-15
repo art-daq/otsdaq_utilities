@@ -184,7 +184,7 @@ ots_mm_udp_interface::~ots_mm_udp_interface()
 } //end destructor()
 
 //=========================================================================
-//extract value for field from xml looking forewards from after
+//extract value for field from xml looking forwards from after
 // occurence = 0 is first occurence
 std::string extractXmlField(const std::string &xml,
 												const std::string &field,

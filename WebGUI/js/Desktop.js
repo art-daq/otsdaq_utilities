@@ -521,7 +521,7 @@ Desktop.createDesktop = function(security) {
 	    		Debug.log("System blackout (likely rebooting)...");
 	    		_sysMsgCounter = 0; // reset since not going to handler
 	    	}
-	    	else
+	    	else // if(0) //uncomment when debugging and removing requests!!
 	    		Desktop.XMLHttpRequest("Request?RequestType=getSystemMessages","",_handleSystemMessages);
 	    }
 	} //end _checkMailboxes()
@@ -551,9 +551,7 @@ Desktop.createDesktop = function(security) {
 	    var tmpi;
 	    if((tmpi = tmp.indexOf(_lastSystemMessage)) >= 0)
 	    {
-	    	Debug.log("Desktop pretmp " + tmp);
-	    	Debug.log("Desktop _lastSystemMessage " + _lastSystemMessage);
-	    	Debug.log("Desktop tmp " + tmp.substr(tmpi+_lastSystemMessage.length+1));
+	    	Debug.log("Skipping repeat System Message...");
 	    	tmp = tmp.substr(tmpi+_lastSystemMessage.length+1);
 	    }
 	   
@@ -600,7 +598,7 @@ Desktop.createDesktop = function(security) {
 
 				
 	    //play sound alert (play() is a promise, which can reject, after processing)
-		_sysMsgSound.src = _SYS_MSG_SOUND_PATH; // buffers automatically when created		
+		//do not load over and over: _sysMsgSound.src = _SYS_MSG_SOUND_PATH; // buffers automatically when created		
 		_sysMsgSound.play().catch(e => {
 			Debug.log("System Message Sound Play() error",e);
 			str += "<br><br><div style='font-size:12px'>(Could not play alert sound because the uesr must interact with the page first)</div>";
@@ -653,6 +651,16 @@ Desktop.createDesktop = function(security) {
 	this.addWindow = function(name,subname,url,unique,extraStep) 
 	{		
 		Debug.log(name + " - " + subname + " - " + url + " - " + unique);
+
+		if(name.indexOf("icons loading...") > 0)
+		{
+			Debug.log("Assuming user is trying to reload icons!");
+			
+			//reset icons, if permissions undefined, keep permissions from before
+			Desktop.desktop.icons.resetWithPermissions(
+				undefined /*undefined permissions*/, true /*keepSamePermissions*/);
+			return;
+		}
 		
 		if(unique == 2) //open as stand-alone new tab page
 		{
@@ -985,16 +993,49 @@ Desktop.createDesktop = function(security) {
 	//	Handle window selection using dashboard
 	this.clickedWindowDashboard = function(id) 
 	{
+		if(0)
+		{
+			var win = this.getWindowById(id);
+			if(win == -1) return -1;
+			if(_getForeWindow() != win) 
+			{ //if not currently foreground window, set as only
+				if(_getForeWindow().isMaximized()) this.toggleFullScreen(); //if old foreground is full screen, toggle
+				this.setForeWindow(win);
+				if(_getForeWindow().isMinimized()) this.toggleMinimize(); //if new foreground is minimized, toggle
+				return;
+			}
+			//else minimize
+			this.toggleMinimize();
+			return;
+		}
+
+		//old functionality above acted more like Windows (removing Maximize if clicking)
+		//new functionality below acts like full screen tab system, to just select which window to show maximized
+
+
         var win = this.getWindowById(id);
 		if(win == -1) return -1;
-        if(_getForeWindow() != win) { //if not currently foreground window, set as only
-            if(_getForeWindow().isMaximized()) this.toggleFullScreen(); //if old foreground is full screen, toggle
+        if(_getForeWindow() != win)
+		{ //if not currently foreground window, set as only
+			var inMaxMode = false;
+            if(_getForeWindow().isMaximized()) 
+			{ 
+				this.toggleFullScreen(); //if old foreground is full screen, toggle
+				inMaxMode = true;
+			}
+
             this.setForeWindow(win);
-            if(_getForeWindow().isMinimized()) this.toggleMinimize(); //if new foreground is minimized, toggle
+            
+			if(_getForeWindow().isMinimized()) this.toggleMinimize(); //if new foreground is minimized, toggle
+			if(inMaxMode) this.toggleFullScreen();
+			
             return;
         }
-        //else minimize
-        this.toggleMinimize();
+        //else minimize if not maximized
+
+		if(!_getForeWindow().isMaximized()) 
+        	this.toggleMinimize();
+
     } //end clickedWindowDashboard()
 
 	//==============================================================================
@@ -2148,13 +2189,13 @@ Desktop.handleWindowManipulation = function(delta)
 
 	} //end tiled prep loop
 
-	if(delta[0] || delta[1])
-		Debug.log("keepTile",keepTile,Desktop.winManipMode,
-			"followTiledRight",followTiledRight.length,(followTiledRight.length?followTiledRight[0].getWindowName():""),
-			"followTiledTop",followTiledTop.length,(followTiledTop.length?followTiledTop[0].getWindowName():""),
-			"followTiledLeft",followTiledLeft.length,(followTiledLeft.length?followTiledLeft[0].getWindowName():""),
-			"followTiledBottom",followTiledBottom.length,(followTiledBottom.length?followTiledBottom[0].getWindowName():""),
-			delta);
+	// if(delta[0] || delta[1]) //for debugging tile behavior
+	// 	Debug.log("keepTile",keepTile,Desktop.winManipMode,
+	// 		"followTiledRight",followTiledRight.length,(followTiledRight.length?followTiledRight[0].getWindowName():""),
+	// 		"followTiledTop",followTiledTop.length,(followTiledTop.length?followTiledTop[0].getWindowName():""),
+	// 		"followTiledLeft",followTiledLeft.length,(followTiledLeft.length?followTiledLeft[0].getWindowName():""),
+	// 		"followTiledBottom",followTiledBottom.length,(followTiledBottom.length?followTiledBottom[0].getWindowName():""),
+	// 		delta);
 
 	if(!keepTile)
 		Desktop.desktop.lastTileWinPositions = {}; //clear to avoid future checks
@@ -2238,8 +2279,9 @@ Desktop.handleWindowManipulation = function(delta)
 			break;
 		default:
 	}
-	if(delta[0] || delta[1])
-		Debug.log(deltaResidual,delta);
+
+	// if(delta[0] || delta[1]) //for debugging tile behavior
+	// 	Debug.log(deltaResidual,delta);
 
 	var winChangeStack = [];
 	if(delta[1])
@@ -2607,6 +2649,12 @@ Desktop.handleFullScreenWindowRefresh = function(mouseEvent)
 		//			Debug.log("ID: " + id + " z=" + z);
 		//			
 		//    	}
+
+			
+		//reset icons, if permissions undefined, keep permissions from before
+		Desktop.desktop.icons.resetWithPermissions(
+			undefined /*undefined permissions*/, true /*keepSamePermissions*/);
+			
     	return false;
 } //end handleFullScreenWindowRefresh()
 
@@ -2879,7 +2927,7 @@ Desktop.desktopTooltip = function()
 			"\n\t- <b>Desktop Dashboard (top pane):</b> " +
 			"<INDENT>" +
 			"Along the top and left margins of the Desktop, you will find the Desktop " +
-			"Dashboard - this section is an introduction to the top pane of the Dashboard. " +
+			"Dashboard; the text below provides an introduction to the top portion of the Dashboard. " +
 			"The top pane of the Dashboard " +
 			"is made of buttons and icons going from left to right:" +
 
@@ -2902,7 +2950,8 @@ Desktop.desktopTooltip = function()
 			"\n\t- <b>Tile Desktop Windows:</b> " +
 			"<INDENT>" +
 			"The next button you will encounter in the top pane reads 'Tile.' " +
-			"This button will automatically tile all open Desktop Windows to fit in your browser window." +
+			"This button will automatically tile all open Desktop Windows to fit in your browser window. " +
+			"If you click the button multiple times, you will get a few different layout options." +
 			"</INDENT>" +
 
 			"\n\t- <b>Show Desktop:</b> " +
@@ -2917,12 +2966,19 @@ Desktop.desktopTooltip = function()
 			"The next button you will encounter in the top pane reads 'Full Screen.' " +
 			"This button will maximize to full screen the Desktop Window that was last used (i.e. the window that has the focus)." +
 			"</INDENT>" +
+			
+			"\n\t- <b>Refresh:</b> " +
+			"<INDENT>" +
+			"The next button you will encounter in the top pane looks like a circular refresh arrow icon. " +
+			"This button will reconnect to the server, refresh every open Desktop Window, and reload the Desktop Icons." +
+			"</INDENT>" +
+
 			"</INDENT>" +
 
 			"\n\t- <b>Desktop Dashboard (left pane):</b> " +
 			"<INDENT>" +
 			"Along the top and left margins of the Desktop, you will find the Desktop " +
-			"Dashboard - this section is an introduction to the left pane of the Dashboard. " +
+			"Dashboard; the text below provides an introduction to the left portion of the Dashboard. " +
 			"The left pane of the Dashboard " +
 			"is a listing of all open Desktop Windows. If you click one of the buttons in the list, " +
 			"the associated window " +
@@ -2932,7 +2988,7 @@ Desktop.desktopTooltip = function()
 
 
 
-			"\n\nRemember, if you would like to take a look at the available online documentation, " +
+			"\n\nNote, if you would like to take a look at the available online documentation, " +
 			"click the question mark at the top-right of the Desktop."
 	);	
 } //end desktopTooltip()

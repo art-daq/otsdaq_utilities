@@ -613,7 +613,7 @@ void MacroMakerSupervisor::requestWrapper(xgi::Input* in, xgi::Output* out)
 	userInfo.username_               = "admin";
 	userInfo.displayName_            = "Admin";
 	userInfo.usernameWithLock_       = "admin";
-	userInfo.activeUserSessionIndex_ = 0;
+	userInfo.userSessionIndex_ 		 = 0;
 	std::map<std::string /*groupName*/, WebUsers::permissionLevel_t> initPermissions = {
 	    {WebUsers::DEFAULT_USER_GROUP, WebUsers::PERMISSION_LEVEL_ADMIN}};
 	userInfo.setGroupPermissionLevels(StringMacros::mapToString(initPermissions));

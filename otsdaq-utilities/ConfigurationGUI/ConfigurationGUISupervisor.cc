@@ -229,7 +229,7 @@ try
 	
 	// refresh to reload from info files and db (maintains temporary views!)
 	ConfigurationManagerRW* cfgMgr = refreshUserSession(
-	    userInfo.username_, userInfo.activeUserSessionIndex_, (refresh == "1"));
+	    userInfo.username_, (refresh == "1"));
 
 	if(requestType == "saveTableInfo")
 	{
@@ -1020,8 +1020,19 @@ try
 			TableGroupKey(tableGroupKey),
 			modifiedTables);
 
-		xmlOut.addTextElementToData("StructureStatusAsJSON", 
-			cfgMgr->getTableByName(tableName)->getStructureStatusAsJSON(cfgMgr));
+		try
+		{
+			xmlOut.addTextElementToData("StructureStatusAsJSON", 
+				cfgMgr->getTableByName(tableName)->getStructureStatusAsJSON(cfgMgr));
+		}
+		catch(const std::runtime_error& e)
+		{
+			__SUP_SS__ << "The table plugin feature getStructureStatusAsJSON(), does not seem to be supported for the table '" <<
+				tableName << ".' Make sure you have the expected table plugin in your path, or contact system admins." << __E__;
+			ss << "Here is the error: " << e.what() << __E__;
+			__SUP_SS_THROW__;
+		}
+		
 	}
 	else if(requestType == "getArtdaqNodes")
 	{
@@ -1270,37 +1281,48 @@ try
 	}
 	else if(requestType == "getLastTableGroups")
 	{
-		std::string                                          timeString;
-		std::pair<std::string /*group name*/, TableGroupKey> theGroup;
+		// std::string                                          timeString;
+		std::map< std::string /* group type */,
+			std::tuple<std::string /*group name*/, TableGroupKey, 
+				std::string /* time string*/>> theGroups;
+		
+		theRemoteWebUsers_.getLastTableGroups(theGroups);
 
-		theGroup = theRemoteWebUsers_.getLastTableGroup("Configured", timeString);
-		xmlOut.addTextElementToData("LastConfiguredGroupName", theGroup.first);
-		xmlOut.addTextElementToData("LastConfiguredGroupKey", theGroup.second.toString());
-		xmlOut.addTextElementToData("LastConfiguredGroupTime", timeString);
-		theGroup = theRemoteWebUsers_.getLastTableGroup("Started", timeString);
-		xmlOut.addTextElementToData("LastStartedGroupName", theGroup.first);
-		xmlOut.addTextElementToData("LastStartedGroupKey", theGroup.second.toString());
-		xmlOut.addTextElementToData("LastStartedGroupTime", timeString);
-		theGroup = theRemoteWebUsers_.getLastTableGroup("ActivatedConfig", timeString);
-		xmlOut.addTextElementToData("LastActivatedConfigGroupName", theGroup.first);
-		xmlOut.addTextElementToData("LastActivatedConfigGroupKey",
-		                            theGroup.second.toString());
-		xmlOut.addTextElementToData("LastActivatedConfigGroupTime", timeString);
-		theGroup = theRemoteWebUsers_.getLastTableGroup("ActivatedContext", timeString);
-		xmlOut.addTextElementToData("LastActivatedContextGroupName", theGroup.first);
-		xmlOut.addTextElementToData("LastActivatedContextGroupKey",
-		                            theGroup.second.toString());
-		xmlOut.addTextElementToData("LastActivatedContextGroupTime", timeString);
-		theGroup = theRemoteWebUsers_.getLastTableGroup("ActivatedBackbone", timeString);
-		xmlOut.addTextElementToData("LastActivatedBackboneGroupName", theGroup.first);
-		xmlOut.addTextElementToData("LastActivatedBackboneGroupKey",
-		                            theGroup.second.toString());
-		xmlOut.addTextElementToData("LastActivatedBackboneGroupTime", timeString);
-		theGroup = theRemoteWebUsers_.getLastTableGroup("ActivatedIterator", timeString);
-		xmlOut.addTextElementToData("LastActivatedIteratorGroupName", theGroup.first);
-		xmlOut.addTextElementToData("LastActivatedIteratorGroupKey",
-		                            theGroup.second.toString());
-		xmlOut.addTextElementToData("LastActivatedIteratorGroupTime", timeString);
+		for(const auto& theGroup : theGroups)
+		{
+			xmlOut.addTextElementToData("Last" + theGroup.first + "GroupName", std::get<0>(theGroup.second));
+			xmlOut.addTextElementToData("Last" + theGroup.first + "GroupKey", std::get<1>(theGroup.second).toString());
+			xmlOut.addTextElementToData("Last" + theGroup.first + "GroupTime", std::get<2>(theGroup.second));
+		}
+
+		// theGroup = theRemoteWebUsers_.getLastTableGroup("Configured", timeString);
+		// xmlOut.addTextElementToData("LastConfiguredGroupName", theGroup.first);
+		// xmlOut.addTextElementToData("LastConfiguredGroupKey", theGroup.second.toString());
+		// xmlOut.addTextElementToData("LastConfiguredGroupTime", timeString);
+		// theGroup = theRemoteWebUsers_.getLastTableGroup("Started", timeString);
+		// xmlOut.addTextElementToData("LastStartedGroupName", theGroup.first);
+		// xmlOut.addTextElementToData("LastStartedGroupKey", theGroup.second.toString());
+		// xmlOut.addTextElementToData("LastStartedGroupTime", timeString);
+		// theGroup = theRemoteWebUsers_.getLastTableGroup("ActivatedConfig", timeString);
+		// xmlOut.addTextElementToData("LastActivatedConfigGroupName", theGroup.first);
+		// xmlOut.addTextElementToData("LastActivatedConfigGroupKey",
+		//                             theGroup.second.toString());
+		// xmlOut.addTextElementToData("LastActivatedConfigGroupTime", timeString);
+		// theGroup = theRemoteWebUsers_.getLastTableGroup("ActivatedContext", timeString);
+		// xmlOut.addTextElementToData("LastActivatedContextGroupName", theGroup.first);
+		// xmlOut.addTextElementToData("LastActivatedContextGroupKey",
+		//                             theGroup.second.toString());
+		// xmlOut.addTextElementToData("LastActivatedContextGroupTime", timeString);
+		// theGroup = theRemoteWebUsers_.getLastTableGroup("ActivatedBackbone", timeString);
+		// xmlOut.addTextElementToData("LastActivatedBackboneGroupName", theGroup.first);
+		// xmlOut.addTextElementToData("LastActivatedBackboneGroupKey",
+		//                             theGroup.second.toString());
+		// xmlOut.addTextElementToData("LastActivatedBackboneGroupTime", timeString);
+		// theGroup = theRemoteWebUsers_.getLastTableGroup("ActivatedIterator", timeString);
+		// xmlOut.addTextElementToData("LastActivatedIteratorGroupName", theGroup.first);
+		// xmlOut.addTextElementToData("LastActivatedIteratorGroupKey",
+		//                             theGroup.second.toString());
+		// xmlOut.addTextElementToData("LastActivatedIteratorGroupTime", timeString);
 
 		//check other subsystems active groups
 		handleOtherSubsystemActiveGroups(xmlOut, cfgMgr, false /* getFullList */);
@@ -1487,7 +1509,7 @@ try
 
 	__SUP_COUTT__ << "cfgMgr runtime=" << cfgMgr->runTimeSeconds() << __E__;
 	// always add active table groups to xml response
-	ConfigurationSupervisorBase::getConfigurationStatusXML(xmlOut, cfgMgr);
+	ConfigurationSupervisorBase::getConfigurationStatusXML(xmlOut, cfgMgr, userInfo.username_);
 	__SUP_COUTT__ << "cfgMgr runtime=" << cfgMgr->runTimeSeconds() << __E__;
 
 }  // end ::request()
@@ -5866,19 +5888,19 @@ catch(...)
 
 //==============================================================================
 //	refreshUserSession
-//		Finds/creates the active user session based on username&  actionSessionIndex
+//		Finds/creates the active user session based on username &  actionSessionIndex
 //
 //		Returns a configurationMangager instance dedictated to the user.
 //		This configurationManager will have at least empty instances of all base
 // configurations (no null pointers) 
 ConfigurationManagerRW* ConfigurationGUISupervisor::refreshUserSession(
-    std::string username, uint64_t activeSessionIndex, bool refresh)
+    std::string username, bool refresh)
 {
-	activeSessionIndex =
+	uint64_t sessionIndex =
 	    0;  // make session by username for now! (may never want to change back)
 
 	std::stringstream ssMapKey;
-	ssMapKey << username << ":" << activeSessionIndex;
+	ssMapKey << username << ":" << sessionIndex;
 	std::string mapKey = ssMapKey.str();
 	__SUP_COUTT__ << "Using Config Session " << mapKey
 					<< " ... Total Session Count: " << userConfigurationManagers_.size()
@@ -7828,167 +7850,180 @@ try
 	{		
 		if(targetSubsystem != "" && targetSubsystem != subsystem.first) continue; //skip non-target subsystem
 
-		std::string userPath = subsystem.second.getNode("SubsystemUserDataPath").getValue();
-		auto splitPath = StringMacros::getVectorFromString(userPath,{':'});
-		__SUP_COUTV__(StringMacros::vectorToString(splitPath));
-
-		if(!splitPath.size() || splitPath.size() > 2) 
-		{					
-			__SUP_SS__ << "Illegal user data path specified for subsystem '" <<  subsystem.first
-				<< "': " << userPath << __E__;
-			__SS_ONLY_THROW__;				
-		}		
-		std::string userDataPath = splitPath[splitPath.size()-1];
-
-		//since we are running exec, cleanse the filename path for alphanumeric,_,-,/ only
-		for(unsigned int i=0; i < userDataPath.length(); ++i)
-			if(!((userDataPath[i] >= 'a' && userDataPath[i] <= 'z') ||
-				(userDataPath[i] >= 'A' && userDataPath[i] <= 'Z') ||
-				(userDataPath[i] >= '0' && userDataPath[i] <= '9') ||
-				userDataPath[i] == '-' ||
-				userDataPath[i] == '_' ||
-				userDataPath[i] == '/'))
-			{				
-				__SUP_SS__ << "Illegal user data path specified (no special characters allowed) for subsystem '" <<  subsystem.first
-						<< "': " << userPath << __E__;
-				__SS_ONLY_THROW__;									
-			} // end filename cleanse	
-		
-
 		xercesc::DOMElement* parent = xmlOut.addTextElementToData("SubsystemName", subsystem.first);
 
 		if(!getFullList)
 			continue;
 
-		//enforce filename ends correctly
-		std::string filename = userDataPath + "/ServiceData/ActiveTableGroups.cfg";		
-
-		std::string cmdResult;
+		std::string filename, userDataPath;
 		std::string username, hostname;
-		bool scpWithUsername = false;
-		if(splitPath.size() == 2) //then need to scp the file
-		{
-			//since we are running exec, cleanse the username@host path for alphanumeric,_,-,/ only
-			std::vector<std::string> userHostSplit = StringMacros::getVectorFromString(splitPath[0],{'@'});
-			__SUP_COUTV__(userHostSplit.size());			
-			if(userHostSplit.size() == 1)
-				hostname = userHostSplit[0];
-			else if(userHostSplit.size() == 2)
-			{
-				username = userHostSplit[0];
-				hostname = userHostSplit[1];
-			}
-			else
-			{					
-				__SUP_SS__ << "Illegal remote username/host specified for subsystem '" <<  subsystem.first
-					<< "': " << userPath << __E__;
-				__SS_ONLY_THROW__;					
-			}		
 
-			for(unsigned int i=0;userHostSplit.size() == 2 && i<username.length(); ++i)
-				if(!((username[i] >= 'a' && username[i] <= 'z') ||
-					(username[i] >= 'A' && username[i] <= 'Z') ||
-					(username[i] >= '0' && username[i] <= '9') ||
-					username[i] == '-' ||
-					username[i] == '_'))
-				{					
-					__SUP_SS__ << "Illegal remote username specified for subsystem '" <<  subsystem.first
-						<< "': " << userPath << __E__;
-					__SS_ONLY_THROW__;					
-				}		
-			unsigned int ii = 0; //track last . to prevent weird . usage
-			for(unsigned int i=0;i<hostname.length(); ++i)
-				if(!((hostname[i] >= 'a' && hostname[i] <= 'z') ||
-					(hostname[i] >= 'A' && hostname[i] <= 'Z') ||
-					(hostname[i] >= '0' && hostname[i] <= '9') ||
-					hostname[i] == '-' ||
-					hostname[i] == '_'))
-				{					
-					if(hostname[i] == '.' && i > ii + 1)
-					{
-						//its ok to have this . so track position
-						ii = i;
-					}
-					else //else not ok to have .. or other characters
-					{
-						__SUP_SS__ << "Illegal remote hostname '" << hostname << "' specified for subsystem '" <<  subsystem.first
-							<< "': " << userPath << __E__;
-						__SS_ONLY_THROW__;					
-					}
-				}		
+		std::map<std::string /*groupType*/,
+			std::pair<std::string /*groupName*/,
+			TableGroupKey>> retMap = cfgMgr->getOtherSubsystemActiveTableGroups(subsystem.first, &userDataPath, &hostname, &username);
+		//TODO -- replace with call to ConfigurationManager::getOtherSubsystemActiveTableGroups
 
-			std::string tmpSubsystemFilename = ConfigurationManager::ACTIVE_GROUPS_FILENAME + "." + subsystem.first;
-			__SUP_COUTV__(tmpSubsystemFilename);
-			if(userHostSplit.size() == 2) //has username
-			{
-				scpWithUsername = true;
-				cmdResult = StringMacros::exec(("rm "  + tmpSubsystemFilename + " 2>/dev/null; scp " + username + "@" + hostname + 
-					":" + filename + 
-					" " + tmpSubsystemFilename + " 2>&1; cat " + tmpSubsystemFilename + " 2>&1").c_str());
-			}
-			else
-				cmdResult = StringMacros::exec(("rm "  + tmpSubsystemFilename + " 2>/dev/null; scp " + hostname + ":" + filename + 
-					" " + tmpSubsystemFilename + " 2>&1; cat " + tmpSubsystemFilename + " 2>&1").c_str());
-		}
-		else if(splitPath.size() == 1) //then can just directly access the file
-		{
-			cmdResult = StringMacros::exec(("cat " + filename + " 2>&1").c_str());
-		}
-		else
-		{
-			__SUP_SS__ << "Illegal user data path specified for subsystem '" << subsystem.first
-				<< "': " << userPath << __E__;
-			__SS_ONLY_THROW__;
-		}
+		// std::string userPath = subsystem.second.getNode("SubsystemUserDataPath").getValue();
+		// auto splitPath = StringMacros::getVectorFromString(userPath,{':'});
+		// __SUP_COUTV__(StringMacros::vectorToString(splitPath));
 
-		__SUP_COUTV__(cmdResult);
-		if(cmdResult.find("Permission denied") != std::string::npos)
-		{
-			__SUP_SS__ << "Permission denied accessing user data path specified for subsystem '" << subsystem.first
-				<< "': " << userPath << __E__;
-			__SS_ONLY_THROW__;
-		}
+		// if(!splitPath.size() || splitPath.size() > 2) 
+		// {					
+		// 	__SUP_SS__ << "Illegal user data path specified for subsystem '" <<  subsystem.first
+		// 		<< "': " << userPath << __E__;
+		// 	__SS_ONLY_THROW__;				
+		// }		
+		// std::string userDataPath = splitPath[splitPath.size()-1];
 
-		auto subsystemActiveGroupMap = StringMacros::getVectorFromString(cmdResult,{'\n'} /* delimieter*/, {' ','\t'} /* whitespace*/);
-		__SUP_COUTV__(StringMacros::vectorToString(subsystemActiveGroupMap));
-		__SUP_COUTV__(subsystemActiveGroupMap.size());
+		// //since we are running exec, cleanse the filename path for alphanumeric,_,-,/ only
+		// for(unsigned int i=0; i < userDataPath.length(); ++i)
+		// 	if(!((userDataPath[i] >= 'a' && userDataPath[i] <= 'z') ||
+		// 		(userDataPath[i] >= 'A' && userDataPath[i] <= 'Z') ||
+		// 		(userDataPath[i] >= '0' && userDataPath[i] <= '9') ||
+		// 		userDataPath[i] == '-' ||
+		// 		userDataPath[i] == '_' ||
+		// 		userDataPath[i] == '/'))
+		// 	{				
+		// 		__SUP_SS__ << "Illegal user data path specified (no special characters allowed) for subsystem '" <<  subsystem.first
+		// 				<< "': " << userPath << __E__;
+		// 		__SS_ONLY_THROW__;									
+		// 	} // end filename cleanse	
 
-		std::string //groupComment, groupAuthor, groupCreationTime, 
-			groupType;
-		for(unsigned int i = 0; i + 1 < subsystemActiveGroupMap.size(); i += 2)
-		{
-			if(subsystemActiveGroupMap[i] == "" || subsystemActiveGroupMap[i+1] == "-1") continue;
+		// //enforce filename ends correctly
+		// std::string filename = userDataPath + "/ServiceData/ActiveTableGroups.cfg";		
 
-			__SUP_COUT__ << "Loading type of subsystem '" << subsystem.first
-				<< "' group " << subsystemActiveGroupMap[i] << "(" << subsystemActiveGroupMap[i+1] << ")" << __E__;
+		// std::string cmdResult;
+		// std::string username, hostname;
+		// bool scpWithUsername = false;
+		// if(splitPath.size() == 2) //then need to scp the file
+		// {
+		// 	//since we are running exec, cleanse the username@host path for alphanumeric,_,-,/ only
+		// 	std::vector<std::string> userHostSplit = StringMacros::getVectorFromString(splitPath[0],{'@'});
+		// 	__SUP_COUTV__(userHostSplit.size());			
+		// 	if(userHostSplit.size() == 1)
+		// 		hostname = userHostSplit[0];
+		// 	else if(userHostSplit.size() == 2)
+		// 	{
+		// 		username = userHostSplit[0];
+		// 		hostname = userHostSplit[1];
+		// 	}
+		// 	else
+		// 	{					
+		// 		__SUP_SS__ << "Illegal remote username/host specified for subsystem '" <<  subsystem.first
+		// 			<< "': " << userPath << __E__;
+		// 		__SS_ONLY_THROW__;					
+		// 	}		
 
-			try
-			{
-				cfgMgr->loadTableGroup(
-					subsystemActiveGroupMap[i]/*groupName*/,
-					TableGroupKey(subsystemActiveGroupMap[i+1]),
-					false /*doActivate*/,
-					0 /*groupMembers*/,
-					0 /*progressBar*/,
-					0 /*accumulateErrors*/,
-					0, // &groupComment,
-					0, //&groupAuthor,
-					0, //&groupCreationTime,
-					true /*doNotLoadMember*/,
-					&groupType);
-			}
-			catch(const std::runtime_error& e)
-			{
-				__SUP_COUT__ <<  "Ignoring error loading subsystem '" << subsystem.first
-				<< "' group " << subsystemActiveGroupMap[i] << "(" << subsystemActiveGroupMap[i+1] << "): " << __E__ << e.what() << __E__;
-				groupType = ConfigurationManager::GROUP_TYPE_NAME_UNKNOWN;
-			}			
+		// 	for(unsigned int i=0;userHostSplit.size() == 2 && i<username.length(); ++i)
+		// 		if(!((username[i] >= 'a' && username[i] <= 'z') ||
+		// 			(username[i] >= 'A' && username[i] <= 'Z') ||
+		// 			(username[i] >= '0' && username[i] <= '9') ||
+		// 			username[i] == '-' ||
+		// 			username[i] == '_'))
+		// 		{					
+		// 			__SUP_SS__ << "Illegal remote username specified for subsystem '" <<  subsystem.first
+		// 				<< "': " << userPath << __E__;
+		// 			__SS_ONLY_THROW__;					
+		// 		}		
+		// 	unsigned int ii = 0; //track last . to prevent weird . usage
+		// 	for(unsigned int i=0;i<hostname.length(); ++i)
+		// 		if(!((hostname[i] >= 'a' && hostname[i] <= 'z') ||
+		// 			(hostname[i] >= 'A' && hostname[i] <= 'Z') ||
+		// 			(hostname[i] >= '0' && hostname[i] <= '9') ||
+		// 			hostname[i] == '-' ||
+		// 			hostname[i] == '_'))
+		// 		{					
+		// 			if(hostname[i] == '.' && i > ii + 1)
+		// 			{
+		// 				//its ok to have this . so track position
+		// 				ii = i;
+		// 			}
+		// 			else //else not ok to have .. or other characters
+		// 			{
+		// 				__SUP_SS__ << "Illegal remote hostname '" << hostname << "' specified for subsystem '" <<  subsystem.first
+		// 					<< "': " << userPath << __E__;
+		// 				__SS_ONLY_THROW__;					
+		// 			}
+		// 		}		
+
+		// 	std::string tmpSubsystemFilename = ConfigurationManager::ACTIVE_GROUPS_FILENAME + "." + subsystem.first;
+		// 	__SUP_COUTV__(tmpSubsystemFilename);
+		// 	if(userHostSplit.size() == 2) //has username
+		// 	{
+		// 		scpWithUsername = true;
+		// 		cmdResult = StringMacros::exec(("rm "  + tmpSubsystemFilename + " 2>/dev/null; scp " + username + "@" + hostname + 
+		// 			":" + filename + 
+		// 			" " + tmpSubsystemFilename + " 2>&1; cat " + tmpSubsystemFilename + " 2>&1").c_str());
+		// 	}
+		// 	else
+		// 		cmdResult = StringMacros::exec(("rm "  + tmpSubsystemFilename + " 2>/dev/null; scp " + hostname + ":" + filename + 
+		// 			" " + tmpSubsystemFilename + " 2>&1; cat " + tmpSubsystemFilename + " 2>&1").c_str());
+		// }
+		// else if(splitPath.size() == 1) //then can just directly access the file
+		// {
+		// 	cmdResult = StringMacros::exec(("cat " + filename + " 2>&1").c_str());
+		// }
+		// else
+		// {
+		// 	__SUP_SS__ << "Illegal user data path specified for subsystem '" << subsystem.first
+		// 		<< "': " << userPath << __E__;
+		// 	__SS_ONLY_THROW__;
+		// }
+
+		// __SUP_COUTV__(cmdResult);
+		// if(cmdResult.find("Permission denied") != std::string::npos)
+		// {
+		// 	__SUP_SS__ << "Permission denied accessing user data path specified for subsystem '" << subsystem.first
+		// 		<< "': " << userPath << __E__;
+		// 	__SS_ONLY_THROW__;
+		// }
+
+		// auto subsystemActiveGroupMap = StringMacros::getVectorFromString(cmdResult,{'\n'} /* delimieter*/, {' ','\t'} /* whitespace*/);
+		// __SUP_COUTV__(StringMacros::vectorToString(subsystemActiveGroupMap));
+		// __SUP_COUTV__(subsystemActiveGroupMap.size());
+
+		// std::string //groupComment, groupAuthor, groupCreationTime, 
+		// 	groupType;
+		// for(unsigned int i = 0; i + 1 < subsystemActiveGroupMap.size(); i += 2)
+		// {
+		// 	if(subsystemActiveGroupMap[i] == "" || subsystemActiveGroupMap[i+1] == "-1") continue;
+
+		// 	__SUP_COUT__ << "Loading type of subsystem '" << subsystem.first
+		// 		<< "' group " << subsystemActiveGroupMap[i] << "(" << subsystemActiveGroupMap[i+1] << ")" << __E__;
+
+		// 	try
+		// 	{
+		// 		cfgMgr->loadTableGroup(
+		// 			subsystemActiveGroupMap[i]/*groupName*/,
+		// 			TableGroupKey(subsystemActiveGroupMap[i+1]),
+		// 			false /*doActivate*/,
+		// 			0 /*groupMembers*/,
+		// 			0 /*progressBar*/,
+		// 			0 /*accumulateErrors*/,
+		// 			0, // &groupComment,
+		// 			0, //&groupAuthor,
+		// 			0, //&groupCreationTime,
+		// 			true /*doNotLoadMember*/,
+		// 			&groupType);
+		// 	}
+		// 	catch(const std::runtime_error& e)
+		// 	{
+		// 		__SUP_COUT__ <<  "Ignoring error loading subsystem '" << subsystem.first
+		// 		<< "' group " << subsystemActiveGroupMap[i] << "(" << subsystemActiveGroupMap[i+1] << "): " << __E__ << e.what() << __E__;
+		// 		groupType = ConfigurationManager::GROUP_TYPE_NAME_UNKNOWN;
+		// 	}			
 			
-			xmlOut.addTextElementToParent("CurrentlyActive" + groupType + "GroupName", subsystemActiveGroupMap[i], parent);
-			xmlOut.addTextElementToParent("CurrentlyActive" + groupType + "GroupKey", subsystemActiveGroupMap[i+1], parent);
-			// xmlOut.addTextElementToParent("CurrentlyActive" + groupType + "GroupComment", groupComment, parent);
-			// xmlOut.addTextElementToParent("CurrentlyActive" + groupType + "GroupAuthor", groupAuthor, parent);
-			// xmlOut.addTextElementToParent("CurrentlyActive" + groupType + "GroupCreationTime", groupCreationTime, parent);
+		// 	xmlOut.addTextElementToParent("CurrentlyActive" + groupType + "GroupName", subsystemActiveGroupMap[i], parent);
+		// 	xmlOut.addTextElementToParent("CurrentlyActive" + groupType + "GroupKey", subsystemActiveGroupMap[i+1], parent);
+		// 	// xmlOut.addTextElementToParent("CurrentlyActive" + groupType + "GroupComment", groupComment, parent);
+		// 	// xmlOut.addTextElementToParent("CurrentlyActive" + groupType + "GroupAuthor", groupAuthor, parent);
+		// 	// xmlOut.addTextElementToParent("CurrentlyActive" + groupType + "GroupCreationTime", groupCreationTime, parent);
+		// }
+
+		for(const auto& retPair : retMap)
+		{
+		 	xmlOut.addTextElementToParent("CurrentlyActive" + retPair.first + "GroupName", retPair.second.first, parent);
+		 	xmlOut.addTextElementToParent("CurrentlyActive" + retPair.first + "GroupKey", retPair.second.second.toString(), parent);
 		}
 
 
@@ -8010,6 +8045,9 @@ try
 			ConfigurationManager::LAST_ACTIVATED_ITERATOR_GROUP_FILE
 		};
 
+		std::string userPath = subsystem.second.getNode("SubsystemUserDataPath").getValue();
+		auto splitPath = StringMacros::getVectorFromString(userPath,{':'});
+		std::string cmdResult;
 		for(unsigned int i = 0; i < filenames.size(); ++i)
 		{
 			filename = userDataPath + "/ServiceData/RunControlData/" + filenames[i];	
@@ -8020,7 +8058,7 @@ try
 			
 			if(splitPath.size() == 2) //must scp
 			{
-				if(scpWithUsername) //has username
+				if(username.size()) //has username
 					cmdResult = StringMacros::exec(("rm "  + tmpSubsystemFilename + " 2>/dev/null; scp " + username + "@" + hostname + 
 						":" + filename + 
 						" " + tmpSubsystemFilename + " 2>&1; cat " + tmpSubsystemFilename + " 2>&1").c_str());

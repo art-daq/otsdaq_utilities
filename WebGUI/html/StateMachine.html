@@ -751,6 +751,37 @@
 			{			
 			    Debug.log("Physics smRequestHandler" + req.responseText);	    
 			    
+
+				var RequireUserLogInputOnConfigureTransition = DesktopContent.getXMLValue(req,"RequireUserLogInputOnConfigureTransition")|0;
+				var RequireUserLogInputOnRunTransition = DesktopContent.getXMLValue(req,"RequireUserLogInputOnRunTransition")|0;
+				//make sure required transitions are set in _LOGBOOK_TRANSITIONS
+				if(RequireUserLogInputOnConfigureTransition)
+				{
+					var transitionActionName = "configure";
+					var found = false;
+					for(var i=0;i<_LOGBOOK_TRANSITIONS.length;++i)
+						if(transitionActionName.toLowerCase() == _LOGBOOK_TRANSITIONS[i].trim().toLowerCase())
+						{ found = true; break;}
+					if(!found)
+					{
+						Debug.log("Confirming that log entries are required for transition",transitionActionName);
+						_LOGBOOK_TRANSITIONS.push(transitionActionName); 
+					}
+				}
+				if(RequireUserLogInputOnRunTransition)
+				{
+					var transitionActionName = "start";
+					var found = false;
+					for(var i=0;i<_LOGBOOK_TRANSITIONS.length;++i)
+						if(transitionActionName.toLowerCase() == _LOGBOOK_TRANSITIONS[i].trim().toLowerCase())
+						{ found = true; break;}
+					if(!found)
+					{
+						Debug.log("Confirming that log entries are required for transition",transitionActionName);
+						_LOGBOOK_TRANSITIONS.push(transitionActionName); 
+					}
+				}
+
 				var states = req.responseXML.getElementsByTagName("state");
 
                 Debug.log("Physics smRequestHandler " + states.length);
@@ -1302,44 +1333,63 @@
 					if(transitionActionName.toLowerCase() == _LOGBOOK_TRANSITIONS[i].trim().toLowerCase())
 					{
 						Debug.log("Found logbook entry required " + transitionActionName);
-						DesktopContent.popUpVerification(
-							/* prompt */
-							"Please enter a logbook entry for '" + transitionActionName + "':"
-							, 
-							/* continueFunc [optional] */
-							function(entry)
-							{
-								Debug.log("User entered logbook entry " + entry);
 
-								//save last entry
-								_last_logbook_entry[transitionActionName] = entry;
-								localCompleteTransition(entry);
-							} //end continueFunc handlere
-							, 
-							/* val [optional] */ undefined,
-							/* bgColor [optional] */ "rgb(191 199 196)", 
-							/* textColor [optional] */ undefined, 
-							/* borderColor [optional] */ "rgb(62 82 75)", 
-							/* getUserInput [optional] */ true, 
-							/* dialogWidth [optional] */ 250,
-							/* cancelFunc [optional] */ 
-							function(entry)
-							{
-								Debug.log("User cancelled transition action");
-
-								//save last entry
-								_last_logbook_entry[transitionActionName] = entry;
-							} //end cancelFunc handler
-							,
-							/* yesButtonText [optional] */ transitionActionName,
-							/* noAutoComplete [optional] */ true, 
-							/* defaultUserInputValue [optional] */ (_last_logbook_entry[transitionActionName]?_last_logbook_entry[transitionActionName]:""),							
-							/* cancelButtonText [optional] */ undefined,							
-							/* wantMultilineInput [optional] */ true
-						);
-
+						//attempt to get last log entry
+						DesktopContent.XMLHttpRequest("Request?RequestType=getStateMachineLastLogEntry" +
+							"&fsmName=" + _fsmName +
+							"&transition=" + transitionActionName, "", 
+							localPopUpVerify, //end request handler
+							0 /*reqParam*/, 0 /*progressHandler*/, false /*callHandlerOnErr*/, 
+							false /*doNoShowLoadingOverlay*/);   
+						
 						return;
-					}
+
+						//================
+						function localPopUpVerify(req)
+						{
+							var lastLogEntry = DesktopContent.getXMLValue(req,"lastLogEntry");
+							if(lastLogEntry && lastLogEntry != "") 
+								_last_logbook_entry[transitionActionName] = lastLogEntry;
+
+							DesktopContent.popUpVerification(
+								/* prompt */
+								"Please enter a logbook entry for '" + transitionActionName + "':"
+								, 
+								/* continueFunc [optional] */
+								function(entry)
+								{
+									Debug.log("User entered logbook entry " + entry);
+
+									//save last entry
+									_last_logbook_entry[transitionActionName] = entry;
+									localCompleteTransition(entry);
+								} //end continueFunc handlere
+								, 
+								/* val [optional] */ undefined,
+								/* bgColor [optional] */ "rgb(191 199 196)", 
+								/* textColor [optional] */ undefined, 
+								/* borderColor [optional] */ "rgb(62 82 75)", 
+								/* getUserInput [optional] */ true, 
+								/* dialogWidth [optional] */ 250,
+								/* cancelFunc [optional] */ 
+								function(entry)
+								{
+									Debug.log("User cancelled transition action");
+
+									//save last entry
+									_last_logbook_entry[transitionActionName] = entry;
+								} //end cancelFunc handler
+								,
+								/* yesButtonText [optional] */ transitionActionName,
+								/* noAutoComplete [optional] */ true, 
+								/* defaultUserInputValue [optional] */ (_last_logbook_entry[transitionActionName]?_last_logbook_entry[transitionActionName]:""),							
+								/* cancelButtonText [optional] */ undefined,							
+								/* wantMultilineInput [optional] */ true
+							);
+
+							return;
+						} //end localPopUpVerify()
+					} //end handle log entry required
 
 				localCompleteTransition();
 
