@@ -840,7 +840,8 @@ SubsystemLaunch.create = function() {
 	TRANSLATE_ITERATOR_COMMANDS["CONFIGURE_ALIAS"] = "Configuring";
 	TRANSLATE_ITERATOR_COMMANDS["CHOOSE_FSM"] = "Choosing FSM";
 	TRANSLATE_ITERATOR_COMMANDS["BEGIN_LABEL"] = "Loop";	
-	TRANSLATE_ITERATOR_COMMANDS["RUN"] = "Run";	
+	TRANSLATE_ITERATOR_COMMANDS["RUN"] = "Start";	
+	TRANSLATE_ITERATOR_COMMANDS["START"] = "Start";	
 	TRANSLATE_ITERATOR_COMMANDS["RUREPEAT_LABEL"] = "Loop";	
 	function displayStatus() 
 	{
@@ -883,14 +884,15 @@ SubsystemLaunch.create = function() {
 
 			el = document.getElementById("runCountInputUnits");
 			var str = "";
+			var inRun = SubsystemLaunch.system.state == "Running" && !SubsystemLaunch.system.inTransition;
 
 			if(SubsystemLaunch.iterator.activePlan == "---GENERATED_PLAN---")
 			{
 				// str += "Command #" + SubsystemLaunch.iterator.currentCommandIndex + 
 				// 	" of " + SubsystemLaunch.iterator.currentNumberOfCommands;
-				Debug.log("SubsystemLaunch.system.state",SubsystemLaunch.system.state);
+				Debug.log("SubsystemLaunch.system.state",SubsystemLaunch.system.state);			
 
-				if(SubsystemLaunch.system.state == "Running")
+				if(inRun)
 					str += "In Run";
 				else
 					str += "Preparing for Run"; 
@@ -905,15 +907,16 @@ SubsystemLaunch.create = function() {
 						(SubsystemLaunch.iterator.genNumberOfRuns>1?"s":"");
 				}
 				
-				if(SubsystemLaunch.iterator.currentCommandType == "RUN")
+				if(inRun)
 					str += ", Time-in-Run";
 				else
 					str += ", Time-on-command" + 
+						(SubsystemLaunch.system.inTransition && SubsystemLaunch.system.transition == "Stopping"?
+						" Stop":
 						(TRANSLATE_ITERATOR_COMMANDS[SubsystemLaunch.iterator.currentCommandType]?
-							(" " + TRANSLATE_ITERATOR_COMMANDS[SubsystemLaunch.iterator.currentCommandType]):"");
+							(" " + TRANSLATE_ITERATOR_COMMANDS[SubsystemLaunch.iterator.currentCommandType]):""));
 			
-				if(SubsystemLaunch.iterator.genRunDuration == -1 || 
-					SubsystemLaunch.iterator.currentCommandType != "RUN")
+				if(SubsystemLaunch.iterator.genRunDuration == -1 || !inRun)
 					str += ": " + SubsystemLaunch.iterator.currentCommandDuration + " seconds";
 				else
 					str += ": " + SubsystemLaunch.iterator.currentCommandDuration + 
@@ -921,18 +924,20 @@ SubsystemLaunch.create = function() {
 							" seconds";
 				
 			}
-			else if(SubsystemLaunch.system.state == "Running") //likely, Iterator left open-ended run			
+			else if(inRun) //likely, Iterator left open-ended run			
 				str += "In open-ended Run";
 			else 
 				str += "Command #" + SubsystemLaunch.iterator.currentCommandIndex + 
 					" of " + SubsystemLaunch.iterator.currentNumberOfCommands +
 					", Iteration #" + SubsystemLaunch.iterator.currentCommandIteration + 
-					", Time-on-command " + 
+					", Time-on-command" + 
+					(SubsystemLaunch.system.inTransition && SubsystemLaunch.system.transition == "Stopping"?
+					" Stop":
 					(TRANSLATE_ITERATOR_COMMANDS[SubsystemLaunch.iterator.currentCommandType]?
-						(" " + TRANSLATE_ITERATOR_COMMANDS[SubsystemLaunch.iterator.currentCommandType]):"") +
+						(" " + TRANSLATE_ITERATOR_COMMANDS[SubsystemLaunch.iterator.currentCommandType]):"")) +
 					": " + SubsystemLaunch.iterator.currentCommandDuration + " seconds";
 			el.innerText = str;
-		}
+		} // end show stop button and iterator status
 
 
 
@@ -1339,6 +1344,7 @@ SubsystemLaunch.create = function() {
 				runDuration *= 60*60;
 			Debug.log("Run duration [s]",runDuration);
 		}
+		Debug.logv({humanPrompt});
 
 		var transitionActionName = "Start";
 		var lastLogEntry;
