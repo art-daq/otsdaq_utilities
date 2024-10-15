@@ -33,7 +33,7 @@ else if (typeof Globals == 'undefined')
 SubsystemLaunch.MENU_PRIMARY_COLOR = "rgb(220, 187, 165)";
 SubsystemLaunch.MENU_SECONDARY_COLOR = "rgb(130, 51, 51)";
 	
-SubsystemLaunch.SUBSYSTEM_FIELDS = ["name","url","status","progress","detail","lastStatusTime","configAlias","configAliasChoices","fsmMode","fsmIncluded"];
+SubsystemLaunch.SUBSYSTEM_FIELDS = ["name","url","status","progress","detail","lastStatusTime","configAlias","configAliasChoices","fsmMode","fsmIncluded","landingPage"];
 SubsystemLaunch.SUBSYSTEM_FIELDS_NAME = SubsystemLaunch.SUBSYSTEM_FIELDS.indexOf("name");
 SubsystemLaunch.SUBSYSTEM_STATUS_FIELDS = ["name","url","status","progress","detail","lastStatusTime","configAlias","configAliasChoices","fsmMode","fsmIncluded","consoleErrCount","consoleWarnCount"];
 SubsystemLaunch.SUBSYSTEM_STATUS_FIELDS_STATUS = SubsystemLaunch.SUBSYSTEM_STATUS_FIELDS.indexOf("status");
@@ -583,9 +583,23 @@ SubsystemLaunch.create = function() {
 						}
 						else if(fieldIds[i] == "name")
 						{
+							var addLandingPage = false;
+							if(SubsystemLaunch.subsystems[s].landingPage && SubsystemLaunch.subsystems[s].landingPage != "")
+							{
+								addLandingPage = true;
+								str += "<a onclick='DesktopContent.openNewWindow(\"" +
+									SubsystemLaunch.subsystems[s].landingPage + "\");' " +
+									"title='Click to open Subsystem Landing Page of &apos;" +
+									SubsystemLaunch.subsystems[s].name + "&apos;' >";
+							}
 							str += SubsystemLaunch.subsystems[s].name + " at " + SubsystemLaunch.subsystems[s].url;
+							
+							if(addLandingPage)
+								str += "</a>";
 
 							//str += "<div class='power_button'><div class='power_light'></div></div>";
+
+
 						}
 						else if(fieldIds[i] == "action")
 						{

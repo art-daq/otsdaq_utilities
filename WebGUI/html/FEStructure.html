@@ -575,6 +575,11 @@
 			ConfigurationAPI.getStructureStatus("DTCInterfaceTable",
 				function(json)
 				{
+					if(!json)
+					{
+						Debug.err("No hardware components found in request to server!");
+						return;	
+					}
 					Debug.logv({json});
 					FEstructure_ = JSON.parse(json);
 					Debug.logv({FEstructure_});

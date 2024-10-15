@@ -250,8 +250,6 @@ else {
       					"The window path seems to be invalid: " + e, Debug.HIGH_PRIORITY);
       			return;
       		}
-
-      		this.iconNameToPathMap[subtext] = [linkurl,uniqueWin];
       		
       		var iconContainer = document.createElement("div");			
 			iconContainer.setAttribute("class", "DesktopIcons-iconContainer");
@@ -270,6 +268,11 @@ else {
 				folderPath = folderPath.substr(1);
 			while(folderPath.length && folderPath[folderPath.length-1] == '/') //remove trailing '/'s
 				folderPath = folderPath.substr(0,folderPath.length-1);
+
+			if(folderPath.length)
+				this.iconNameToPathMap[folderPath + "/" + subtext] = [linkurl,uniqueWin];
+			else
+				this.iconNameToPathMap[subtext] = [linkurl,uniqueWin];
 			
 			var folderSplit = folderPath.split('/'); //root folder is first non empty index			
 			var rootFolderIndex;
