@@ -880,6 +880,8 @@ SubsystemLaunch.create = function() {
 		//Run Launch Status ---------
 		el = document.getElementById("startButtonDiv");
 		if(SubsystemLaunch.system.state != "Running" && (
+			SubsystemLaunch.iterator.activePlanStatus === undefined || 
+			SubsystemLaunch.iterator.activePlanStatus == "" ||
 			SubsystemLaunch.iterator.activePlanStatus == "Inactive" || 
 			SubsystemLaunch.iterator.activePlanStatus == "Error"))
 		{			
@@ -954,7 +956,7 @@ SubsystemLaunch.create = function() {
 			}
 			else if(inRun) //likely, Iterator left open-ended run			
 				str += "In open-ended Run";
-			else 
+			else if(SubsystemLaunch.system.activeFsm == "iterator")
 				str += "Command #" + SubsystemLaunch.iterator.currentCommandIndex + 
 					" of " + SubsystemLaunch.iterator.currentNumberOfCommands +
 					", Iteration #" + SubsystemLaunch.iterator.currentCommandIteration + 
