@@ -15,9 +15,7 @@
 //User note:
 //	This is demonstrated in otsdaq_demo/UserWebGUI/html/SubsystemLaunch.html
 //		
-//	In short, subsystems comprise your configuration, and subsystem names map to
-//		one or many context records that can be on/off as a group (activating/deactivating their segment of the full configuration).
-
+//	In short, remote subsystems comprise your ots instances
 
 //Subsystem Launch desktop icon from:
 //	http://icons.iconarchive.com/icons/bokehlicia/captiva/256/rocket-icon.png
@@ -75,7 +73,9 @@ SubsystemLaunch.create = function() {
 	//		'public' member functions: -------
 	//	this.handleSubsystemActionSelect(el, subsystemIndex)
 	//	this.handleSubsystemConfigAliasSelect(value, subsystemIndex)
+	//	this.getSubsystemConfigAliasSelectInfo(subsystemIndex)
 	//	this.handleSubsystemFsmModeSelect(value, subsystemIndex)
+	//	this.handleDurationSelect(value)
 	//
 	//	this.start()
 	//		- localStop()	
@@ -96,17 +96,6 @@ SubsystemLaunch.create = function() {
 
 
 	var _needEventListeners = true;
-
-
-
-	// //for run state
-	// var _state = "";
-	// var _inTransition = false;
-	// var _wasInTransition = false;
-	// var _timeInState = 0;
-	// var _progress = 0;
-	// var _runNumber;
-	// var _transitionName = "";
 
 	var _fsmName, _fsmWindowName;
 	var _getStatusTimer = 0;
@@ -394,7 +383,11 @@ SubsystemLaunch.create = function() {
 						else 
 						{
 							str += " w/comment:<br><label id='systemConfigAliasTranslationNote' class='subtext'></label>";
-							aliasTranslation += decodeURIComponent(SubsystemLaunch.system.systemAliases[selc].comment);
+							aliasTranslation += SubsystemLaunch.system.systemAliases[selc].author +
+								": " + decodeURIComponent(SubsystemLaunch.system.systemAliases[selc].comment) +
+								" (" + 
+								ConfigurationAPI.getDateString(new Date((
+									SubsystemLaunch.system.systemAliases[selc].createTime | 0) * 1000)) + ")";
 						}
 					}
 					else
@@ -615,8 +608,9 @@ SubsystemLaunch.create = function() {
 						}
 						else if(fieldIds[i] == "configAlias")
 						{
+							// str += "<div style='white-space:nowrap'>";
 							str += "<select id='subsystem_" + fieldIds[i] + 
-								"_select_" + s + "' style='padding: 4px; font-size: 14px;' "+ 
+								"_select_" + s + "' style='padding: 4px; font-size: 14px; padding-right:10px;' "+ 
 								"onchange='SubsystemLaunch.launcher.handleSubsystemConfigAliasSelect(this.value, " + s + ");'>";
 							var csvSplit = SubsystemLaunch.subsystems[s].configAliasChoices.split(',');
 							Debug.logv({csvSplit});
@@ -627,6 +621,15 @@ SubsystemLaunch.create = function() {
 									csvSplit[c] +
 									"</option>";
 							str += "</select>";
+
+							str += "<div id='subsystem_" + fieldIds[i] + 
+								"_select_" + s + "_info' class='subsystem_" + fieldIds[i] + 
+								"_select_info' " + 
+								"title='Click for more details on the selected Configuration Alias for subsystem &apos;" + 
+								SubsystemLaunch.subsystems[s].name + "&apos;' " +
+								"onclick='SubsystemLaunch.launcher.getSubsystemConfigAliasSelectInfo(" + s + ");'>" +
+								"i</div>";
+							// str += "</div>";
 						}
 						else if(fieldIds[i] == "fsmMode")
 						{
@@ -1195,6 +1198,29 @@ SubsystemLaunch.create = function() {
 		); //end setRemoteSubsystemFsmControl request	
 
 	}	//end handleSubsystemConfigAliasSelect()
+
+	//=====================================================================================     
+	this.getSubsystemConfigAliasSelectInfo = function(subsystemIndex)
+	{
+		Debug.log("getSubsystemConfigAliasSelectInfo()", subsystemIndex);
+				
+		var targetSubsystem = SubsystemLaunch.subsystems[subsystemIndex].name;
+
+		DesktopContent.XMLHttpRequest("Request?RequestType=getSubsystemConfigAliasSelectInfo" + 
+				"&targetSubsystem=" + targetSubsystem,
+				"", //end post data, 
+				function(req)
+				{
+					var alias_info = DesktopContent.getXMLValue(req,"alias_info");
+					Debug.info(alias_info);
+					
+				},  //end handler				
+				0, 0, false,//reqParam, progressHandler, callHandlerOnErr, 
+				false,//doNotShowLoadingOverlay,
+				true //targetGatewaySupervisor
+		); //end setRemoteSubsystemFsmControl request	
+
+	}	//end getSubsystemConfigAliasSelectInfo()	
 
 	//=====================================================================================     
 	this.handleSubsystemFsmModeSelect = function(value, subsystemIndex)
@@ -1833,7 +1859,9 @@ SubsystemLaunch.initSubsystemRecords = function(returnHandler)
 					SubsystemLaunch.system.systemAliases.push({
 							name: alias,
 							translation: aliasGroupArr[i].getAttribute('value'),
-							comment: aliasGroupCommentArr[i].getAttribute('value')
+							comment: aliasGroupCommentArr[i].getAttribute('value'),
+							author: aliasAuthorArr[i].getAttribute('value'),
+							createTime: aliasCreateTimeArr[i].getAttribute('value')
 						});
 					
 					
@@ -1983,7 +2011,7 @@ SubsystemLaunch.extractIteratorStatus = function(req)
 
 	SubsystemLaunch.iterator.error = err;
 
-	Debug.log("iterator obj", SubsystemLaunch.iterator);	
+	// Debug.log("iterator obj", SubsystemLaunch.iterator);	
 
 } //end SubsystemLaunch.extractIteratorStatus()
 

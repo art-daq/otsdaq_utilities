@@ -188,6 +188,16 @@
 			text-align: center;
 		}
 
+		.subsystem_configAlias_select_info {
+			float: right;
+			background-color: darkblue;
+			border-radius: 9px;
+			color: white;
+			padding: 1px 5px;
+			font-family: 'Inconsolata';
+			cursor: pointer;
+		}
+
 		#subsystemDiv .power_button {
 			/*  design the outer circle */
 			width: 150px;
