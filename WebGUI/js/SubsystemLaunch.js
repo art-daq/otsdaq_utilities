@@ -372,7 +372,7 @@ SubsystemLaunch.create = function() {
 							"</option>";
 					}
 					str += "</select>";
-					str += "</td><td id='systemConfigAliasTranslation' colspan=" + (numOfCols-1) + ">";
+					str += "</td><td id='systemConfigAliasTranslation' colspan=" + (numOfCols-2) + ">";
 					var aliasTranslation = ""; //set as innerText to handle special HTML chars
 					if(selc >= 0)
 					{
@@ -392,6 +392,17 @@ SubsystemLaunch.create = function() {
 					}
 					else
 						str += "&lt;=== Please select a valid System Configure Alias!";
+
+					str += "</td><td  >";
+					str += "<select id='systemManualFsmAction' style='padding: 4px; font-size: 14px;' "+ 
+						"onchange='SubsystemLaunch.launcher.handleSubsystemActionSelect(this, -1);'>";
+					str += "<option selected>Select an FSM action:</option>";
+					str += "<option >Configure</option>";
+					// str += "<option >Start</option>";
+					// str += "<option >Stop</option>";
+					str += "<option >Halt</option>";
+					str += "</select>";
+
 					str += "</td></tr>";
 				}
 				if(SubsystemLaunch.system.lastRunLogEntry) //if not undefined
@@ -610,7 +621,7 @@ SubsystemLaunch.create = function() {
 						{
 							// str += "<div style='white-space:nowrap'>";
 							str += "<select id='subsystem_" + fieldIds[i] + 
-								"_select_" + s + "' style='padding: 4px; font-size: 14px; padding-right:10px;' "+ 
+								"_select_" + s + "' style='padding: 4px; font-size: 14px; margin-right:20px;' "+ 
 								"onchange='SubsystemLaunch.launcher.handleSubsystemConfigAliasSelect(this.value, " + s + ");'>";
 							var csvSplit = SubsystemLaunch.subsystems[s].configAliasChoices.split(',');
 							Debug.logv({csvSplit});
@@ -1263,6 +1274,84 @@ SubsystemLaunch.create = function() {
 			return;
 		}
 
+		if(subsystemIndex == -1)
+		{
+			Debug.log("System action - activeFsm", SubsystemLaunch.system.activeFsm);
+
+			var configAlias;
+			if(command == "Configure") //at config alias
+			{
+				configAlias = document.getElementById("systemConfigAliasSelect").value;
+			}
+			//at this point, ready to send command!
+			//but need to determine target request
+
+			window.clearTimeout(_getStatusTimer);
+			SubsystemLaunch.system.error = ""; //clear error for next command response
+			//force state display for user feedback
+			SubsystemLaunch.system.inTransition = true;
+			SubsystemLaunch.system.transition = "Launching " + command;
+			SubsystemLaunch.system.progress = 0;
+			displayStatus();
+
+			if(command == "Halt" && SubsystemLaunch.system.activeFsm == "iterator")
+			{
+				Debug.log("Do haltIterator");				
+
+				DesktopContent.XMLHttpRequest("StateMachineXgiHandler?" + 
+						"&StateMachine=iterateHalt", //end get data 
+						"", //end post data
+						function(req) //start handler
+						{
+
+					Debug.log("iterateHalt handler ");
+									
+					//resume statusing and clear action
+					window.clearTimeout(_getStatusTimer);
+					_getStatusTimer = window.setTimeout(
+						function()
+						{
+							el.selectedIndex = 0; //reset command select box
+							getCurrentStatus();
+						},2000); //in 2 sec
+					
+						}, //end handler
+						0, //handler param
+						0,0,false, //progressHandler, callHandlerOnErr, doNotShowLoadingOverlay
+						true /*targetGatewaySupervisor*/);
+			}
+			else 
+			{
+				Debug.log("Do fsmName",_fsmName);
+
+				DesktopContent.XMLHttpRequest("StateMachineXgiHandler?" + 
+							"&fsmName=" + _fsmName + 
+							"&StateMachine=" + command, //end get data 
+							(configAlias?("ConfigurationAlias=" + configAlias):""), //end post data
+						function(req) //start handler
+						{
+					Debug.log(command,"() FSM handler ");
+					
+					//resume statusing and clear action
+					window.clearTimeout(_getStatusTimer);
+					_getStatusTimer = window.setTimeout(
+						function()
+						{
+							el.selectedIndex = 0; //reset command select box
+							getCurrentStatus();
+						},2000); //in 2 sec
+
+						}, //end handler
+						0, //handler param
+						0,0,false, //progressHandler, callHandlerOnErr, doNotShowLoadingOverlay
+						true /*targetGatewaySupervisor*/);
+			}
+
+
+			return;
+		} //end system command
+		//else if here, subsystem command
+
 		var parameter;
 		if(command == "Configure") //at config alias
 		{
@@ -1305,7 +1394,7 @@ SubsystemLaunch.create = function() {
 					{
 						el.selectedIndex = 0; //reset command select box
 						getCurrentStatus();
-					},1000); //in 1 sec
+					},2000); //in 2 sec
 
 			}, //end request handler
 			0 /*reqParam*/, 0 /*progressHandler*/, true /*callHandlerOnErr*/, 
@@ -1894,6 +1983,7 @@ SubsystemLaunch.initSubsystemRecords = function(returnHandler)
 //=====================================================================================     
 SubsystemLaunch.extractSystemStatus = function(req)
 {
+	SubsystemLaunch.system.activeFsm = DesktopContent.getXMLValue(req,"active_fsmName");
 	SubsystemLaunch.system.state = DesktopContent.getXMLValue(req,"current_state");
 	SubsystemLaunch.system.inTransition = DesktopContent.getXMLValue(req,"in_transition") == "1";
 	SubsystemLaunch.system.transition = DesktopContent.getXMLValue(req,"current_transition");

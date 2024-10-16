@@ -196,6 +196,7 @@
 			padding: 1px 5px;
 			font-family: 'Inconsolata';
 			cursor: pointer;
+			margin-left: -20px;
 		}
 
 		#subsystemDiv .power_button {
