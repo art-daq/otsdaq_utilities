@@ -1534,7 +1534,8 @@ Desktop.createDesktop = function(security) {
 	    		// Note: similar to L1000 in actOnParameterAction() 
 	    		Debug.log("requestingWindowId=" + requestingWindowId);
 	    		Debug.log("windowPath=" + windowPath);
-		    	while(windowPath.length && windowPath[0] == '?') windowPath = windowPath.substr(1); //remove leading ?'s
+		    	while(windowPath && windowPath.length && windowPath[0] == '?') 
+					windowPath = windowPath.substr(1); //remove leading ?'s
 		    	Debug.log("modified windowPath=" + windowPath);
 		    	Debug.log("windowName=" + windowName);
 		    	Debug.log("windowSubname=" + windowSubname);
@@ -1571,7 +1572,7 @@ Desktop.createDesktop = function(security) {
 
 					var pathStr = pathUniquePair[0];
 					
-					if(windowPath != "undefined") //add parameters if defined
+					if(windowPath && windowPath != "undefined") //add parameters if defined
 					{
 						Debug.log("Adding parameter path " + windowPath);
 						if(pathStr.indexOf('?') >= 0) //then assume already parameters

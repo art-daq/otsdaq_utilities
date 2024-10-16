@@ -7005,7 +7005,7 @@ void ConfigurationGUISupervisor::handleGroupAliasesXML(HttpXmlDocument&        x
 			xmlOut.addTextElementToData("GroupAuthor", 			sharedGroupInfoPtrs[i]->latestKeyGroupAuthor_);
 			xmlOut.addTextElementToData("GroupCreationTime", 	sharedGroupInfoPtrs[i]->latestKeyGroupCreationTime_);
 			xmlOut.addTextElementToData("GroupType", 			sharedGroupInfoPtrs[i]->latestKeyGroupTypeString_);
-			// xmlOut.addTextElementToData("GroupType", 			sharedGroupInfoPtrs[i]->latestKeyMemberMap_);
+			// xmlOut.addTextElementToData("GroupMemberMap",	sharedGroupInfoPtrs[i]->latestKeyMemberMap_);
 			++i;
 		} //end copy group info loop
 
