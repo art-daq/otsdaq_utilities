@@ -137,6 +137,11 @@ function updateTable
 		cp $OTS_SOURCE_PATH_MOD/${mod_line}Info.xml $USER_DATA/TableInfo/ &>/dev/null && DID_IT=1 && DID_IT_SOURCE="-Source"
 		# echo -e "UpdateOTS.sh:${LINENO}  \t modsource  DID_IT=$DID_IT"
 	fi
+	if [[ $DID_IT == 0 && $BACK_COUNT > 4 ]]; then #try above srcs modified path as last resort!
+		cp $OTS_SOURCE/../${repo_of_line}/${mod_line}Info.xml $USER_DATA/TableInfo/ &>/dev/null && DID_IT=1 && DID_IT_SOURCE="..Source"
+		# echo -e "UpdateOTS.sh:${LINENO}  \t unmodsource  DID_IT=$DID_IT $OTS_SOURCE/../${repo_of_line}/${mod_line}Info.xml"
+	fi
+
 
 	echo -e "UpdateOTS.sh:${LINENO}  \t ============= from $DID_IT_SOURCE, Table Dependency = $repo_of_line/$mod_line"
 	if [ $DID_IT == 0 ]; then
