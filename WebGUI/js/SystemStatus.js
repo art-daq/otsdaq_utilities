@@ -151,6 +151,7 @@ function getContextNames()
 				function (req) 
 				{	
 			var memberNames = req.responseXML.getElementsByTagName("ContextMember");
+			var remoteNames = req.responseXML.getElementsByTagName("RemoteGateway");
 
 			_allContextNames = {}; //reset and treat as count
 
@@ -159,6 +160,11 @@ function getContextNames()
 					++_allContextNames[memberNames[i].getAttribute("value")];
 				else
 					_allContextNames[memberNames[i].getAttribute("value")] = 1;
+            for(var i=0;i<remoteNames.length;++i)
+                if(_allContextNames[remoteNames[i].getAttribute("value")])
+                    ++_allContextNames[remoteNames[i].getAttribute("value")];
+                else
+                    _allContextNames[remoteNames[i].getAttribute("value")] = 1;
 
 			console.log("_allContextNames",Object.keys(_allContextNames).length,_allContextNames);
 
