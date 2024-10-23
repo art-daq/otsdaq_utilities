@@ -193,16 +193,17 @@
 			background-color: darkblue;
 			border-radius: 9px;
 			color: white;
-			padding: 1px 5px;
+			padding: 0px 5px 1px 5px;
 			font-family: 'Inconsolata';
 			cursor: pointer;
 			margin-left: -20px;
+			margin-top: 3px;
 		}
 
 		#subsystemDiv .power_button {
 			/*  design the outer circle */
-			width: 150px;
-			height: 150px;
+			width: 22px;
+			height: 20px;
 			border-radius: 50%;
 			border: 1px solid #ddd;
 			box-shadow: 0 0 5px 0px #888;
@@ -213,6 +214,9 @@
 			/*  required to center elements*/
 			display: grid;
 			place-items: center;
+
+			float: right;
+			margin: -20px 0 -10px -60px;
 		  }
 		  
 		  #subsystemDiv  .power_button::before {
@@ -222,38 +226,40 @@
 			/*  design the inner-ring */
 			width: 50%;
 			height: 50%;
-			border: 10px solid #eee;
+			border: 2px solid #00008b;
 			border-radius: 50%;
 			position: absolute;
 		  }
 		  
 		  #subsystemDiv  .power_light {
 			/*  design the vertical light */
-			height: 30%;
-			width: 10px;
-			background: #eee;
+			height: 40%;
+			width: 4px;
+			background: #00008b;
 			border-radius: 10px;
 		  
 			/*  position the light correctly */
 			position: absolute;
-			top: 20px;
+			top: 2px;
 		  
 			/*  required to give white-space to inner-ring */
-			box-shadow: 0 0 0 10px #fff;
+			box-shadow: 0 0 0 1px lightgray;
 		  }
 		  
 		  #subsystemDiv  .power_button:hover {
 			cursor: pointer;
+			background-color: rgb(249, 178, 178);
+		  }
+		  #subsystemDiv  .power_button:hover .power_light {
+			box-shadow: 0 0 0 1px rgb(249, 178, 178);
 		  }
 		  
 		  #subsystemDiv  .power_button:active {
 			box-shadow: 0 0 10px 0px #888 inset;
-		  }
-		  
-		  #subsystemDiv  .power_button:active .light {
+		  }		  
+		  #subsystemDiv  .power_button:active .power_light {
 			background: lightgreen;
-		  }
-		  
+		  }		  
 		  #subsystemDiv  .power_button:active::before {
 			border-color: lightgreen;
 		  }

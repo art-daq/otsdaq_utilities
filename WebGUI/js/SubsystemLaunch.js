@@ -74,6 +74,7 @@ SubsystemLaunch.create = function() {
 	//	this.handleSubsystemActionSelect(el, subsystemIndex)
 	//	this.handleSubsystemConfigAliasSelect(value, subsystemIndex)
 	//	this.getSubsystemConfigAliasSelectInfo(subsystemIndex)
+	//	this.bootSubsystem(subsystemIndex)
 	//	this.handleSubsystemFsmModeSelect(value, subsystemIndex)
 	//	this.handleDurationSelect(value)
 	//
@@ -99,6 +100,7 @@ SubsystemLaunch.create = function() {
 
 	var _fsmName, _fsmWindowName;
 	var _getStatusTimer = 0;
+	var _getAutoInitCount = 2; // allow 2 auto inits to happen before giving up
 	
 	var _dotDotDot = "..."; //to add growing ... feedback to user
 
@@ -167,6 +169,7 @@ SubsystemLaunch.create = function() {
 					Debug.log("Handling login notification...");
 					Debug.closeErrorPop();
 
+					_getAutoInitCount = 2; // allow 2 auto inits to happen before giving up
 					window.clearTimeout(_getStatusTimer);
 					_getStatusTimer = window.setTimeout(init,5000); //in 5 sec (give some time for subsystem propagation)
 				} //end login notify handler
@@ -588,6 +591,7 @@ SubsystemLaunch.create = function() {
 						else if(fieldIds[i] == "name")
 						{
 							var addLandingPage = false;
+							str += "<div style='margin-right:30px;'>"
 							if(SubsystemLaunch.subsystems[s].landingPage && SubsystemLaunch.subsystems[s].landingPage != "")
 							{
 								addLandingPage = true;
@@ -600,10 +604,13 @@ SubsystemLaunch.create = function() {
 							
 							if(addLandingPage)
 								str += "</a>";
+							str += "</div>";
 
-							//str += "<div class='power_button'><div class='power_light'></div></div>";
-
-
+							str += "<div class='power_button' " +
+								"title='Click to reboot the the Remote Subsystem &apos;" + 
+									SubsystemLaunch.subsystems[s].name + "&apos;' " +
+								"onclick='SubsystemLaunch.launcher.bootSubsystem(" + s + ");' " +
+								"><div class='power_light'></div></div>";
 						}
 						else if(fieldIds[i] == "action")
 						{
@@ -640,7 +647,6 @@ SubsystemLaunch.create = function() {
 								SubsystemLaunch.subsystems[s].name + "&apos;' " +
 								"onclick='SubsystemLaunch.launcher.getSubsystemConfigAliasSelectInfo(" + s + ");'>" +
 								"i</div>";
-							// str += "</div>";
 						}
 						else if(fieldIds[i] == "fsmMode")
 						{
@@ -1025,10 +1031,11 @@ SubsystemLaunch.create = function() {
 					el = document.getElementById("subsystem_" + fieldIds[i] + 
 						"_select_" + s);
 					if(el.value != SubsystemLaunch.subsystems[s][fieldIds[i]])
-					{						
-						Debug.warn("The selected " + fieldIds[i] + " for Subsystem '" + 
-							SubsystemLaunch.subsystems[s].name + "' has changed from '" +
-							el.value + "' to '" + SubsystemLaunch.subsystems[s][fieldIds[i]] + ".'");
+					{				
+						if(SubsystemLaunch.subsystems[s].configAliasChoices && SubsystemLaunch.subsystems[s].configAliasChoices != "")	
+							Debug.warn("The selected " + fieldIds[i] + " for Subsystem '" + 
+								SubsystemLaunch.subsystems[s].name + "' has changed from '" +
+								el.value + "' to '" + SubsystemLaunch.subsystems[s][fieldIds[i]] + ".'");
 
 						//find selected index and select!
 						for(var f=0; f < el.options.length; ++f)
@@ -1040,19 +1047,31 @@ SubsystemLaunch.create = function() {
 
 						if(f == el.options.length)
 						{
-							Debug.err("Could not find '" + SubsystemLaunch.subsystems[s][fieldIds[i]] + 
-								"' in the " + fieldIds[i] +" list of Subsystem '" + 
-								SubsystemLaunch.subsystems[s].name + "!' Maybe the system is still loading (it may take 20+ seconds at startup)? Please fix the issue and refresh this page, or notify admins.");
-							//stop updates, something is wrong!
-							window.clearTimeout(_getStatusTimer);
-							_getStatusTimer = window.setTimeout(
-								function()
-								{
-									Debug.warn("Trying to auto-refresh the page...");
-									init();
-								}
-								,5000); //in 5 sec (give some time for subsystem propagation)
-							return false;						
+							if(_getAutoInitCount > 0)
+								Debug.err("Could not find '" + SubsystemLaunch.subsystems[s][fieldIds[i]] + 
+									"' in the " + fieldIds[i] +" list of Subsystem '" + 
+									SubsystemLaunch.subsystems[s].name + "!' Maybe the system is still loading (it may take 20+ seconds at startup)? Please fix the issue and refresh this page, or notify admins.");
+							else
+								Debug.log("Could not find '" + SubsystemLaunch.subsystems[s][fieldIds[i]] + 
+									"' in the " + fieldIds[i] +" list of Subsystem '" + 
+									SubsystemLaunch.subsystems[s].name + "!' Maybe the system is still loading (it may take 20+ seconds at startup)? Please fix the issue and refresh this page, or notify admins.");
+
+
+							if(_getAutoInitCount > 0)
+							{
+								--_getAutoInitCount; 
+								//stop updates, something is wrong!
+								window.clearTimeout(_getStatusTimer);
+								_getStatusTimer = window.setTimeout(
+									function()
+									{
+										Debug.warn("Trying to auto-refresh the page...");
+										init();
+									}
+									,5000); //in 5 sec (give some time for subsystem propagation)
+								return false;	
+							}
+							// else //no more allow auto-inits												
 						}
 					}
 				} //end select box update
@@ -1236,6 +1255,56 @@ SubsystemLaunch.create = function() {
 	}	//end getSubsystemConfigAliasSelectInfo()	
 
 	//=====================================================================================     
+	this.bootSubsystem = function(subsystemIndex)
+	{
+		Debug.log("bootSubsystem()", subsystemIndex);
+				
+		var targetSubsystem = SubsystemLaunch.subsystems[subsystemIndex].name;
+
+		DesktopContent.popUpVerification( 
+			"Are you sure you want to reboot subsystem <b><u>" + targetSubsystem + "</b></u>?",
+			function()
+			{
+				DesktopContent.popUpVerification( 
+					"Are you REALLY sure you want to reboot subsystem <b><u>" + targetSubsystem + "</b></u>?",
+					function()
+					{		
+						Debug.log("Rebooting",targetSubsystem);
+						window.clearTimeout(_getStatusTimer);
+				
+						SubsystemLaunch.system.error = ""; //clear error for next command response
+						//force state display for user feedback
+						SubsystemLaunch.subsystems[subsystemIndex].status = "Rebooting...";
+						SubsystemLaunch.subsystems[subsystemIndex].progress = 0;
+						displayStatus();
+
+						DesktopContent.XMLHttpRequest("Request?RequestType=gatewayLaunchOTSInstance" +
+						"&targetSubsystem=" + targetSubsystem, 
+						"", 
+						function(req)
+							{
+								Debug.info("Reboot launched for '" + targetSubsystem + "'...!");
+
+								window.clearTimeout(_getStatusTimer);
+								_getStatusTimer = window.setTimeout(getCurrentStatus,1000); //in 1 sec
+									
+							}, //request handler
+						0 /*reqParam*/, 0 /*progressHandler*/, false /*callHandlerOnErr*/, 
+						false /*doNoShowLoadingOverlay*/,
+						true /*targetGatewaySupervisor*/);   
+
+
+					}, //end handler
+					0,"#efeaea",0,"#770000",0 /* getUserInput [optional] */ ,
+					350 /* dialogWidth [optional] */); //end second verify
+			},
+			0,"#efeaea",0,"#770000",0 /* getUserInput [optional] */ ,
+			350 /* dialogWidth [optional] */); //end first verify
+					
+
+	}	//end bootSubsystem()		
+
+	//=====================================================================================     
 	this.handleSubsystemFsmModeSelect = function(value, subsystemIndex)
 	{
 		Debug.log("handleSubsystemFsmModeSelect()", value, subsystemIndex);
@@ -1289,6 +1358,7 @@ SubsystemLaunch.create = function() {
 			//but need to determine target request
 
 			window.clearTimeout(_getStatusTimer);
+
 			SubsystemLaunch.system.error = ""; //clear error for next command response
 			//force state display for user feedback
 			SubsystemLaunch.system.inTransition = true;
