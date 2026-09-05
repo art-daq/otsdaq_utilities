@@ -16660,8 +16660,10 @@
 					var parts = cellVal.split('|');
 					for (var pi = 0; pi < parts.length; ++pi) {
 						var gid = parts[pi].trim();
-						if (gid && myGroupIds.indexOf(gid) < 0)
-							myGroupIds.push(gid);
+						//scope by GroupID column index so same value in a different
+						//	GroupID column does not match
+						if (gid && myGroupIds.indexOf(ci + ":" + gid) < 0)
+							myGroupIds.push(ci + ":" + gid);
 					}
 				}
 			}
@@ -16690,7 +16692,7 @@
 					if (!cellVal || cellVal == "" || cellVal == "DEFAULT") continue;
 					var parts = cellVal.split('|');
 					for (var pi = 0; pi < parts.length; ++pi) {
-						if (myGroupIds.indexOf(parts[pi].trim()) >= 0) {
+						if (myGroupIds.indexOf(ci + ":" + parts[pi].trim()) >= 0) {
 							isMatch = true;
 							break;
 						}
@@ -16702,7 +16704,7 @@
 			if (!confirm("Set this column to '" + newValue +
 				"' for " + matchingRows.length + " record" +
 				(matchingRows.length != 1 ? "s" : "") +
-				" in the group (GroupID: " + myGroupIds.join(", ") + ")?"))
+				" in the group (GroupID: " + myGroupIds.map(function(s) { return s.substring(s.indexOf(":") + 1); }).join(", ") + ")?"))
 				return;
 
 			var boolTypeTrues = ["On","True","Yes"];
