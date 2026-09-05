@@ -2762,6 +2762,14 @@ void MacroMakerSupervisor::clearFEHistory(const std::string& username)
 	std::string fullPath = (std::string)MACROS_HIST_PATH + username + "/" + fileName;
 
 	std::remove(fullPath.c_str());
+
+	//reset per-user repeat tracking so next command is not treated as a repeat
+	//	of a record that no longer exists in the (now empty) history file
+	lastFeCommandToHistory_.erase(username);
+	lastFeRepeatCount_.erase(username);
+	lastFeRecordFilePos_.erase(username);
+	lastFeLaunchTime_.erase(username);
+
 	__SUP_COUT__ << "Successfully deleted " << fullPath;
 }  //end clearFEHistory()
 
