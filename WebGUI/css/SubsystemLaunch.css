@@ -38,6 +38,7 @@
 		#systemStatusState, .subsystem_status {
 			font-family: 'Inconsolata', monospace;
 			padding: 0 30px;
+			box-sizing: border-box;
 			box-shadow: 			inset rgba(255,254,255,0.6) 0 0.3em .3em,
 									inset rgba(0,0,0,0.15) 0 -0.1em .3em, /* inner shadow */
 									rgba(200, 200, 200,0.6) 0 .1em 3px,
@@ -47,6 +48,7 @@
 			/* font-weight:			bold; */
 			text-shadow: 			0px 1px 0px rgba(255,255,255,.3),
 									0px -1px 0px rgba(0,0,0,.7);
+			overflow: hidden;
 		}
 
 		.progressBar {
@@ -163,6 +165,57 @@
 			margin:	5px;
 		}
 
+		#systemRelaunchButton {
+			display: inline-block;
+			vertical-align: middle;
+			margin-left: 10px;
+			width: 22px;
+			height: 20px;
+			border-radius: 50%;
+			border: 1px solid #ddd;
+			box-shadow: 0 0 5px 0px #888;
+			position: relative;
+			cursor: pointer;
+		}
+		#systemRelaunchButton::before {
+			content: "";
+			width: 50%;
+			height: 50%;
+			border: 2px solid #00008b;
+			border-radius: 50%;
+			position: absolute;
+			top: 50%;
+			left: 50%;
+			transform: translate(-50%, -50%);
+		}
+		#systemRelaunchButton::after {
+			content: "";
+			height: 40%;
+			width: 4px;
+			background: #00008b;
+			border-radius: 10px;
+			position: absolute;
+			top: 2px;
+			left: 50%;
+			transform: translateX(-50%);
+			box-shadow: 0 0 0 1px lightgray;
+		}
+		#systemRelaunchButton:hover {
+			background-color: rgb(249, 178, 178);
+		}
+		#systemRelaunchButton:hover::after {
+			box-shadow: 0 0 0 1px rgb(249, 178, 178);
+		}
+		#systemRelaunchButton:active {
+			box-shadow: 0 0 10px 0px #888 inset;
+		}
+		#systemRelaunchButton:active::after {
+			background: lightgreen;
+		}
+		#systemRelaunchButton:active::before {
+			border-color: lightgreen;
+		}
+
 		/* ===================== end System status div section  */
 
 
@@ -240,6 +293,13 @@
 			max-width: 100%;
 			table-layout: auto;
 		}
+		/* Force Status column to maintain fixed width despite table-layout: auto */
+		#subsystemDiv .tableSingleRowMode td.subsystem_status,
+		#subsystemDiv .tableDoubleRowMode td.subsystem_status {
+			width: 150px !important;
+			max-width: 150px !important;
+			min-width: 150px !important;
+		}
 		.detail_scroll {
 			overflow-x: auto;
 			overflow-y: hidden;
@@ -252,6 +312,27 @@
 			display: none;
 			width: 0;
 			height: 0;
+		}
+
+		#systemStatusDiv .system_scroll_wrap {
+			scrollbar-width: none;       /* Firefox: hidden by default */
+			-ms-overflow-style: none;    /* IE/legacy Edge */
+		}
+		#systemStatusDiv .system_scroll_wrap::-webkit-scrollbar {
+			width: 0;                    /* WebKit: hidden by default */
+		}
+		#systemStatusDiv .system_scroll_wrap:hover {
+			scrollbar-width: thin;       /* Firefox: thin overlay on hover */
+		}
+		#systemStatusDiv .system_scroll_wrap:hover::-webkit-scrollbar {
+			width: 6px;
+		}
+		#systemStatusDiv .system_scroll_wrap:hover::-webkit-scrollbar-thumb {
+			background: rgba(0,0,0,0.3);
+			border-radius: 3px;
+		}
+		#systemStatusDiv .system_scroll_wrap:hover::-webkit-scrollbar-track {
+			background: transparent;
 		}
 
 		.subsystem_console {

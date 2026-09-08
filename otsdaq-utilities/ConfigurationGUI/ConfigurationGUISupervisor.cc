@@ -2,6 +2,7 @@
 
 #include "otsdaq/CgiDataUtilities/CgiDataUtilities.h"
 #include "otsdaq/Macros/CoutMacros.h"
+#include "otsdaq/Macros/StringMacros.h"
 #include "otsdaq/MessageFacility/MessageFacility.h"
 #include "otsdaq/TablePlugins/IterateTable.h"
 #include "otsdaq/XmlUtilities/HttpXmlDocument.h"
@@ -14,6 +15,8 @@
 
 #include <xdaq/NamespaceURI.h>
 
+#include <chrono>
+#include <fstream>
 #include <iostream>
 #include <map>
 #include <utility>
@@ -570,7 +573,16 @@ try
 	}
 	else if(requestType == "getTables")
 	{
-		handleTablesXML(xmlOut, cfgMgr);
+		std::string filterStartTime = CgiDataUtilities::getData(cgiIn, "startTime");
+		std::string filterEndTime   = CgiDataUtilities::getData(cgiIn, "endTime");
+		std::string filterMode      = CgiDataUtilities::getData(cgiIn, "filterMode");
+		if(filterMode == "")
+			filterMode = "created";
+		__COUT__ << "startTime: " << filterStartTime << __E__;
+		__COUT__ << "endTime: " << filterEndTime << __E__;
+		__COUT__ << "filterMode: " << filterMode << __E__;
+
+		handleTablesXML(xmlOut, cfgMgr, filterStartTime, filterEndTime, filterMode);
 	}
 	else if(requestType == "getContextMemberNames")
 	{
@@ -1110,11 +1122,29 @@ try
 	}
 	else if(requestType == "getArtdaqNodes")
 	{
-		std::string modifiedTables = CgiDataUtilities::postData(cgiIn, "modifiedTables");
+		std::string modifiedTables  = CgiDataUtilities::postData(cgiIn, "modifiedTables");
+		std::string tableGroup      = CgiDataUtilities::getData(cgiIn, "tableGroup");
+		std::string tableGroupKey   = CgiDataUtilities::getData(cgiIn, "tableGroupKey");
+		std::string contextGroup    = CgiDataUtilities::getData(cgiIn, "contextGroup");
+		std::string contextGroupKey = CgiDataUtilities::getData(cgiIn, "contextGroupKey");
+		bool        suppressMultiNode =
+		    1 == CgiDataUtilities::getDataAsInt(cgiIn, "suppressMultiNode");
 
 		__SUP_COUTV__(modifiedTables);
+		__SUP_COUTT__ << "tableGroup: " << tableGroup << __E__;
+		__SUP_COUTT__ << "tableGroupKey: " << tableGroupKey << __E__;
+		__SUP_COUTT__ << "contextGroup: " << contextGroup << __E__;
+		__SUP_COUTT__ << "contextGroupKey: " << contextGroupKey << __E__;
+		__SUP_COUTT__ << "suppressMultiNode: " << suppressMultiNode << __E__;
 
-		handleGetArtdaqNodeRecordsXML(xmlOut, cfgMgr, modifiedTables);
+		handleGetArtdaqNodeRecordsXML(xmlOut,
+		                              cfgMgr,
+		                              modifiedTables,
+		                              tableGroup,
+		                              TableGroupKey(tableGroupKey),
+		                              contextGroup,
+		                              TableGroupKey(contextGroupKey),
+		                              suppressMultiNode);
 	}
 	else if(requestType == "saveArtdaqNodes")
 	{
@@ -1667,6 +1697,266 @@ try
 		                     TableGroupKey(groupBKeyConfig),
 		                     userInfo.username_,
 		                     mergeApproach);
+	}
+	else if(requestType == "getArtdaqSystemVariables")
+	{
+		std::string filePath =
+		    std::string(__ENV__("USER_DATA")) + "/ServiceData/ArtdaqSystemVariables.dat";
+		std::ifstream inFile(filePath);
+		if(inFile.is_open())
+		{
+			std::string line;
+			while(std::getline(inFile, line))
+			{
+				size_t eqPos = line.find('=');
+				if(eqPos == std::string::npos)
+					continue;
+				std::string key   = line.substr(0, eqPos);
+				std::string value = line.substr(eqPos + 1);
+				xmlOut.addTextElementToData("artdaq_" + key, value);
+			}
+		}
+	}
+	else if(requestType == "setArtdaqSystemVariable")
+	{
+		std::string key = CgiDataUtilities::postData(cgiIn, "key");
+		std::string value =
+		    StringMacros::decodeURIComponent(CgiDataUtilities::postData(cgiIn, "value"));
+
+		if(key.empty())
+		{
+			xmlOut.addTextElementToData("Error", "Variable key must not be empty.");
+		}
+		else
+		{
+			bool valid = true;
+			for(char c : key)
+				if(!std::isalnum(c) && c != '_')
+				{
+					valid = false;
+					break;
+				}
+			if(!valid)
+			{
+				xmlOut.addTextElementToData("Error",
+				                            "Variable key must contain only alphanumeric "
+				                            "characters and underscores.");
+			}
+			else
+			{
+				std::string filePath = std::string(__ENV__("USER_DATA")) +
+				                       "/ServiceData/ArtdaqSystemVariables.dat";
+				std::map<std::string, std::string> vars;
+				{
+					std::ifstream inFile(filePath);
+					if(inFile.is_open())
+					{
+						std::string line;
+						while(std::getline(inFile, line))
+						{
+							size_t eqPos = line.find('=');
+							if(eqPos == std::string::npos)
+								continue;
+							vars[line.substr(0, eqPos)] = line.substr(eqPos + 1);
+						}
+					}
+				}
+
+				vars[key] = value;
+
+				std::ofstream outFile(filePath);
+				if(!outFile.is_open())
+				{
+					xmlOut.addTextElementToData(
+					    "Error", "Failed to open persistence file for writing.");
+				}
+				else
+				{
+					for(auto& [k, v] : vars)
+						outFile << k << "=" << v << "\n";
+					__SUP_COUT__ << "Set artdaq system variable " << key << " = " << value
+					             << __E__;
+					xmlOut.addTextElementToData("Success", "Variable '" + key + "' set.");
+				}
+			}
+		}
+	}
+	else if(requestType == "getJsonDocuments")
+	{
+		auto* ifc = ConfigurationInterface::getInstance();
+
+		std::set<std::string> allTableNames = ifc->getAllTableNames();
+
+		for(const auto& tableName : allTableNames)
+		{
+			if(tableName.find(TableBase::JSON_DOC_PREPEND) != 0)
+				continue;
+
+			std::string docName = tableName.substr(TableBase::JSON_DOC_PREPEND.size());
+
+			TableBase              tmpTable(true, tableName);
+			std::set<TableVersion> versions = ifc->getVersions(&tmpTable);
+
+			std::string versionList;
+			for(const auto& v : versions)
+			{
+				if(!versionList.empty())
+					versionList += ",";
+				versionList += v.toString();
+			}
+
+			xmlOut.addTextElementToData("jsonDoc_name", docName);
+			xmlOut.addTextElementToData("jsonDoc_versions", versionList);
+		}
+	}
+	else if(requestType == "getJsonDocumentContent")
+	{
+		std::string docName    = CgiDataUtilities::getData(cgiIn, "docName");
+		std::string docVersion = CgiDataUtilities::getData(cgiIn, "docVersion");
+
+		__SUP_COUTV__(docName);
+		__SUP_COUTV__(docVersion);
+
+		bool valid = !docName.empty();
+		for(char c : docName)
+			if(!std::isalnum(c) && c != '_' && c != '-')
+			{
+				valid = false;
+				break;
+			}
+		if(!valid)
+		{
+			xmlOut.addTextElementToData(
+			    "Error",
+			    "Document name must be non-empty and contain only "
+			    "alphanumeric characters, dashes, and underscores.");
+		}
+		else if(docVersion.empty() ||
+		        docVersion.find_first_not_of("0123456789") != std::string::npos)
+		{
+			xmlOut.addTextElementToData(
+			    "Error", "Document version must contain only numeric characters.");
+		}
+		else
+		{
+			try
+			{
+				auto*       ifc  = ConfigurationInterface::getInstance();
+				std::string json = ifc->loadCustomJSON(docName, TableVersion(docVersion));
+				xmlOut.addTextElementToData("content", json);
+			}
+			catch(const std::exception& e)
+			{
+				xmlOut.addTextElementToData("Error",
+				                            "Failed to load document '" + docName + "-v" +
+				                                docVersion + "': " + e.what());
+			}
+		}
+	}
+	else if(requestType == "saveJsonDocumentContent")
+	{
+		std::string docName = StringMacros::decodeURIComponent(
+		    CgiDataUtilities::postData(cgiIn, "docName"));
+		std::string content = StringMacros::decodeURIComponent(
+		    CgiDataUtilities::postData(cgiIn, "content"));
+
+		__SUP_COUTV__(docName);
+		__SUP_COUTVS__(10, content);
+
+		bool valid = !docName.empty();
+		for(char c : docName)
+			if(!std::isalnum(c) && c != '_' && c != '-')
+			{
+				valid = false;
+				break;
+			}
+		if(!valid)
+		{
+			xmlOut.addTextElementToData(
+			    "Error",
+			    "Document name must be non-empty and contain only "
+			    "alphanumeric characters, dashes, and underscores.");
+		}
+		else if(content.empty())
+		{
+			xmlOut.addTextElementToData("Error", "Document content must not be empty.");
+		}
+		else
+		{
+			try
+			{
+				auto* ifc = ConfigurationInterface::getInstance();
+				std::pair<std::string, TableVersion> saved =
+				    ifc->saveCustomJSON(content, docName);
+				__SUP_COUT__ << "Saved JSON document '" << docName << "' as version "
+				             << saved.second.toString() << __E__;
+				xmlOut.addTextElementToData("newVersion", saved.second.toString());
+				xmlOut.addTextElementToData(
+				    "Success", "Saved as version " + saved.second.toString());
+			}
+			catch(const std::exception& e)
+			{
+				xmlOut.addTextElementToData(
+				    "Error", "Failed to save document '" + docName + "': " + e.what());
+			}
+		}
+	}
+	else if(requestType == "getAppUrnByClass")
+	{
+		std::string className = CgiDataUtilities::getData(cgiIn, "className");
+
+		__SUP_COUTV__(className);
+
+		if(className.empty())
+		{
+			xmlOut.addTextElementToData("Error", "className must not be empty.");
+		}
+		else
+		{
+			try
+			{
+				std::vector<std::pair<std::string, ConfigurationTree>> appRecords =
+				    cfgMgr->getNode(ConfigurationManager::XDAQ_APPLICATION_TABLE_NAME)
+				        .getChildren();
+
+				bool found = false;
+				for(const auto& appRecord : appRecords)
+				{
+					std::string appClass =
+					    appRecord.second.getNode("Class").getValueAsString();
+
+					// tolerate either a bare class name or a namespace-qualified
+					// class name (e.g. "CodeEditorSupervisor" or
+					// "ots::CodeEditorSupervisor") on either side of the comparison
+					bool classMatches =
+					    appClass == className ||
+					    (appClass.size() > className.size() &&
+					     appClass.compare(appClass.size() - className.size(),
+					                      className.size(),
+					                      className) == 0 &&
+					     appClass[appClass.size() - className.size() - 1] == ':');
+					if(!classMatches)
+						continue;
+
+					std::string appId = appRecord.second.getNode("Id").getValueAsString();
+					xmlOut.addTextElementToData("urn", appId);
+					found = true;
+					break;
+				}
+
+				if(!found)
+					xmlOut.addTextElementToData(
+					    "Error",
+					    "No enabled application found for class '" + className + "'.");
+			}
+			catch(const std::exception& e)
+			{
+				xmlOut.addTextElementToData(
+				    "Error",
+				    "Failed to look up application URN for class '" + className +
+				        "': " + e.what());
+			}
+		}
 	}
 	else
 	{
@@ -6081,7 +6371,6 @@ void ConfigurationGUISupervisor::handleGetTableXML(HttpXmlDocument&        xmlOu
                                                    bool descriptionOnly /* = false */)
 try
 {
-	char                 tmpIntStr[100];
 	xercesc::DOMElement *parentEl, *subparentEl;
 
 	std::string accumulatedErrors = "";
@@ -6371,24 +6660,28 @@ try
 
 	parentEl = xmlOut.addTextElementToData("CurrentVersionRows", "");
 
-	for(int r = 0; r < (int)tableViewPtr->getNumberOfRows(); ++r)
-	{
-		sprintf(tmpIntStr, "%d", r);
-		xercesc::DOMElement* tmpParentEl =
-		    xmlOut.addTextElementToParent("Row", tmpIntStr, parentEl);
+	int numRows = (int)tableViewPtr->getNumberOfRows();
+	int numCols = (int)tableViewPtr->getNumberOfColumns();
 
-		for(int c = 0; c < (int)tableViewPtr->getNumberOfColumns(); ++c)
+	for(int c = 0; c < numCols; ++c)
+	{
+		std::string csvStr;
+		csvStr.reserve(numRows * 20);
+		for(int r = 0; r < numRows; ++r)
 		{
+			if(r > 0)
+				csvStr += ",";
 			if(colInfo[c].getDataType() == TableViewColumnInfo::DATATYPE_TIME)
 			{
 				std::string timeAsString;
 				tableViewPtr->getValue(timeAsString, r, c);
-				xmlOut.addTextElementToParent("Entry", timeAsString, tmpParentEl);
+				csvStr += StringMacros::encodeURIComponent(timeAsString);
 			}
 			else
-				xmlOut.addTextElementToParent(
-				    "Entry", tableViewPtr->getDataView()[r][c], tmpParentEl);
+				csvStr +=
+				    StringMacros::encodeURIComponent(tableViewPtr->getDataView()[r][c]);
 		}
+		xmlOut.addTextElementToParent("ColCSV", csvStr, parentEl);
 	}
 
 	// add "other" fields associated with configView
@@ -6681,6 +6974,8 @@ void ConfigurationGUISupervisor::handleSaveTableInfoXML(
 	std::vector<std::string> columnData =
 	    StringMacros::getVectorFromString(data, {';'} /*delimiter*/);
 
+	std::set<std::string> childLinkIndices, childLinkUIDIndices, childLinkGroupIDIndices;
+
 	for(unsigned int c = 0; c < columnData.size() - 1; ++c)
 	{
 		columnParameters =
@@ -6809,8 +7104,53 @@ void ConfigurationGUISupervisor::handleSaveTableInfoXML(
 			__SS_THROW__;
 		}
 
+		if(TableViewColumnInfo::isChildLink(columnType))
+			childLinkIndices.insert(columnType.substr(sizeof("ChildLink-") - 1));
+		else if(columnType.find("ChildLinkUID-") == 0)
+			childLinkUIDIndices.insert(columnType.substr(sizeof("ChildLinkUID-") - 1));
+		else if(columnType.find("ChildLinkGroupID-") == 0)
+			childLinkGroupIDIndices.insert(
+			    columnType.substr(sizeof("ChildLinkGroupID-") - 1));
+
 		outss << "\"/>\n";
 	}
+
+	// Cross-column validation: every ChildLinkUID and ChildLinkGroupID must
+	//	have a matching ChildLink with the same index.
+	for(const auto& idx : childLinkUIDIndices)
+		if(childLinkIndices.find(idx) == childLinkIndices.end())
+		{
+			__SS__ << "Column type 'ChildLinkUID-" << idx
+			       << "' has no matching 'ChildLink-" << idx
+			       << "' column. A ChildLinkUID column must be paired with a "
+			          "ChildLink column using the same link index."
+			       << __E__;
+			__SS_THROW__;
+		}
+	for(const auto& idx : childLinkGroupIDIndices)
+		if(childLinkIndices.find(idx) == childLinkIndices.end())
+		{
+			__SS__ << "Column type 'ChildLinkGroupID-" << idx
+			       << "' has no matching 'ChildLink-" << idx
+			       << "' column. A ChildLinkGroupID column must be paired with a "
+			          "ChildLink column using the same link index. "
+			          "Did you intend to make a target of a Group Link? "
+			          "If so, use the 'GroupID' column type instead."
+			       << __E__;
+			__SS_THROW__;
+		}
+	for(const auto& idx : childLinkIndices)
+		if(childLinkUIDIndices.find(idx) == childLinkUIDIndices.end() &&
+		   childLinkGroupIDIndices.find(idx) == childLinkGroupIDIndices.end())
+		{
+			__SS__ << "Column type 'ChildLink-" << idx
+			       << "' has no matching 'ChildLinkUID-" << idx
+			       << "' or 'ChildLinkGroupID-" << idx
+			       << "' column. A ChildLink column must be paired with either a "
+			          "ChildLinkUID or ChildLinkGroupID column using the same link index."
+			       << __E__;
+			__SS_THROW__;
+		}
 
 	outss << "\t\t\t</VIEW>\n";
 	outss << "\t\t</TABLE>\n";
@@ -7515,8 +7855,8 @@ void ConfigurationGUISupervisor::handleGroupAliasesXML(HttpXmlDocument&        x
 	std::vector<std::pair<std::string, ConfigurationTree>> aliasNodePairs =
 	    cfgMgr->getNode(groupAliasesTableName).getChildren();
 
-	const int numOfThreads = ConfigurationManager::PROCESSOR_COUNT / 2;
-	__SUP_COUT__ << " PROCESSOR_COUNT " << ConfigurationManager::PROCESSOR_COUNT
+	const int numOfThreads = StringMacros::getConcurrencyCount() / 2;
+	__SUP_COUT__ << " getConcurrencyCount " << StringMacros::getConcurrencyCount()
 	             << " ==> " << numOfThreads << " threads for alias group loads." << __E__;
 
 	if(numOfThreads < 2)  // no multi-threading
@@ -8040,9 +8380,70 @@ void ConfigurationGUISupervisor::handleTableGroupsXML(HttpXmlDocument&        xm
 ///		<table name=xxx>...</table>
 ///		...
 ///
+///		Versions can be filtered by a time range [filterStartTime, filterEndTime]
+///		applied to either the version creation time (filterMode == "created",
+///		persisted in the database) or the version's last load time
+///		(filterMode == "loaded"). Note: "loaded" times are in-memory only, per
+///		ConfigurationGUI supervisor process -- they reset on supervisor restart and
+///		only versions still in the per-table view cache have a Loaded time.
+///
 void ConfigurationGUISupervisor::handleTablesXML(HttpXmlDocument&        xmlOut,
-                                                 ConfigurationManagerRW* cfgMgr)
+                                                 ConfigurationManagerRW* cfgMgr,
+                                                 const std::string& filterStartTimeStr,
+                                                 const std::string& filterEndTimeStr,
+                                                 const std::string& filterMode)
 {
+	time_t filterStartTime = 0;
+	time_t filterEndTime   = 0;
+	if(filterStartTimeStr != "")
+	{
+		try
+		{
+			filterStartTime = static_cast<time_t>(std::stoll(filterStartTimeStr));
+		}
+		catch(const std::exception& e)
+		{
+			__SUP_SS__ << "Error parsing startTime parameter: " << e.what() << __E__;
+			__SUP_COUT_ERR__ << "\n" << ss.str();
+			xmlOut.addTextElementToData("Error", ss.str());
+			return;
+		}
+	}
+	if(filterEndTimeStr != "")
+	{
+		try
+		{
+			filterEndTime = static_cast<time_t>(std::stoll(filterEndTimeStr));
+		}
+		catch(const std::exception& e)
+		{
+			__SUP_SS__ << "Error parsing endTime parameter: " << e.what() << __E__;
+			__SUP_COUT_ERR__ << "\n" << ss.str();
+			xmlOut.addTextElementToData("Error", ss.str());
+			return;
+		}
+	}
+	if(filterStartTime != 0 && filterEndTime != 0 && filterStartTime > filterEndTime)
+	{
+		__SUP_SS__ << "Invalid time range: startTime (" << filterStartTime
+		           << ") must be <= endTime (" << filterEndTime << ")." << __E__;
+		__SUP_SS_THROW__;
+	}
+	if(filterMode != "created" && filterMode != "loaded")
+	{
+		__SUP_SS__ << "Invalid filterMode parameter '" << filterMode
+		           << ".' Expected 'created' or 'loaded.'" << __E__;
+		__SUP_COUT_ERR__ << "\n" << ss.str();
+		xmlOut.addTextElementToData("Error", ss.str());
+		return;
+	}
+	// diagnostics: track where the time is going
+	const auto diagStartTime  = std::chrono::steady_clock::now();
+	auto       diagElapsedSec = [](const std::chrono::steady_clock::time_point& start) {
+        return std::chrono::duration<double>(std::chrono::steady_clock::now() - start)
+            .count();
+	};
+
 	if(cfgMgr->getAllGroupInfo().size() == 0 || cfgMgr->getActiveVersions().size() == 0)
 	{
 		__SUP_COUT__ << "Table Info cache appears empty. Attempting to regenerate."
@@ -8053,6 +8454,8 @@ void ConfigurationGUISupervisor::handleTablesXML(HttpXmlDocument&        xmlOut,
 		                        false /* getGroupKeys */,
 		                        false /* getGroupInfo */,
 		                        true /* initializeActiveGroups */);
+		__SUP_COUT__ << "getAllTableInfo() regenerate took "
+		             << diagElapsedSec(diagStartTime) << " s" << __E__;
 	}
 
 	xercesc::DOMElement*                    parentEl;
@@ -8065,12 +8468,35 @@ void ConfigurationGUISupervisor::handleTablesXML(HttpXmlDocument&        xmlOut,
 
 	// std::map<std::string, TableInfo>::const_iterator it = allTableInfo.begin();
 
-	__SUP_COUT__ << "# of tables found: " << allTableInfo.size() << __E__;
+	__SUP_COUT__ << "# of tables to consider: " << allTableInfo.size() << __E__;
 
+	const auto diagAliasStartTime = std::chrono::steady_clock::now();
 	std::map<std::string, std::map<std::string, TableVersion>> versionAliases =
 	    cfgMgr->getVersionAliases();
 
-	__SUP_COUT__ << "# of tables w/aliases: " << versionAliases.size() << __E__;
+	__SUP_COUT__ << "# of tables w/aliases: " << versionAliases.size() << " (took "
+	             << diagElapsedSec(diagAliasStartTime) << " s)" << __E__;
+
+	if(filterStartTime != 0 && filterEndTime != 0 && filterMode == "created")
+	{
+		// parallel pre-warm of the process-wide creation time cache, so the
+		//	filter loop below gets immediate cache hits (only versions not yet in
+		//	the disk-persisted cache are loaded, so this is cheap after first use)
+		const auto diagPreloadStartTime = std::chrono::steady_clock::now();
+		cfgMgr->preloadVersionCreationTimes();
+		__SUP_COUT__ << "Version creation time cache pre-warm took "
+		             << diagElapsedSec(diagPreloadStartTime) << " s" << __E__;
+	}
+
+	// diagnostics accumulated over the table loop
+	size_t      diagNumTablesFound        = 0;  //tables with at least one version listed
+	size_t      diagNumVersionsConsidered = 0;
+	size_t      diagNumVersionsMatched    = 0;
+	size_t      diagNumTimeLookups        = 0;
+	double      diagTimeLookupSec    = 0;  //cumulative time in creation/load time lookups
+	double      diagSlowestTableSec  = 0;
+	std::string diagSlowestTableName = "";
+	size_t      diagTableCount       = 0;
 
 	for(const auto& orderedTableName : orderedTableSet)  // while(it !=
 	                                                     // allTableInfo.end())
@@ -8107,14 +8533,79 @@ void ConfigurationGUISupervisor::handleTablesXML(HttpXmlDocument&        xmlOut,
 		// for speed, group versions into spans:
 		//======
 		/// Lambda function to output table version values in spans
-		auto vSpanToXML = [](auto const& sortedKeys, auto& xmlOut, auto& configEl) {
+		auto vSpanToXML = [&diagNumVersionsConsidered,
+		                   &diagNumVersionsMatched,
+		                   &diagNumTimeLookups,
+		                   &diagTimeLookupSec](auto const&             sortedKeys,
+		                                       auto&                   xmlOut,
+		                                       auto&                   configEl,
+		                                       const std::string&      tableName,
+		                                       ConfigurationManagerRW* cfgMgr,
+		                                       const time_t            filterStartTime,
+		                                       const time_t            filterEndTime,
+		                                       const std::string&      filterMode) {
 			//add lo and hi spans, instead of each individual value
 			size_t lo = -1, hi = -1;
+			bool   allVersionsFiltered = true;
 			for(auto& keyInOrder : sortedKeys)
 			{
 				//skip scratch version
 				if(keyInOrder.isScratchVersion())
 					continue;
+
+				++diagNumVersionsConsidered;
+
+				if(filterStartTime != 0 && filterEndTime != 0)
+				{
+					const auto diagLookupStartTime = std::chrono::steady_clock::now();
+					try
+					{
+						// Note: neither helper stamps the version's lastAccessTime
+						// ("Last Load"), so filtering does not corrupt Last Load times.
+						//	- "created" times are immutable and cached, so each version is
+						//		loaded from the database at most once per process lifetime.
+						//	- "loaded" times are in-memory only; 0 (never loaded by this
+						//		process, or evicted from cache) falls outside any range.
+						time_t tableVersionTime =
+						    filterMode == "loaded"
+						        ? cfgMgr->getVersionLastAccessTime(tableName, keyInOrder)
+						        : cfgMgr->getVersionCreationTime(tableName, keyInOrder);
+
+						++diagNumTimeLookups;
+						diagTimeLookupSec +=
+						    std::chrono::duration<double>(
+						        std::chrono::steady_clock::now() - diagLookupStartTime)
+						        .count();
+
+						if(tableVersionTime < filterStartTime ||
+						   tableVersionTime > filterEndTime)
+						{
+							//Note: trace-level to avoid log flooding (one line per
+							//	filtered version can be thousands of lines)
+							__COUTT__ << "Table '" << tableName << "' version v"
+							          << keyInOrder << " " << filterMode
+							          << " time is outside the filter range, so "
+							             "skipping."
+							          << __E__;
+							continue;
+						}
+					}
+					catch(const std::runtime_error&)
+					{
+						++diagNumTimeLookups;
+						diagTimeLookupSec +=
+						    std::chrono::duration<double>(
+						        std::chrono::steady_clock::now() - diagLookupStartTime)
+						        .count();
+						__COUT__ << "Failed to get " << filterMode << " time for table '"
+						         << tableName << "' version v" << keyInOrder
+						         << ", so skipping." << __E__;
+						continue;
+					}
+				}
+
+				allVersionsFiltered = false;
+				++diagNumVersionsMatched;
 
 				if(lo == size_t(-1))  //establish start of potential span
 				{
@@ -8148,31 +8639,139 @@ void ConfigurationGUISupervisor::handleTablesXML(HttpXmlDocument&        xmlOut,
 					    "_" + std::to_string(lo) + "_" + std::to_string(hi),
 					    configEl);
 			}
+			return allVersionsFiltered;
 		};  //end local lambda vSpanToXML()
 
-		vSpanToXML(it->second.versions_, xmlOut, parentEl);
+		const auto diagTableStartTime = std::chrono::steady_clock::now();
+		if(vSpanToXML(it->second.versions_,
+		              xmlOut,
+		              parentEl,
+		              it->first,
+		              cfgMgr,
+		              filterStartTime,
+		              filterEndTime,
+		              filterMode) &&
+		   filterStartTime != 0 && filterEndTime != 0)
+		{
+			// Only remove tables when a time filter is active; without a filter,
+			//	tables with no persistent versions (e.g. definition-only tables)
+			//	should still be listed, as in the unfiltered Table View.
+			// Remove the pair we just added: TableVersions then TableName.
+			unsigned int childCount = xmlOut.getChildrenCount();
+			if(childCount >= 2)
+			{
+				xmlOut.removeDataElement(childCount - 1);
+				xmlOut.removeDataElement(childCount - 2);
+			}
+		}
+		else
+			++diagNumTablesFound;
+
+		// diagnostics: report slow tables and periodic progress
+		double diagTableSec = diagElapsedSec(diagTableStartTime);
+		if(diagTableSec > diagSlowestTableSec)
+		{
+			diagSlowestTableSec  = diagTableSec;
+			diagSlowestTableName = it->first;
+		}
+		if(diagTableSec > 1.0)
+			__SUP_COUT__ << "Slow table filter: '" << it->first << "' with "
+			             << it->second.versions_.size() << " versions took "
+			             << diagTableSec << " s" << __E__;
+		++diagTableCount;
+		if(diagTableCount % 50 == 0)
+			__SUP_COUT__ << "getTables filter progress: " << diagTableCount << " of "
+			             << orderedTableSet.size() << " tables in "
+			             << diagElapsedSec(diagStartTime) << " s (" << diagNumTimeLookups
+			             << " version time lookups taking " << diagTimeLookupSec
+			             << " s so far)" << __E__;
 
 	}  // end table loop
+
+	// always return the table and version counts, even if everything was filtered out
+	xmlOut.addTextElementToData("NumberOfTablesConsidered",
+	                            std::to_string(allTableInfo.size()));
+	xmlOut.addTextElementToData("NumberOfTablesFound",
+	                            std::to_string(diagNumTablesFound));
+	xmlOut.addTextElementToData("NumberOfVersionsConsidered",
+	                            std::to_string(diagNumVersionsConsidered));
+	xmlOut.addTextElementToData("NumberOfVersionsFound",
+	                            std::to_string(diagNumVersionsMatched));
+
+	__SUP_COUT__ << "getTables filter summary: mode=" << filterMode << " range=["
+	             << filterStartTime << "," << filterEndTime << "]"
+	             << " tables considered=" << allTableInfo.size()
+	             << " found=" << diagNumTablesFound
+	             << "; versions considered=" << diagNumVersionsConsidered
+	             << " matched=" << diagNumVersionsMatched << "; " << diagNumTimeLookups
+	             << " version time lookups took " << diagTimeLookupSec
+	             << " s; slowest table '" << diagSlowestTableName << "' took "
+	             << diagSlowestTableSec << " s; total " << diagElapsedSec(diagStartTime)
+	             << " s" << __E__;
 
 }  // end handleTablesXML()
 
 //==============================================================================
 /// handleGetArtdaqNodeRecordsXML
-///	get artdaq nodes for active groups
+///	get artdaq nodes for specified or active groups
 ///
 /// parameters
 ///	modifiedTables := CSV of table/version pairs
+///	tableGroup     := optional config group name (empty = use active groups)
+///	tableGroupKey  := optional config group key  (invalid = use active groups)
 ///
 void ConfigurationGUISupervisor::handleGetArtdaqNodeRecordsXML(
     HttpXmlDocument&        xmlOut,
     ConfigurationManagerRW* cfgMgr,
-    const std::string&      modifiedTables)
+    const std::string&      modifiedTables,
+    const std::string&      tableGroup,
+    TableGroupKey           tableGroupKey,
+    const std::string&      contextGroup,
+    TableGroupKey           contextGroupKey,
+    bool                    suppressMultiNode)
 {
 	__COUT__ << "Retrieving artdaq nodes..." << __E__;
 
-	//	setup active tables based on active groups and modified tables
-	setupActiveTablesXML(
-	    xmlOut, cfgMgr, "", TableGroupKey(-1), modifiedTables, false /* refreshAll */);
+	//	setup active tables based on specified or active groups and modified tables
+	setupActiveTablesXML(xmlOut,
+	                     cfgMgr,
+	                     tableGroup,
+	                     tableGroupKey,
+	                     modifiedTables,
+	                     false /* refreshAll */);
+
+	// if a context group was specified, also load it so that
+	// getARTDAQSystem() can find XDAQContextTable and the ARTDAQSupervisor.
+	// Note: loadTableGroup(doActivate=false) only fills the table's raw row/column
+	//	data -- it deliberately does NOT call TableBase::init(), so derived/extracted
+	//	state (like XDAQContextTable::artdaqSupervisorContext_, computed in
+	//	XDAQContextTable::init()->extractContexts()) is left stale from whatever
+	//	group was last activated/initialized. We only want that one derived field
+	//	recomputed for the group we asked for -- calling full init() is NOT safe here:
+	//	it also runs configManager->isOwnerFirstAppInContext(), which looks up THIS
+	//	process's own (unrelated) ownerContextUID_ within whatever XDAQContextTable
+	//	rows now happen to be loaded, and on a lookup miss defaults to "yes" and
+	//	truncates/rewrites the live XDAQ_RUN_FILE. So call extractContexts() directly
+	//	(the read-only half of init()) instead of init() itself.
+	if(contextGroup != "" && !contextGroupKey.isInvalid())
+	{
+		__SUP_COUT__ << "Also loading context group '" << contextGroup << "("
+		             << contextGroupKey << ")' for ARTDAQ node lookup..." << __E__;
+		cfgMgr->loadTableGroup(contextGroup, contextGroupKey, false /*doActivate*/);
+
+		TableBase* ctxTableBase =
+		    cfgMgr->getTableByName(ConfigurationManager::XDAQ_CONTEXT_TABLE_NAME);
+		XDAQContextTable* ctxTable = dynamic_cast<XDAQContextTable*>(ctxTableBase);
+		if(!ctxTable)
+		{
+			__SUP_SS__ << "Failed to cast "
+			           << ConfigurationManager::XDAQ_CONTEXT_TABLE_NAME
+			           << " to XDAQContextTable for context group '" << contextGroup
+			           << "(" << contextGroupKey << ")'." << __E__;
+			__SS_THROW__;
+		}
+		ctxTable->extractContexts(cfgMgr);
+	}
 
 	std::map<std::string /*type*/,
 	         std::map<std::string /*record*/, std::vector<std::string /*property*/>>>
@@ -8183,8 +8782,12 @@ void ConfigurationGUISupervisor::handleGetArtdaqNodeRecordsXML(
 	std::vector<std::string /*property*/> artdaqSupervisorInfo;
 
 	std::string                        artdaqSupervisorName;
-	const ARTDAQTableBase::ARTDAQInfo& info = ARTDAQTableBase::getARTDAQSystem(
-	    cfgMgr, nodeTypeToObjectMap, subsystemObjectMap, artdaqSupervisorInfo);
+	const ARTDAQTableBase::ARTDAQInfo& info =
+	    ARTDAQTableBase::getARTDAQSystem(cfgMgr,
+	                                     nodeTypeToObjectMap,
+	                                     subsystemObjectMap,
+	                                     artdaqSupervisorInfo,
+	                                     suppressMultiNode);
 
 	if(artdaqSupervisorInfo.size() != 4 /*expecting 4 artdaq Supervisor parameters*/)
 	{

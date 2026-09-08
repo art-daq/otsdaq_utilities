@@ -889,7 +889,8 @@ DesktopContent.handleBlur = function (e) {
 //=====================================================================================
 DesktopContent.handleScroll = function (e) {
 	//console.log("Scroll DesktopContent.handleScroll", DesktopContent._isFocused, DesktopContent._theWindowId);
-	window.focus();
+	if(!DesktopContent._isFocused)
+		window.focus();
 } //end DesktopContent.handleScroll()
 
 //=====================================================================================
@@ -1290,7 +1291,8 @@ DesktopContent.scrollIntoViewX = function (targetID, doHighlight) {
 //			}
 DesktopContent.XMLHttpRequest = function (requestURL, data, returnHandler,
 	reqParam, progressHandler, callHandlerOnErr, doNotShowLoadingOverlay,
-	targetGatewaySupervisor, ignoreSystemBlock, doNotOfferSequenceChange) {
+	targetGatewaySupervisor, ignoreSystemBlock, doNotOfferSequenceChange,
+	targetUrnOverride) {
 
 	// Sequence is used as an alternative approach to cookieCode (e.g. ots Config Wizard).
 	var sequence = DesktopContent._sequence;
@@ -1383,7 +1385,7 @@ DesktopContent.XMLHttpRequest = function (requestURL, data, returnHandler,
 						requestType = " '" + requestURL.substr(requestType + ("RequestType=").length) + "'";
 					else
 						requestType = "";
-					errStr = "Request " + requestType + " failed due to <b>insufficient account permissions</b>. Re-login or check your access code.";
+					errStr = "Failure due to <b>insufficient account permissions</b>" + (requestType ? (" for request" + requestType) : "") + ". Re-login or check your access code.";
 					if (callHandlerOnErr && callHandlerOnErr < 2)
 						Debug.err(errStr);
 
@@ -1404,7 +1406,8 @@ DesktopContent.XMLHttpRequest = function (requestURL, data, returnHandler,
 									Debug.log("Retrying request with new access code...");
 									DesktopContent.XMLHttpRequest(requestURL, data, returnHandler,
 										reqParam, progressHandler, callHandlerOnErr, doNotShowLoadingOverlay,
-										targetGatewaySupervisor, ignoreSystemBlock);
+										targetGatewaySupervisor, ignoreSystemBlock, doNotOfferSequenceChange,
+										targetUrnOverride);
 
 									if(!DesktopContent._forcedWizMode)
 									{
@@ -1647,6 +1650,12 @@ DesktopContent.XMLHttpRequest = function (requestURL, data, returnHandler,
 		urn = DesktopContent._serverUrnLid;
 		origin = DesktopContent._serverOrigin;
 	}
+
+	if (targetUrnOverride) //explicit override to reach a specific third-party
+		//	XDAQ application (e.g. resolved via a getAppUrnByClass-style lookup),
+		//	instead of the local application or the gateway. Same origin is used
+		//	since all applications behind one gateway share it.
+		urn = targetUrnOverride;
 
 
 	if (!doNotShowLoadingOverlay)

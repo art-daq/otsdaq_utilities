@@ -3,12 +3,14 @@
 #include "otsdaq/CodeEditor/CodeEditor.h"
 #include "otsdaq/ConfigurationInterface/ConfigurationManager.h"
 #include "otsdaq/FECore/FEVInterface.h"
+#include "otsdaq/Macros/StringMacros.h"
 
 #include "otsdaq/NetworkUtilities/TransceiverSocket.h"  // for UDP remote control
 
 #include <dirent.h>    //for DIR
 #include <stdio.h>     //for file rename
 #include <sys/stat.h>  //for mkdir
+#include <unistd.h>    //for truncate
 #include <chrono>
 #include <cstdio>
 #include <filesystem>  //for std::filesytem
@@ -21,6 +23,9 @@
 #define MACROS_HIST_PATH std::string(__ENV__("SERVICE_DATA_PATH")) + "/MacroHistory/"
 #define MACROS_SEQUENCE_PATH std::string(__ENV__("SERVICE_DATA_PATH")) + "/MacroSequence/"
 #define MACROS_EXPORT_PATH std::string("/MacroExport/")
+#define USER_FEMACROTEST_PREF_PATH \
+	std::string(__ENV__("SERVICE_DATA_PATH")) + "/FEMacroTestPreferences/"
+#define FEMACROTEST_PREF_FILETYPE "pref"
 
 #define SEQUENCE_FILE_NAME \
 	std::string(__ENV__("SERVICE_DATA_PATH")) + "/OtsWizardData/sequence.dat"
@@ -47,6 +52,7 @@ MacroMakerSupervisor::MacroMakerSupervisor(xdaq::ApplicationStub* stub)
 	mkdir(((std::string)MACROS_HIST_PATH).c_str(), 0755);
 	mkdir(((std::string)MACROS_SEQUENCE_PATH).c_str(), 0755);
 	mkdir((__ENV__("SERVICE_DATA_PATH") + MACROS_EXPORT_PATH).c_str(), 0755);
+	mkdir(((std::string)USER_FEMACROTEST_PREF_PATH).c_str(), 0755);
 
 	xoap::bind(this,
 	           &MacroMakerSupervisor::frontEndCommunicationRequest,
@@ -1052,6 +1058,70 @@ void MacroMakerSupervisor::handleRequest(const std::string                Comman
 		deleteFEMacroSequence(cgi, userInfo.username_);
 	else if(Command == "makeSequencePublic")
 		makeSequencePublic(cgi, userInfo.username_);
+	else if(Command == "saveFEMacroTestPreferences")
+	{
+		int twoColumnView    = CgiDataUtilities::postDataAsInt(cgi, "twoColumnView");
+		int showSequencePane = CgiDataUtilities::postDataAsInt(cgi, "showSequencePane");
+		int dynamicDropdown  = CgiDataUtilities::postDataAsInt(cgi, "dynamicDropdown");
+
+		if(userInfo.username_ == "")
+		{
+			__SUP_COUT_ERR__ << "Invalid user found! user=" << userInfo.username_
+			                 << __E__;
+			xmldoc.addTextElementToData("Error", "Error - Invalid user found.");
+			return;
+		}
+
+		std::string fn = (std::string)USER_FEMACROTEST_PREF_PATH + userInfo.username_ +
+		                 "." + (std::string)FEMACROTEST_PREF_FILETYPE;
+
+		FILE* fp = fopen(fn.c_str(), "w");
+		if(!fp)
+		{
+			__SS__;
+			__THROW__(ss.str() + "Could not open file: " + fn);
+		}
+		fprintf(fp, "twoColumnView %d\n", twoColumnView);
+		fprintf(fp, "showSequencePane %d\n", showSequencePane);
+		fprintf(fp, "dynamicDropdown %d\n", dynamicDropdown);
+		fclose(fp);
+	}
+	else if(Command == "loadFEMacroTestPreferences")
+	{
+		if(userInfo.username_ == "")
+		{
+			__SUP_COUT_ERR__ << "Invalid user found! user=" << userInfo.username_
+			                 << __E__;
+			xmldoc.addTextElementToData("Error", "Error - Invalid user found.");
+			return;
+		}
+
+		std::string fn = (std::string)USER_FEMACROTEST_PREF_PATH + userInfo.username_ +
+		                 "." + (std::string)FEMACROTEST_PREF_FILETYPE;
+
+		FILE* fp = fopen(fn.c_str(), "r");
+		if(!fp)
+		{
+			__SUP_COUT__ << "Returning defaults." << __E__;
+			xmldoc.addTextElementToData("twoColumnView", "0");
+			xmldoc.addTextElementToData("showSequencePane", "0");
+			xmldoc.addTextElementToData("dynamicDropdown", "0");
+			return;
+		}
+		unsigned int twoColumnView = 0, showSequencePane = 0, dynamicDropdown = 0;
+		fscanf(fp, "%*s %u", &twoColumnView);
+		fscanf(fp, "%*s %u", &showSequencePane);
+		fscanf(fp, "%*s %u", &dynamicDropdown);
+		fclose(fp);
+
+		char tmpStr[20];
+		sprintf(tmpStr, "%u", twoColumnView);
+		xmldoc.addTextElementToData("twoColumnView", tmpStr);
+		sprintf(tmpStr, "%u", showSequencePane);
+		xmldoc.addTextElementToData("showSequencePane", tmpStr);
+		sprintf(tmpStr, "%u", dynamicDropdown);
+		xmldoc.addTextElementToData("dynamicDropdown", tmpStr);
+	}
 	else
 		xmldoc.addTextElementToData("Error",
 		                            "Command '" + Command +
@@ -1064,8 +1134,7 @@ xoap::MessageReference MacroMakerSupervisor::frontEndCommunicationRequest(
     xoap::MessageReference message)
 try
 {
-	__COUTT__;  //mark for debugging
-	__SUP_COUT__ << "FE Request received: " << SOAPUtilities::translate(message) << __E__;
+	__COUTT__;
 
 	SOAPParameters typeParameter, rxParameters;  // params for xoap to recv
 	typeParameter.addParameter("type");
@@ -1162,8 +1231,8 @@ try
 		FEtoPluginTypeMap_.clear();     // reset
 		for(auto& feApp : feTypeSupervisors)
 		{
-			__SUP_COUT__ << "FEs for app " << feApp.first << ":" << feApp.second.getName()
-			             << __E__;
+			__SUP_COUTT__ << "FEs for app " << feApp.first << ":"
+			              << feApp.second.getName() << __E__;
 
 			auto feChildren = appsNode.getNode(feApp.second.getName())
 			                      .getNode("LinkToSupervisorTable")
@@ -1175,7 +1244,7 @@ try
 				if(!fe.second.status())
 					continue;  // skip disabled FEs
 
-				__SUP_COUTV__(fe.first);
+				__SUP_COUTTV__(fe.first);
 				FEtoSupervisorMap_[fe.first] = feApp.first;
 
 				std::string pluginType =
@@ -1247,16 +1316,101 @@ try
 
 		try
 		{
-			__SUP_COUT__ << "Forwarding request: " << SOAPUtilities::translate(message)
-			             << __E__;
+			__SUP_COUT_INFO__ << "Forwarding (fresh message) to LID="
+			                  << it->second.getId() << " URL=" << it->second.getURL()
+			                  << __E__;
 
-			xoap::MessageReference replyMessage =
-			    SOAPMessenger::sendWithSOAPReply(it->second.getDescriptor(), message);
+			// Build a fresh SOAP message to avoid stale routing info
+			// from the first hop (CFO -> MacroMaker) contaminating
+			// the second hop (MacroMaker -> target FESupervisor).
+			SOAPCommand            incomingCmd = SOAPUtilities::translate(message);
+			xoap::MessageReference freshMessage =
+			    SOAPUtilities::makeSOAPMessageReference("FECommunication");
+			SOAPParameters fwdParams;
+			fwdParams.addParameter("type", type);
+			fwdParams.addParameter("requester",
+			                       incomingCmd.getParameters().getValue("requester"));
+			fwdParams.addParameter("targetInterfaceID", targetInterfaceID);
+			if(type == "feMacro")
+			{
+				fwdParams.addParameter(
+				    "feMacroName", incomingCmd.getParameters().getValue("feMacroName"));
+				fwdParams.addParameter("inputArgs",
+				                       incomingCmd.getParameters().getValue("inputArgs"));
+			}
+			else if(type == "feSend")
+			{
+				fwdParams.addParameter("value",
+				                       incomingCmd.getParameters().getValue("value"));
+			}
+			else if(type == "feMacroMultiDimensionalStart")
+			{
+				fwdParams.addParameter(
+				    "feMacroName", incomingCmd.getParameters().getValue("feMacroName"));
+				fwdParams.addParameter("inputArgs",
+				                       incomingCmd.getParameters().getValue("inputArgs"));
+				fwdParams.addParameter(
+				    "enableSavingOutput",
+				    incomingCmd.getParameters().getValue("enableSavingOutput"));
+				fwdParams.addParameter(
+				    "outputFilePath",
+				    incomingCmd.getParameters().getValue("outputFilePath"));
+				fwdParams.addParameter(
+				    "outputFileRadix",
+				    incomingCmd.getParameters().getValue("outputFileRadix"));
+			}
+			else if(type == "macroMultiDimensionalStart")
+			{
+				fwdParams.addParameter("macroName",
+				                       incomingCmd.getParameters().getValue("macroName"));
+				fwdParams.addParameter(
+				    "macroString", incomingCmd.getParameters().getValue("macroString"));
+				fwdParams.addParameter("inputArgs",
+				                       incomingCmd.getParameters().getValue("inputArgs"));
+				fwdParams.addParameter(
+				    "enableSavingOutput",
+				    incomingCmd.getParameters().getValue("enableSavingOutput"));
+				fwdParams.addParameter(
+				    "outputFilePath",
+				    incomingCmd.getParameters().getValue("outputFilePath"));
+				fwdParams.addParameter(
+				    "outputFileRadix",
+				    incomingCmd.getParameters().getValue("outputFileRadix"));
+			}
+			else if(type == "feMacroMultiDimensionalCheck")
+			{
+				fwdParams.addParameter(
+				    "feMacroName", incomingCmd.getParameters().getValue("feMacroName"));
+			}
+			else if(type == "macroMultiDimensionalCheck")
+			{
+				fwdParams.addParameter("macroName",
+				                       incomingCmd.getParameters().getValue("macroName"));
+			}
+			SOAPUtilities::addParameters(freshMessage, fwdParams);
+
+			xoap::MessageReference replyMessage = SOAPMessenger::sendWithSOAPReply(
+			    it->second.getDescriptor(), freshMessage);
 
 			if(type != "feSend")
 			{
-				__SUP_COUT__ << "Forwarding FE Macro response: "
-				             << SOAPUtilities::translate(replyMessage) << __E__;
+				std::string replyStr =
+				    SOAPUtilities::translate(replyMessage).getCommand();
+
+				if(replyStr == "Fault")
+				{
+					try
+					{
+						std::string fullReply;
+						replyMessage->writeTo(fullReply);
+						__SUP_COUT_WARN__ << "SOAP Fault detail for target '"
+						                  << targetInterfaceID << "': " << fullReply
+						                  << __E__;
+					}
+					catch(...)
+					{
+					}
+				}
 
 				return replyMessage;
 			}
@@ -1942,21 +2096,51 @@ void MacroMakerSupervisor::appendCommandToHistory(std::string        feClass,
 	if(completeTime == 0)
 		completeTime = launchTime;
 
-	//prevent repeats to FE command history (otherwise live view can overwhelm history)
-	auto feHistoryIt = lastFeCommandToHistory_.find(username);
-	if(feHistoryIt != lastFeCommandToHistory_.end() && feHistoryIt->second.size() == 7 &&
-	   feHistoryIt->second[0] == feClass && feHistoryIt->second[1] == feUID &&
-	   feHistoryIt->second[2] == macroType && feHistoryIt->second[3] == macroName &&
-	   feHistoryIt->second[4] == inputArgs && feHistoryIt->second[5] == outputArgs &&
-	   feHistoryIt->second[6] == (saveOutputs ? "1" : "0"))
-	{
-		__SUP_COUTT__ << "Not saving repeat command to history from user " << username
-		              << __E__;
-		return;
-	}
-
 	std::string fileName = "FEhistory.hist";
 	std::string fullPath = (std::string)MACROS_HIST_PATH + username + "/" + fileName;
+
+	auto feHistoryIt = lastFeCommandToHistory_.find(username);
+	bool isRepeat =
+	    (feHistoryIt != lastFeCommandToHistory_.end() &&
+	     feHistoryIt->second.size() == 7 && feHistoryIt->second[0] == feClass &&
+	     feHistoryIt->second[1] == feUID && feHistoryIt->second[2] == macroType &&
+	     feHistoryIt->second[3] == macroName && feHistoryIt->second[4] == inputArgs &&
+	     feHistoryIt->second[5] == outputArgs &&
+	     feHistoryIt->second[6] == (saveOutputs ? "1" : "0"));
+
+	unsigned int repeatCount;
+	time_t       origLaunchTime;
+
+	if(isRepeat)
+	{
+		repeatCount    = lastFeRepeatCount_[username] + 1;
+		origLaunchTime = lastFeLaunchTime_[username];
+
+		auto posIt = lastFeRecordFilePos_.find(username);
+		if(posIt != lastFeRecordFilePos_.end() && posIt->second > 0)
+		{
+			struct stat fileStat;
+			if(stat(fullPath.c_str(), &fileStat) == 0 &&
+			   fileStat.st_size >= posIt->second)
+			{
+				truncate(fullPath.c_str(), posIt->second);
+			}
+		}
+
+		__SUP_COUTT__ << "Incrementing repeat count to " << repeatCount
+		              << " for command to history from user " << username << __E__;
+	}
+	else
+	{
+		repeatCount    = 1;
+		origLaunchTime = launchTime;
+	}
+
+	struct stat fileStat;
+	off_t       filePos = 0;
+	if(stat(fullPath.c_str(), &fileStat) == 0)
+		filePos = fileStat.st_size;
+
 	__SUP_COUT__ << fullPath << __E__;
 	std::ofstream histfile(fullPath.c_str(), std::ios::app);
 	if(histfile.is_open())
@@ -1968,8 +2152,10 @@ void MacroMakerSupervisor::appendCommandToHistory(std::string        feClass,
 		histfile << "\"macroName\":\"" << macroName << "\",\n";
 		histfile << "\"inputArgs\":\"" << inputArgs << "\",\n";
 		histfile << "\"outputArgs\":\"" << outputArgs << "\",\n";
-		histfile << "\"launchTime\":\"" << launchTime << "\",\n";
+		histfile << "\"launchTime\":\"" << origLaunchTime << "\",\n";
 		histfile << "\"completeTime\":\"" << completeTime << "\",\n";
+		if(repeatCount > 1)
+			histfile << "\"repeatCount\":\"" << repeatCount << "\",\n";
 		if(saveOutputs)
 			histfile << "\"saveOutputs\":\"" << 1 << "\"\n";
 		else
@@ -1977,7 +2163,7 @@ void MacroMakerSupervisor::appendCommandToHistory(std::string        feClass,
 		histfile << "}#" << __E__;
 		histfile.close();
 
-		lastFeCommandToHistory_[username].clear();  //create instance and/or clear
+		lastFeCommandToHistory_[username].clear();
 		feHistoryIt = lastFeCommandToHistory_.find(username);
 		feHistoryIt->second.push_back(feClass);
 		feHistoryIt->second.push_back(feUID);
@@ -1986,6 +2172,10 @@ void MacroMakerSupervisor::appendCommandToHistory(std::string        feClass,
 		feHistoryIt->second.push_back(inputArgs);
 		feHistoryIt->second.push_back(outputArgs);
 		feHistoryIt->second.push_back((saveOutputs ? "1" : "0"));
+
+		lastFeRepeatCount_[username]   = repeatCount;
+		lastFeRecordFilePos_[username] = filePos;
+		lastFeLaunchTime_[username]    = origLaunchTime;
 	}
 	else
 	{
@@ -2572,6 +2762,14 @@ void MacroMakerSupervisor::clearFEHistory(const std::string& username)
 	std::string fullPath = (std::string)MACROS_HIST_PATH + username + "/" + fileName;
 
 	std::remove(fullPath.c_str());
+
+	//reset per-user repeat tracking so next command is not treated as a repeat
+	//	of a record that no longer exists in the (now empty) history file
+	lastFeCommandToHistory_.erase(username);
+	lastFeRepeatCount_.erase(username);
+	lastFeRecordFilePos_.erase(username);
+	lastFeLaunchTime_.erase(username);
+
 	__SUP_COUT__ << "Successfully deleted " << fullPath;
 }  //end clearFEHistory()
 
@@ -3259,11 +3457,7 @@ try
 	{
 		std::lock_guard<std::mutex> lock(feMacroRunThreadStructMutex_);
 
-		__SUP_COUT__ << "Checking if recent FE macro group has completed for NotDoneID = "
-		             << NotDoneID << __E__;
-
-		for(const auto& g : feMacroRunThreadStruct_)
-			__SUP_COUTT__ << "[] groupID_ = " << g->groupID_ << __E__;
+		__SUP_COUTT__ << "Checking NotDoneID = " << NotDoneID << __E__;
 
 		time_t now      = time(0);
 		size_t target_i = -1;
@@ -3471,10 +3665,16 @@ try
 		MacroMakerSupervisor::runFEMacroGroupSchedulerThread(group, this);
 	}).detach();
 
+	// This synchronous wait must stay SHORT: while this xgi handler runs, the
+	// application does not service other inbound messages, so an FE macro that
+	// calls back through MacroMaker (FECommunication to reach another
+	// supervisor) can not complete until this handler returns -- a circular
+	// wait. Serve only quick macros synchronously; everything else goes async
+	// and the GUI polls with NotDoneID.
 	size_t sleepTime = 10 * 1000;  //10ms
 	usleep(sleepTime);
 	//if not all done quickly, track in "not-done" queue
-	for(int i = 0; i < 6; ++i)
+	for(int i = 0; i < 2; ++i)
 	{
 		if(group->allDone())
 		{
@@ -3487,13 +3687,10 @@ try
 		else
 		{
 			__SUP_COUTT__ << "FE macros not all done, sleeping..." << __E__;
-			sleepTime *= 5;  //50ms, 250ms, 1s
-			if(sleepTime > 1000 * 1000 /* 1 second */)
-				sleepTime = 1000 * 1000;
+			sleepTime *= 5;  //50ms, 250ms
 			usleep(sleepTime);
 		}
-	}  //end wait loop
-
+	}                      //end wait loop
 	if(!group->allDone())  //not all done - go async
 	{
 		xmldoc.addNumberElementToData("NotDoneID", group->groupID_);
@@ -3605,7 +3802,7 @@ try
 	__COUT__ << "FE macro group scheduler started. groupID=" << group->groupID_
 	         << " tasks=" << group->tasks_.size() << __E__;
 
-	std::size_t maxThreads = std::thread::hardware_concurrency();
+	std::size_t maxThreads = StringMacros::getConcurrencyCount();
 	if(maxThreads == 0)
 		maxThreads = 4;
 	if(maxThreads > group->tasks_.size())
@@ -3949,22 +4146,23 @@ void MacroMakerSupervisor::runFEMacro(HttpXmlDocument&   xmldoc,
 			    "MacroMakerSupervisorRequest",
 			    txParameters);
 
-			__SUP_COUT__ << "Received response message: "
-			             << SOAPUtilities::translate(retMsg) << __E__;
-
 			SOAPUtilities::receive(retMsg, rxParameters);
 
-			__SUP_COUT__ << "Received it " << __E__;
-
-			// If FESupervisor returned NotDoneTaskID, poll until macro completes
+			// If FESupervisor returned NotDoneTaskID, poll until macro completes.
+			// Poll with a short adaptive backoff -- CheckMacro is cheap for the
+			// FESupervisor to answer (verified: ~4ms round trip), so fast FE
+			// macros should not pay a multi-second discovery penalty.
 			{
-				std::string notDoneTaskID = rxParameters.getValue("NotDoneTaskID");
+				std::string notDoneTaskID  = rxParameters.getValue("NotDoneTaskID");
+				int         asyncPollCount = 0;
+				useconds_t  pollSleepUs    = 100 * 1000;  //100ms, doubling to 2s cap
+				if(!notDoneTaskID.empty())
+				{
+					usleep(pollSleepUs);
+				}
 				while(notDoneTaskID != "")
 				{
-					__SUP_COUT__ << "FE Macro async task " << notDoneTaskID
-					             << " still running for FE '" << feUID
-					             << "'. Polling in 5s..." << __E__;
-					sleep(5);
+					++asyncPollCount;
 
 					SOAPParameters pollTxParams;
 					pollTxParams.addParameter("Request", "CheckMacro");
@@ -3991,6 +4189,14 @@ void MacroMakerSupervisor::runFEMacro(HttpXmlDocument&   xmldoc,
 					}
 
 					notDoneTaskID = rxParameters.getValue("NotDoneTaskID");
+
+					if(!notDoneTaskID.empty())
+					{
+						usleep(pollSleepUs);
+						pollSleepUs *= 2;
+						if(pollSleepUs > 2000 * 1000 /* 2 seconds */)
+							pollSleepUs = 2000 * 1000;
+					}
 				}
 			}
 
@@ -3999,7 +4205,7 @@ void MacroMakerSupervisor::runFEMacro(HttpXmlDocument&   xmldoc,
 			std::string error         = rxParameters.getValue("Error");
 
 			//__SUP_COUT__ << "rx success = " << success << __E__;
-			__SUP_COUT__ << "outputArgs = " << outputResults << __E__;
+			__SUP_COUTT__ << "outputArgs = " << outputResults << __E__;
 
 			if(error != "")
 			{
@@ -4053,7 +4259,7 @@ void MacroMakerSupervisor::runFEMacro(HttpXmlDocument&   xmldoc,
 						xmldoc.addTextElementToParent(
 						    "outputArgs_value", argValue, feMacroExecParent);
 					}
-					__SUP_COUT__ << argName << ": " << argValue << __E__;
+					__SUP_COUTT__ << argName << ": " << argValue << __E__;
 				}
 			}
 

@@ -690,7 +690,39 @@
 		var _tableColumnMinValues = [];
 		var _tableColumnMaxValues = [];
 		var _tableViewBackLinkStr;
+		var _navHistory = [];
+		var _navHistoryPushDisabled = false;
 		var _tableUploadStr = "";
+		var _tableViewSelectedOption = "";
+		var _tableViewSelectedFilterMode = "created"; //"created" or "loaded"
+		var _tableViewSelectedStartTime = 0;
+		var _tableViewSelectedEndTime = 0;
+		//time filter presets per filter mode; seconds = how far back from now
+		//	("All" and "Custom Range" are always added in populateTableViewPresetOptions())
+		var _TABLE_VIEW_FILTER_PRESETS = {
+			"created": [
+				{ value: "last5m",  label: "Last 5 Minutes",  seconds: 5*60 },
+				{ value: "last15m", label: "Last 15 Minutes", seconds: 15*60 },
+				{ value: "last30m", label: "Last 30 Minutes", seconds: 30*60 },
+				{ value: "last1h",  label: "Last Hour",       seconds: 60*60 },
+				{ value: "last4h",  label: "Last 4 Hours",    seconds: 4*60*60 },
+				{ value: "last24",  label: "Last Day",        seconds: 24*60*60 },
+				{ value: "last7",   label: "Last Week",       seconds: 7*24*60*60 },
+				{ value: "last30",  label: "Last Month",      seconds: 30*24*60*60 },
+				{ value: "last365", label: "Last Year",       seconds: 365*24*60*60 }
+			],
+			"loaded": [
+				{ value: "last5m",  label: "Last 5 Minutes",  seconds: 5*60 },
+				{ value: "last15m", label: "Last 15 Minutes", seconds: 15*60 },
+				{ value: "last30m", label: "Last 30 Minutes", seconds: 30*60 },
+				{ value: "last1h",  label: "Last Hour",       seconds: 60*60 },
+				{ value: "last4h",  label: "Last 4 Hours",    seconds: 4*60*60 },
+				{ value: "last24",  label: "Last Day",        seconds: 24*60*60 },
+				{ value: "last7",   label: "Last Week",       seconds: 7*24*60*60 },
+				{ value: "last30",  label: "Last Month",      seconds: 30*24*60*60 },
+				{ value: "last365", label: "Last Year",       seconds: 365*24*60*60 }
+			]
+		};
 		var _doCopyAndPaintIncrementally = false;
 		var _copyAndPaintLastCellKey = "";
 		const _CURSOR_PAINTER_SOURCE = 'url("/WebPath/images/iconImages/cursor-PaintRoller.png"), auto';
@@ -740,6 +772,10 @@
 		var treeEditingEditIconShownIdString_ = "";
 		var treeEditingInitGroupMembers_ = [];
 		var treeEditingGroupMembersLastSelect_ = "";
+
+		var _siblingSaveQueue_ = [];
+		var _siblingSaving_ = false;
+		var _siblingSavedUIDs_ = [];
 
 		var _memberMapForGroupSave = {}; //used by saveTableGroupAsNewKey()
 
@@ -810,6 +846,12 @@
 			DesktopContent.mouseMoveSubscriber(bodyMouseMoveHandler);
 			//be careful to not override the body.keydown DesktopContent/Debug action
 			document.body.addEventListener("keydown", bodyKeyHandler, true /* flag for capture priority */);
+			window.addEventListener("mousedown", function(e) {
+				if (e.button == 3) {
+					e.preventDefault();
+					navigateBack();
+				}
+			});
 
 
 			//============================
@@ -878,6 +920,18 @@
 					cmdStr = DesktopContent.getParameter(0, "newWindowOps");
 
 				//DesktopContent.getParameter(1); //from  location.search
+
+				//autoTreeView deep-link: external pages (e.g. Mu2e Run Control) can open
+				//	this ConfigurationGUI (possibly for a REMOTE subsystem) directly in the
+				//	tree view of a given group, activating that group first. On a fresh
+				//	remote window the gateway session isn't verified yet, so the first
+				//	requests fail with status 0 (ERR_EMPTY_RESPONSE) -- even the
+				//	getActiveGroups above runs its callback on error. So retry
+				//	getActiveGroups until it returns valid data (session verified), THEN
+				//	activate the group and open its tree view (at root).
+				var autoTreeGroup = DesktopContent.getParameter(0, "autoTreeGroup");
+				var autoTreeKey   = DesktopContent.getParameter(0, "autoTreeKey");
+
 				if (cmdStr && cmdStr != "") {
 					//do incoming commands!
 					Debug.log("cmdStr=" + cmdStr);
@@ -885,6 +939,45 @@
 					cmdStr = cmdStr.replace(/%22/g, "\"");
 
 					evaluateJS(cmdStr);
+				}
+				else if (autoTreeGroup && autoTreeKey) {
+					Debug.log("autoTreeView deep-link: " + autoTreeGroup +
+						"(" + autoTreeKey + ")");
+
+					var _openTree = function () {
+						//activate the group, then open its tree view at root
+						activateSystemConfig(autoTreeGroup, autoTreeKey,
+							undefined /*ignoreWarnings*/,
+							function (req) {
+								if (DesktopContent.getXMLValue(req, "Error"))
+									return;
+								setupTableGroupTreeView(autoTreeGroup, autoTreeKey);
+							});
+					};
+					var _isReady = function (g) {
+						return g && g.Configuration &&
+							g.Configuration.groupName &&
+							g.Configuration.groupName.length > 0;
+					};
+
+					if (_isReady(activeGroups))
+						_openTree();
+					else {
+						var _autoTreeTries = 0;
+						var _t = setInterval(function () {
+							if (++_autoTreeTries > 40) { //~40s safety cap
+								clearInterval(_t);
+								Debug.log("autoTreeView gave up waiting for session.");
+								return;
+							}
+							ConfigurationAPI.getActiveGroups(function (g) {
+								if (_isReady(g)) {
+									clearInterval(_t);
+									_openTree();
+								}
+							});
+						}, 1000);
+					}
 				}
 				else
 					setupSystemViewMode();
@@ -976,8 +1069,10 @@
 			}
 
 			var el = document.getElementById("display");
-			el.innerHTML = "Loading...";
 
+			navHistoryPush();
+
+			el.innerHTML = "Loading...";
 			//get history for this group type
 			DesktopContent.XMLHttpRequest("Request?RequestType=getGroupHistory&groupAction=" +
 				groupAction + "&groupType=" +
@@ -1126,6 +1221,7 @@
 		//==============================================================================
 		//setupSystemViewMode ~
 		function setupSystemViewMode(anchorTarget) {
+			navHistoryPush();
 
 			editCellCancel();
 
@@ -1198,6 +1294,7 @@
 		//==============================================================================
 		//setupGroupViewMode ~
 		function setupGroupViewMode(anchorTarget) {
+			navHistoryPush();
 			editCellCancel();
 
 			var el = document.getElementById("display");
@@ -1209,14 +1306,204 @@
 
 		//==============================================================================
 		//setupTableViewMode ~
-		function setupTableViewMode(anchorTarget) {
-			editCellCancel();
+		function setupTableViewMode(anchorTarget, refreshVersions) {
+            editCellCancel();
+			navHistoryPush();
 
 			var el = document.getElementById("display");
 			el.innerHTML = "Loading...";
-			DesktopContent.XMLHttpRequest("Request?RequestType=getTables", "",
+			var requestStr = "Request?RequestType=getTables" +
+				(refreshVersions ? "&refresh=1" : "");
+
+			// recalculate time window from the stored preset so relative
+			//	presets ("Last 5 Minutes", etc.) are always relative to now
+			var startTime = _tableViewSelectedStartTime;
+			var endTime = _tableViewSelectedEndTime;
+			if (_tableViewSelectedOption && _tableViewSelectedOption !== "custom")
+			{
+				var presets = _TABLE_VIEW_FILTER_PRESETS[_tableViewSelectedFilterMode] ||
+					_TABLE_VIEW_FILTER_PRESETS["created"];
+				for (var p = 0; p < presets.length; ++p)
+					if (presets[p].value === _tableViewSelectedOption) {
+						endTime = Math.floor(Date.now() / 1000);
+						startTime = endTime - presets[p].seconds;
+						_tableViewSelectedStartTime = startTime;
+						_tableViewSelectedEndTime = endTime;
+						break;
+					}
+			}
+
+			if (startTime > 0 && endTime > 0)
+				requestStr += "&startTime=" + startTime +
+					"&endTime=" + endTime +
+					"&filterMode=" + _tableViewSelectedFilterMode;
+			DesktopContent.XMLHttpRequest(requestStr, "",
 				tableViewRequestHandler, anchorTarget);
 		} //end setupTableViewMode()
+
+		//==============================================================================
+		//toggleTableViewCustomDateInputs ~
+		function toggleTableViewCustomDateInputs() {
+			var presetEl = document.getElementById("tableViewDateFilterPreset");
+			var customEl = document.getElementById("tableViewCustomDateInputs");
+			if (!presetEl || !customEl)
+				return;
+
+			customEl.style.display = presetEl.value === "custom" ? "inline" : "none";
+		} //end toggleTableViewCustomDateInputs()
+
+		//==============================================================================
+		//populateTableViewPresetOptions ~
+		//	rebuild the time preset dropdown options based on the selected filter mode
+		//	(Created vs Loaded); keep the current selection if it exists in the new mode,
+		//	otherwise fall back to "All."
+		function populateTableViewPresetOptions() {
+			var presetEl = document.getElementById("tableViewDateFilterPreset");
+			if (!presetEl)
+				return;
+
+			var presets = _TABLE_VIEW_FILTER_PRESETS[_tableViewSelectedFilterMode] ||
+				_TABLE_VIEW_FILTER_PRESETS["created"];
+			var prevValue = presetEl.value;
+
+			var str = "<option value=''>All</option>";
+			var prevValueExists = (prevValue === "" || prevValue === "custom");
+			for (var i = 0; i < presets.length; ++i) {
+				str += "<option value='" + presets[i].value + "'>" +
+					presets[i].label + "</option>";
+				if (presets[i].value === prevValue)
+					prevValueExists = true;
+			}
+			str += "<option value='custom'>Custom Range</option>";
+			presetEl.innerHTML = str;
+			presetEl.value = prevValueExists ? prevValue : "";
+		} //end populateTableViewPresetOptions()
+
+		//==============================================================================
+		//handleTableViewFilterModeChange ~
+		//	on Created/Loaded mode change: swap the preset options for the new mode,
+		//	then re-apply the filter
+		function handleTableViewFilterModeChange() {
+			var modeEl = document.getElementById("tableViewDateFilterMode");
+			if (modeEl)
+				_tableViewSelectedFilterMode = modeEl.value;
+			populateTableViewPresetOptions();
+			toggleTableViewCustomDateInputs();
+			tableViewFilterRequest();
+		} //end handleTableViewFilterModeChange()
+
+		function unixTimeToDateInputValue(unixTimeSeconds) {
+			if (!unixTimeSeconds)
+				return "";
+			var date = new Date(Number(unixTimeSeconds) * 1000);
+			var y = date.getFullYear();
+			var m = String(date.getMonth() + 1).padStart(2, "0");
+			var d = String(date.getDate()).padStart(2, "0");
+			return y + "-" + m + "-" + d;
+		} //end unixTimeToDateInputValue()
+
+		//==============================================================================
+		function filterTableViewByName() {
+			var input = document.getElementById("tableViewSearchInput");
+			if (!input) return;
+			var filter = input.value.toLowerCase();
+			var table = document.getElementById("tableViewTable");
+			if (!table) return;
+			var tbody = table.tBodies[0] || table;
+			var rows = tbody.children;
+			for (var i = 0; i < rows.length; ++i) {
+				var name = rows[i].getAttribute("data-tablename") || "";
+				rows[i].style.display = name.indexOf(filter) >= 0 ? "" : "none";
+			}
+		} //end filterTableViewByName()
+
+		//==============================================================================
+		function tableViewFilterRequest(anchorTarget, refreshVersions) {
+			editCellCancel();
+
+			var selectedOption = document.getElementById("tableViewDateFilterPreset").value;
+			_tableViewSelectedOption = selectedOption;
+			var modeEl = document.getElementById("tableViewDateFilterMode");
+			if (modeEl)
+				_tableViewSelectedFilterMode = modeEl.value;
+			_tableViewSelectedStartTime = 0;
+			_tableViewSelectedEndTime = 0;
+			var selectedStartTime = 0;
+			var selectedEndTime = 0;
+
+			function localDateFromInput(dateString, endOfDay = false) {
+				const [year, month, day] = dateString.split("-").map(Number);
+
+				if (endOfDay) {
+					return new Date(year, month - 1, day, 23, 59, 59, 999);
+				}
+
+				return new Date(year, month - 1, day, 0, 0, 0, 0);
+			}
+
+			//look up the selected preset in the current mode's preset list
+			var presets = _TABLE_VIEW_FILTER_PRESETS[_tableViewSelectedFilterMode] ||
+				_TABLE_VIEW_FILTER_PRESETS["created"];
+			var selectedPreset = null;
+			for (var p = 0; p < presets.length; ++p)
+				if (presets[p].value === selectedOption) {
+					selectedPreset = presets[p];
+					break;
+				}
+
+			if (selectedPreset) {
+				selectedEndTime = Math.floor(Date.now() / 1000);
+				selectedStartTime = selectedEndTime - selectedPreset.seconds;
+			}
+			else if (selectedOption === "custom") {
+				// get the dates from tableViewDateFrom and tableViewDateTo
+				const dateFromInput = document.getElementById("tableViewDateFrom").value;
+				const dateToInput = document.getElementById("tableViewDateTo").value;
+				if (!dateFromInput || !dateToInput) {
+					Debug.log("Custom date filter selected but missing date inputs.");
+					return; // missing custom date inputs, so return without making a request
+				}
+				const dateFrom = localDateFromInput(dateFromInput);
+				const dateTo = localDateFromInput(dateToInput, true /*endOfDay*/);
+				selectedStartTime = Math.floor(dateFrom.getTime() / 1000);
+				selectedEndTime = Math.floor(dateTo.getTime() / 1000);
+				if ( selectedStartTime >= selectedEndTime) {
+					Debug.warn("Invalid Custom Date Range: the 'From' date (" +
+						encodeHTML(dateFromInput) + ") must be before the 'To' date (" +
+						encodeHTML(dateToInput) + "). Please adjust your custom date filter inputs.");
+					return;
+				}
+			}
+			else if (selectedOption === "") {
+				Debug.log("No date filter applied, loading all tables.");
+				var keepFilterMode = _tableViewSelectedFilterMode;
+				resetTableViewParams();
+				_tableViewSelectedFilterMode = keepFilterMode; //preserve user's Created/Loaded choice
+				setupTableViewMode(anchorTarget, refreshVersions);
+				return;
+			}
+			else {
+				Debug.log("Unknown date filter preset: " + selectedOption);
+				return;
+			}
+
+			_tableViewSelectedStartTime = selectedStartTime;
+			_tableViewSelectedEndTime = selectedEndTime;
+
+			var el = document.getElementById("display");
+			el.innerHTML = "Loading... " +
+				"<label style='font-size:12px; color:gray;'>If this is the first " +
+				"time filtering, it may take a while to populate the time cache " +
+				"(e.g. &gt;1 minute).</label>";
+			DesktopContent.XMLHttpRequest("Request?RequestType=getTables" +
+								(refreshVersions ? "&refresh=1" : "") +
+								"&startTime=" + selectedStartTime +
+								"&endTime=" + selectedEndTime +
+								"&filterMode=" + _tableViewSelectedFilterMode,
+								"",
+								tableViewRequestHandler,
+								anchorTarget);
+		} //end tableViewFilterRequest()
 
 		//==============================================================================
 		//handleFlattenSystemAliasesResponse ~
@@ -1297,6 +1584,7 @@
 		//setupSpecificTable ~
 		//	undefined version gives latest
 		function setupSpecificTable(tableName, version, backLinkStr, allowIllegalColumns, refreshVersions) {
+			navHistoryPush();
 
 			Debug.logv({refreshVersions});
 
@@ -1511,7 +1799,7 @@
 						str += "<a href='#' onclick='setupTableGroupTreeView(\"" +
 							_activeTableGroups[i * 2] +
 							"\",\"" +
-							_activeTableGroups[i * 2 + 1] + "\"); return false;' " +
+							_activeTableGroups[i * 2 + 1] + "\",\"" + backLinkStr + "\"); return false;' " +
 							"title='Open the tree-view for " + _activeTableGroups[i * 2] +
 							"(" + _activeTableGroups[i * 2 + 1] + ")'" +
 							">Tree-view</a>";
@@ -1622,7 +1910,7 @@
 							str += "<a href='#' onclick='setupTableGroupTreeView(\"" +
 								_lastTableGroups[i] +
 								"\",\"" +
-								_lastTableGroups[i + 1] + "\"); return false;' " +
+								_lastTableGroups[i + 1] + "\",\"" + backLinkStr + "\"); return false;' " +
 								"title='Open the tree-view for " + _lastTableGroups[i] +
 								"(" + _lastTableGroups[i + 1] + ")'" +
 								">Tree-view</a>";
@@ -1917,7 +2205,7 @@
 							str += "<a href='#' onclick='setupTableGroupTreeView(\"" +
 								subsystemActiveTableGroups[i * 2] +
 								"\",\"" +
-								subsystemActiveTableGroups[i * 2 + 1] + "\"); return false;' " +
+								subsystemActiveTableGroups[i * 2 + 1] + "\",\"" + backLinkStr + "\"); return false;' " +
 								"title='Open the tree-view for " + subsystemActiveTableGroups[i * 2] +
 								"(" + subsystemActiveTableGroups[i * 2 + 1] + ")'" +
 								">Tree-view</a>";
@@ -2013,7 +2301,7 @@
 								str += "<a href='#' onclick='setupTableGroupTreeView(\"" +
 									subsystemLastTableGroups[i] +
 									"\",\"" +
-									subsystemLastTableGroups[i + 1] + "\"); return false;' " +
+									subsystemLastTableGroups[i + 1] + "\",\"" + backLinkStr + "\"); return false;' " +
 									"title='Open the tree-view for " + subsystemLastTableGroups[i] +
 									"(" + subsystemLastTableGroups[i + 1] + ")'" +
 									">Tree-view</a>";
@@ -2100,10 +2388,10 @@
 				"'>" +
 				"Create a new Group</a> ";
 			str += "<a href='#' onclick='" +
-                "showGroupSearch = !showGroupSearch; setupGroupViewMode(); return false;' title='" +
-                "Toggle group search controls." +
-                "'>" +
-                "Search in Groups</a>";
+				"showGroupSearch = !showGroupSearch; setupGroupViewMode(); return false;' title='" +
+				"Toggle group search controls." +
+				"'>" +
+				"Search in Groups</a>";
 			var search_info = "Search for keywords in table content of specific groups or latest keys. " +
 				"\\nYou may search keywords in all groups or selected ones from the \\\"Search and Select a Group\\\" view." +
 				"\\n\\nUse the keyword field to search all tables in the group for specific text. " +
@@ -2158,7 +2446,7 @@
 
 				str += "<br>Range of group keys... ";
 				str += "<br><input type='text' id='searchVersionToCheck' value='' autocomplete='off' autocorrect='off' autocapitalize='off' spellcheck='false'" +
-                    "style='margin:0;width:399px; height:" + (17) + "px'" +
+					"style='margin:0;width:399px; height:" + (17) + "px'" +
 					"placeholder='e.g. 1, 1-5, -4 to check latest 4 keys' />";
 
 				str += "<br>Minimum occurrence threshold... ";
@@ -2463,73 +2751,73 @@
 			return str;
 		} //end makeGroupInfoDisplayString()
 
-        //==============================================================================
-        //searchTextInGroup
-        function searchTextInGroup() {
-            Debug.log("CfgGUI searchTextInGroup");
+		//==============================================================================
+		//searchTextInGroup
+		function searchTextInGroup() {
+			Debug.log("CfgGUI searchTextInGroup");
 
-            var el = document.getElementById("searchTextInGroups");
-            var searchText = el ? el.value : "";
-            Debug.log("searchTextInGroups: " + searchText);
+			var el = document.getElementById("searchTextInGroups");
+			var searchText = el ? el.value : "";
+			Debug.log("searchTextInGroups: " + searchText);
 
 			var el = document.getElementById("searchMinThreshold");
-            var searchMinThreshold = el ? el.value : 1;
-            Debug.log("searchMinThreshold: " + searchMinThreshold);
+			var searchMinThreshold = el ? el.value : 1;
+			Debug.log("searchMinThreshold: " + searchMinThreshold);
 
 			var el = document.getElementById("searchVersionToCheck");
-            var searchVersionToCheck = el ? el.value : "";
-            Debug.log("searchVersionToCheck: " + searchVersionToCheck);
+			var searchVersionToCheck = el ? el.value : "";
+			Debug.log("searchVersionToCheck: " + searchVersionToCheck);
 
 			var activeOnlyEl = document.getElementById("activeOnlyFilter");
 			var isActiveOnlyChecked = activeOnlyEl ? activeOnlyEl.checked : false;
 			Debug.log("activeGroupFilter checked: " + isActiveOnlyChecked);
 
-            var typeName = ["All", "Context", "Backbone", "Configuration", "Iterate"];
-            var groupType = typeName[_groupViewFilterIndex + 1];
-            Debug.log("groupType: " + groupType);
+			var typeName = ["All", "Context", "Backbone", "Configuration", "Iterate"];
+			var groupType = typeName[_groupViewFilterIndex + 1];
+			Debug.log("groupType: " + groupType);
 
 			var optionElements = document.querySelectorAll('.myOption.optionhighlighted');
 			var optionGroups = Array.from(optionElements).map(el => el.textContent).join(',');
 			Debug.log("optionGroups: " + optionGroups);
 
-            DesktopContent.XMLHttpRequest("Request?RequestType=SearchFieldInGroup" +
-                "&searchText=" + encodeURIComponent(searchText) +
-                "&filterValue=" + encodeURIComponent(isActiveOnlyChecked) +
-                "&groupType=" + encodeURIComponent(groupType) +
+			DesktopContent.XMLHttpRequest("Request?RequestType=SearchFieldInGroup" +
+				"&searchText=" + encodeURIComponent(searchText) +
+				"&filterValue=" + encodeURIComponent(isActiveOnlyChecked) +
+				"&groupType=" + encodeURIComponent(groupType) +
 				"&optionGroups=" + encodeURIComponent(optionGroups) +
 				"&versionsToCheck=" + encodeURIComponent(searchVersionToCheck),
 				"",
-                function(req){
-                    var req = arguments[0];
-                    var errStr = arguments[2];
-                    if (errStr) {
-                        console.error(errStr);
-                        return;
-                    }
+				function(req){
+					var req = arguments[0];
+					var errStr = arguments[2];
+					if (errStr) {
+						console.error(errStr);
+						return;
+					}
 
-                    const groupTableMap = new Map();
-                    var groupTableMatches = DesktopContent.getXMLChildren(req, "GroupTableMatch");
+					const groupTableMap = new Map();
+					var groupTableMatches = DesktopContent.getXMLChildren(req, "GroupTableMatch");
 
 					Debug.log("GroupTableMatch elements found:", groupTableMatches.length);
 
-                    for (var i = 0; i < groupTableMatches.length; i++) {
-                        var groupTable = groupTableMatches[i];
-                        var groupTableInfo = groupTable.getAttribute("value").split("/");
-                        var groupName = groupTableInfo[0];
-                        var tableName = groupTableInfo[1];
-                        var matchRow = DesktopContent.getXMLValue(groupTable, "MatchRow");
-                        var matchColumn = DesktopContent.getXMLValue(groupTable, "MatchColumn");
-                        var matchTableVersion = DesktopContent.getXMLValue(groupTable, "MatchTableVersion");
-                        var matchGroupVersion = DesktopContent.getXMLValue(groupTable, "MatchGroupVersion");
-                        // Process each match...
+					for (var i = 0; i < groupTableMatches.length; i++) {
+						var groupTable = groupTableMatches[i];
+						var groupTableInfo = groupTable.getAttribute("value").split("/");
+						var groupName = groupTableInfo[0];
+						var tableName = groupTableInfo[1];
+						var matchRow = DesktopContent.getXMLValue(groupTable, "MatchRow");
+						var matchColumn = DesktopContent.getXMLValue(groupTable, "MatchColumn");
+						var matchTableVersion = DesktopContent.getXMLValue(groupTable, "MatchTableVersion");
+						var matchGroupVersion = DesktopContent.getXMLValue(groupTable, "MatchGroupVersion");
+						// Process each match...
 
-                        Debug.log("Match found:", { groupName: groupName, groupVersion: matchGroupVersion, tableName: tableName, tableVersion: matchTableVersion, row: matchRow, column: matchColumn });
-                        var mapKey = groupName+"-"+tableName+"-"+matchColumn+"-"+matchTableVersion+"-"+matchGroupVersion;
-                        if (!groupTableMap.has(mapKey))
-                            groupTableMap.set(mapKey, 1);
-                        else
-                            groupTableMap.set(mapKey, groupTableMap.get(mapKey) + 1);
-                    } // end groupTableMatches loop
+						Debug.log("Match found:", { groupName: groupName, groupVersion: matchGroupVersion, tableName: tableName, tableVersion: matchTableVersion, row: matchRow, column: matchColumn });
+						var mapKey = groupName+"-"+tableName+"-"+matchColumn+"-"+matchTableVersion+"-"+matchGroupVersion;
+						if (!groupTableMap.has(mapKey))
+							groupTableMap.set(mapKey, 1);
+						else
+							groupTableMap.set(mapKey, groupTableMap.get(mapKey) + 1);
+					} // end groupTableMatches loop
 
 					// loop through and add to new table if threshold met
 					for (let [key, count] of groupTableMap.entries()) {
@@ -2537,45 +2825,45 @@
 							groupTableMap.delete(key);
 					}
 
-                    // Display results
-                    var escapedSearchText = encodeHTML(searchText);
-                    var resultStr = "Search Results For: <b>" + escapedSearchText + "</b>\n";
-                    if (groupTableMap.size === 0) {
-                        resultStr += "<br>No matches found.";
-                    } else {
-                        var previousGroupName = "";
+					// Display results
+					var escapedSearchText = encodeHTML(searchText);
+					var resultStr = "Search Results For: <b>" + escapedSearchText + "</b>\n";
+					if (groupTableMap.size === 0) {
+						resultStr += "<br>No matches found.";
+					} else {
+						var previousGroupName = "";
 						var previousGroupKey = "";
-                        var previousTableName = "";
-                        for(var i=0; i<groupTableMap.size; i++)
-                        {
-                            var parts = Array.from(groupTableMap.keys())[i].split("-");
-                            if(parts[0] != previousGroupName || parts[4] != previousGroupKey)
-                            {
-                                resultStr += "\nGroup: <b>" + parts[0] + "</b> v" + parts[4] + "\n";
-                                previousGroupName = parts[0];
-                                previousGroupKey = parts[4];
-                                previousTableName = "";
-                            }
-                            if(parts[1] != previousTableName)
-                            {
+						var previousTableName = "";
+						for(var i=0; i<groupTableMap.size; i++)
+						{
+							var parts = Array.from(groupTableMap.keys())[i].split("-");
+							if(parts[0] != previousGroupName || parts[4] != previousGroupKey)
+							{
+								resultStr += "\nGroup: <b>" + parts[0] + "</b> v" + parts[4] + "\n";
+								previousGroupName = parts[0];
+								previousGroupKey = parts[4];
+								previousTableName = "";
+							}
+							if(parts[1] != previousTableName)
+							{
 								resultStr += "\t<a href='#' onclick='setupSpecificTable(\"" + parts[1] + "\",\"" + parts[3] + "\", \"setupTableViewMode(\\\"anchorTag-" + parts[1] + "\\\");\"); return false;'>" +
-                                            "Table " + parts[1] + "-v" + parts[3] + "</a><br>";
-                                previousTableName = parts[1];
-                            }
+											"Table " + parts[1] + "-v" + parts[3] + "</a><br>";
+								previousTableName = parts[1];
+							}
 							if(parts[1] == "")
 								Debug.log('Warning: Empty table name for group ' + parts[0] + ' (' + parts[4] + ')');
-                            resultStr += "\t\tColumn: <b>" + parts[2] + "</b>" +
-                                ", Count: <b>" + (groupTableMap.get(Array.from(groupTableMap.keys())[i])) + "</b>" +
-                                "\n";
-                        } // end groupTableMap loop
-                    }
+							resultStr += "\t\tColumn: <b>" + parts[2] + "</b>" +
+								", Count: <b>" + (groupTableMap.get(Array.from(groupTableMap.keys())[i])) + "</b>" +
+								"\n";
+						} // end groupTableMap loop
+					}
 					Debug._errTruncLen = -1;
-                    Debug.info(DesktopContent.tooltipConditionString(resultStr));
+					Debug.info(DesktopContent.tooltipConditionString(resultStr));
 					Debug._errTruncLen = undefined;
-                },
-                "searchTextInGroup"
-            );
-        } //end searchTextInGroup()
+				},
+				"searchTextInGroup"
+			);
+		} //end searchTextInGroup()
 
 		//==============================================================================
 		//gotoSelectedMSGroup ~~
@@ -2588,6 +2876,15 @@
 			setupSpecificTableGroup(_msChosenGroupName, _msChosenGroupKey,
 				"setupGroupViewMode()");
 		} //end gotoSelectedMSGroup()
+
+		//==============================================================================
+		// resetTableViewParams ~~
+		function resetTableViewParams() {
+			_tableViewSelectedOption = "";
+			_tableViewSelectedFilterMode = "created";
+			_tableViewSelectedStartTime = 0;
+			_tableViewSelectedEndTime = 0;
+		} //end resetTableViewParams()
 
 		//==============================================================================
 		//tableViewRequestHandler ~~
@@ -2604,12 +2901,67 @@
 			var tableName, version;
 			var backLinkStr;
 
-			str += "<h3 style='margin-top:-10px'><u>Table View</u></h3>";
+			str += "<h3 style='margin-top:-10px; margin-bottom: 28px;'><u>Table View</u> " +
+				"<a href='#' style='font-size:14px; font-weight:normal; margin-left: 46px;' " +
+				"onclick='var p=document.getElementById(\"tableViewDateFilterPreset\"); " +
+				"if(p){p.value=\"\";tableViewFilterRequest();} return false;'>Show All</a>" +
+				" | " +
+				"<a href='#' style='font-size:14px; font-weight:normal;' " +
+				"onclick='tableViewFilterRequest(undefined, true); return false;'>Refresh</a>" +
+				"</h3>";
 
-			//			str += "<div id='tableSearchDiv' ";
-			//			str += "style='margin-top:-20px; height:200px; width:450px;'";
-			//			str += ">";
-			//			str += "</div>";
+			function toLocalDateInputValue(d) {
+				var y = d.getFullYear();
+				var m = String(d.getMonth() + 1).padStart(2, "0");
+				var day = String(d.getDate()).padStart(2, "0");
+				return y + "-" + m + "-" + day;
+			}
+			var today = new Date();
+			var dateToday = toLocalDateInputValue(today);
+			var yesterday = new Date(today);
+			yesterday.setDate(today.getDate() - 1);
+			var dateYesterday = toLocalDateInputValue(yesterday);
+			str += "<div id='tableSearchDiv' ";
+			str += "style='margin-top:-20px; white-space:nowrap;'";
+			str += ">";
+			str += "Show versions: ";
+			str += "<select id='tableViewDateFilterMode' onchange='handleTableViewFilterModeChange();'>";
+			str += "<option value='created'>Created</option>";
+			str += "<option value='loaded'>Loaded</option>";
+			str += "</select> ";
+			//Note: time preset options are populated by populateTableViewPresetOptions()
+			//	based on the selected filter mode (Created vs Loaded)
+			str += "<select id='tableViewDateFilterPreset' onchange='toggleTableViewCustomDateInputs(); if(this.value !== \"custom\") tableViewFilterRequest();'>";
+			str += "</select> ";
+			str += "<span id='tableViewCustomDateInputs' style='display:none;'>";
+			str += "From: <input id='tableViewDateFrom' type='date' value='" + dateYesterday + "' onchange='if(document.getElementById(\"tableViewDateFilterPreset\").value === \"custom\") tableViewFilterRequest();'> ";
+			str += "To: <input id='tableViewDateTo' type='date' value='" + dateToday + "' onchange='if(document.getElementById(\"tableViewDateFilterPreset\").value === \"custom\") tableViewFilterRequest();'> ";
+			str += "</span> ";
+
+			//show "Showing X of Y table names, and N of M table versions" counts
+			//	(always returned by the server)
+			var numTablesConsidered = DesktopContent.getXMLValue(req, "NumberOfTablesConsidered");
+			var numTablesFound = DesktopContent.getXMLValue(req, "NumberOfTablesFound");
+			var numVersionsConsidered = DesktopContent.getXMLValue(req, "NumberOfVersionsConsidered");
+			var numVersionsFound = DesktopContent.getXMLValue(req, "NumberOfVersionsFound");
+			if (numTablesConsidered !== undefined && numTablesFound !== undefined)
+			{
+				str += " <label id='tableViewFilterCount'>Showing " + numTablesFound +
+					" of " + numTablesConsidered + " table names";
+				if (numVersionsConsidered !== undefined && numVersionsFound !== undefined)
+					str += ", and " + numVersionsFound + " of " + numVersionsConsidered +
+						" table versions";
+				str += "</label>";
+			}
+			str += "</div>";
+
+			str += "<div style='margin-top:5px;'>";
+			str += "Search: <input type='text' id='tableViewSearchInput' " +
+				"placeholder='Filter table names...' " +
+				"style='width:300px;' " +
+				"autocomplete='off' autocorrect='off' autocapitalize='off' spellcheck='false' " +
+				"oninput='filterTableViewByName();' />";
+			str += "</div>";
 
 			str += "<div id='clearDiv'></div>";
 
@@ -2618,8 +2970,8 @@
 
 			str += "<table id='tableViewTable'>";
 			for (var i = 0; i < tableNames.length; ++i) {
-				str += "<tr><td>";
 				tableName = tableNames[i].getAttribute("value");
+				str += "<tr data-tablename='" + tableName.toLowerCase() + "'><td>";
 
 				backLinkStr = "setupTableViewMode(\\\"anchorTag-" + tableName + "\\\");";
 
@@ -2664,6 +3016,26 @@
 			str += "</table>";
 			//Debug.log("CfgGUI requestHandler str " + str);
 			el.innerHTML = str;
+			var modeEl = document.getElementById("tableViewDateFilterMode");
+			if (modeEl)
+				modeEl.value = _tableViewSelectedFilterMode;
+			populateTableViewPresetOptions(); //fill preset options for the selected mode
+			if (_tableViewSelectedOption)
+			{
+				var presetEl = document.getElementById("tableViewDateFilterPreset");
+				if (presetEl)
+					presetEl.value = _tableViewSelectedOption;
+				if (_tableViewSelectedOption === "custom")
+				{
+					var dateFromEl = document.getElementById("tableViewDateFrom");
+					var dateToEl = document.getElementById("tableViewDateTo");
+					if (dateFromEl)
+						dateFromEl.value = unixTimeToDateInputValue(_tableViewSelectedStartTime);
+					if (dateToEl)
+						dateToEl.value = unixTimeToDateInputValue(_tableViewSelectedEndTime);
+				}
+				toggleTableViewCustomDateInputs();
+			}
 
 			//			//////////// make search box - similar to tableGroupsRequestHandler()
 			//			{
@@ -2701,6 +3073,7 @@
 
 
 			//if there is a target to jump to, do it
+			toggleTableViewCustomDateInputs();
 			if (anchorTarget) {
 				Debug.log("anchorTarget = " + anchorTarget);
 				jump(anchorTarget);
@@ -2743,6 +3116,7 @@
 		//==============================================================================
 		//setupSpecificTableGroup ~
 		function setupSpecificTableGroup(groupName, groupKey, backLinkStr, anchorTarget, modifiedTables) {
+			navHistoryPush();
 			Debug.log("setupSpecificTableGroup", groupName, groupKey, backLinkStr, anchorTarget, modifiedTables);
 
 			//cancel any existing popups
@@ -2911,6 +3285,7 @@
 			var el = document.getElementById("display");
 
 			var str = "";
+			str += "<div style='display:none'>Specific Table Group View</div>";
 
 			var tableExistingVersions;
 
@@ -3453,8 +3828,14 @@
 				el.innerHTML = str;
 				return;
 			}
-			var rows = req.responseXML.getElementsByTagName(
-				"CurrentVersionRows")[0].getElementsByTagName("Row");
+			var colCSVEls = req.responseXML.getElementsByTagName(
+				"CurrentVersionRows")[0].getElementsByTagName("ColCSV");
+			var colArrays = [];
+			for (var ci = 0; ci < colCSVEls.length; ++ci) {
+				var csvVal = colCSVEls[ci].getAttribute("value");
+				colArrays.push(csvVal.length ? csvVal.split(",").map(decodeURIComponent) : []);
+			}
+			var numDataRows = colArrays.length ? colArrays[0].length : 0;
 
 			var colHdrs = req.responseXML.getElementsByTagName("CurrentVersionColumnHeaders")[0].getElementsByTagName("ColumnHeader");
 			var colTypeEls = req.responseXML.getElementsByTagName("CurrentVersionColumnHeaders")[0].getElementsByTagName("ColumnType");
@@ -3502,7 +3883,7 @@
 			_editingCell = false;
 			_editingCellEl = 0;
 			_versionIsChanged = false;
-			_dataOffset = rows.length ? (rows[0].getAttribute("value") | 0) : 0;
+			_dataOffset = 0;
 
 			var str = "";
 			str += "<div style='display:none'>Specific Table View</div>"; //Note: this is children[0] tag is used in some place to determine mode after a series of events
@@ -3619,7 +4000,8 @@
 			if (-1 != version)
 				str += "</a>";
 
-			//display all other version links
+			//display all other version links and build ordered version list for < > nav
+			var _specificTableAllVersions = [-1]; //start with mockup
 			{
 				var tableVersion, tableVersionHi;
 				var aliasString;
@@ -3641,6 +4023,7 @@
 						aliasString += (k == 0 ? "==>" : ",") + versionAliases[k].getAttribute("value");
 
 					for (; tableVersion <= tableVersionHi; ++tableVersion) {
+						_specificTableAllVersions.push(tableVersion | 0);
 						str += " ";
 						if (tableVersion != version)
 							str += "<a href='#' onclick='setupSpecificTable(\"" + tableName +
@@ -3654,6 +4037,41 @@
 					} //end version field/span loop
 				}
 			}
+
+			// < > navigation links to go to previous/next version (on own line)
+			{
+				var curIdx = _specificTableAllVersions.indexOf(version | 0);
+				var prevVersion = (curIdx > 0) ?
+					_specificTableAllVersions[curIdx - 1] : undefined;
+				var nextVersion = (curIdx >= 0 && curIdx < _specificTableAllVersions.length - 1) ?
+					_specificTableAllVersions[curIdx + 1] : undefined;
+
+				str += "<br>";
+				if (prevVersion !== undefined)
+					str += "<a href='#' title='Previous version (Left Arrow key)' " +
+						"onclick='setupSpecificTable(\"" + tableName +
+						"\",\"" + prevVersion +
+						"\", \"" + backLinkStr + "\"); return false;'>&lt;</a>";
+				else
+					str += "<span style='color:gray;' title='No previous version'>&lt;</span>";
+
+				str += " ";
+				if (nextVersion !== undefined)
+					str += "<a href='#' title='Next version (Right Arrow key)' " +
+						"onclick='setupSpecificTable(\"" + tableName +
+						"\",\"" + nextVersion +
+						"\", \"" + backLinkStr + "\"); return false;'>&gt;</a>";
+				else
+					str += "<span style='color:gray;' title='No next version'>&gt;</span>";
+			}
+
+			// store version nav info for arrow key handler
+			window._specificTableVersionNav = {
+				tableName: tableName,
+				backLinkStr: _tableViewBackLinkStr,
+				allVersions: _specificTableAllVersions,
+				currentVersion: version | 0
+			};
 
 			str += "<div id='clearDiv'></div>";
 			str += "<div id='findAndReplace'></div>";
@@ -3779,16 +4197,13 @@
 
 				//add data
 				{
-					var rowEntries;
-					for (var r = 0; r < rows.length; ++r) {
-						rowEntries = rows[r].getElementsByTagName("Entry");
-
+					for (var r = 0; r < numDataRows; ++r) {
 						cols.push([]);
 						for (var c = 0; c < _CONFIG_DATA_COL_OFFSET; ++c)
 							cols[cols.length - 1].push("");
 
 						for (var c = 0; c < colHdrs.length; ++c)
-							cols[cols.length - 1].push(rowEntries[c].getAttribute("value"));
+							cols[cols.length - 1].push(colArrays[c][r]);
 					}
 				}
 
@@ -4683,8 +5098,8 @@
 						treeViewBackLinkStr_ = treeViewBackLinkStr_.replace(/"/g, "\\\"");
 					Debug.log("Back-link = " + treeViewBackLinkStr_);
 
-					treeViewHandlerStr_ += "<a onclick='evaluateJS(\"" + treeViewBackLinkStr_ +
-						"\"); return false;'>Back</a>";
+					treeViewHandlerStr_ += "<a style='cursor:pointer' onclick='evaluateJS(\"" + treeViewBackLinkStr_ +
+						"\")'>Back</a>";
 					treeViewHandlerStr_ += "&nbsp;&nbsp;&nbsp;&nbsp;";
 				}
 
@@ -5421,7 +5836,7 @@
 						for (var j = 1; j < choices.length; ++j) //skip the first DEFAULT param
 							bmpParams.push(choices[j].getAttribute("value"));
 
-						treeViewHandlerStr_ += createBmpString(value, bmpParams);
+						treeViewHandlerStr_ += "<div style='margin-top:6px'>" + createBmpString(value, bmpParams) + "</div>";
 					}
 					else
 						treeViewHandlerStr_ += value;
@@ -7215,6 +7630,7 @@
 		//		To prevent insanity, track the loaded tables as also modified tables!
 		//	Also, at this point must not allow random active tables, which could happen during editing (i.e. must reactivate the Configure Group).
 		function setupTableGroupTreeView(tableGroupName, tableGroupKey, backLinkStr) {
+			navHistoryPush();
 			editCellCancel();
 
 			if (backLinkStr && backLinkStr != "")
@@ -7797,10 +8213,12 @@
 
 		//==============================================================================
 		//setupGroupCreator ~
-		function setupGroupCreator(preSelectStr) {
+        function setupGroupCreator(preSelectStr, refreshVersions) {
+			navHistoryPush();
 			var el = document.getElementById("display");
 			el.innerHTML = "Loading...";
-			DesktopContent.XMLHttpRequest("Request?RequestType=getTables",
+			DesktopContent.XMLHttpRequest("Request?RequestType=getTables" +
+				(refreshVersions ? "&refresh=1" : ""),
 				"", setupGroupCreatorHandler, preSelectStr,
 				0, true  //progressHandler, callHandlerOnErr
 			);
@@ -7846,7 +8264,7 @@
 			}
 
 			var refreshLinkStr = "setupGroupCreator(\"" +
-				preSelectStr + "&backLinkStr=" + backLinkStr + "\");";
+				preSelectStr + "&backLinkStr=" + backLinkStr + "\", true);";
 			str += "<a href='#' onclick='" + refreshLinkStr +
 				"; _cachedGroupComment=\"" + _cachedGroupComment + "\"; return false;'>Refresh</a>";
 			str += "<br>";
@@ -7944,6 +8362,9 @@
 					} //end version span loop
 				} //end version xml value loop
 				str += "</select>";
+				str += " <a onclick='selectLatestForTable(\"" + name + "\"); return false;'" +
+					" title='Select the latest version for this table.'" +
+					" style='font-size:11px;'>Latest</a>";
 				str += "</td>";
 
 				backLinkStr = "setupGroupCreator(\\\"" + preSelectStr + "\\\");";
@@ -8118,6 +8539,20 @@
 
 			return false;
 		} //end handleGroupMemberChange()
+
+		//==============================================================================
+		//selectLatestForTable ~
+		function selectLatestForTable(tableName) {
+			var sel = document.getElementById("select-" + tableName);
+			if (!sel) return;
+			var options = sel.options;
+			for (var i = options.length - 1; i >= 0; --i)
+				if (options[i].value[0] != '-') {
+					options[i].selected = true;
+					break;
+				}
+			handleGroupMemberChange();
+		} //end selectLatestForTable()
 
 		//==============================================================================
 		//versionsForCreateTableGroup ~
@@ -8439,16 +8874,16 @@
 		} //end groupsWithTable()
 
 		//==============================================================================
-        function setupSearchAllTableVersions() {
-            Debug.log("setupSearchAllTableVersions()");
+		function setupSearchAllTableVersions() {
+			Debug.log("setupSearchAllTableVersions()");
 
-            var el = document.getElementById('findAndReplace');
-            el.innerHTML = ""; //clear the other type of controls
-            var el = document.getElementById('aboveTableDialog'); //share with copyAndMove and tableVersionDiff
-            var i = el.innerText.indexOf("Active ");
-            if (i >= 0 && i < 5) { el.innerHTML = ""; return; } //hide if already shown
+			var el = document.getElementById('findAndReplace');
+			el.innerHTML = ""; //clear the other type of controls
+			var el = document.getElementById('aboveTableDialog'); //share with copyAndMove and tableVersionDiff
+			var i = el.innerText.indexOf("Active ");
+			if (i >= 0 && i < 5) { el.innerHTML = ""; return; } //hide if already shown
 
-            var str = "";
+			var str = "";
 			str += "<br><label style='margin-right:10px;'><input type='checkbox' id='activeOnlyFilter' value='active'> Active Versions Only</label>";
 
 			str += "<br>Keyword to search for... ";
@@ -8457,17 +8892,17 @@
 				"placeholder='Search text' style='margin:0;width:" + (el.offsetWidth / 6) + "px; height:" + (17) + "px'/>";
 
 			str += "<br>Version to search for... ";
-            str += "<br><input type='text' id='searchVersionToCheck' value='' autocomplete='off' autocorrect='off' autocapitalize='off' spellcheck='false'" +
-                    "style='margin:0;width:" + (el.offsetWidth / 6) + "px; height:" + (17) + "px'" +
+			str += "<br><input type='text' id='searchVersionToCheck' value='' autocomplete='off' autocorrect='off' autocapitalize='off' spellcheck='false'" +
+					"style='margin:0;width:" + (el.offsetWidth / 6) + "px; height:" + (17) + "px'" +
 					"placeholder='e.g. 1, 1-5, -4 to check latest 4 keys'/>";
 
 			str += "<br>Minimum occurrence threshold... ";
-            str += "<br>";
-            str += "<input type='text' id='searchMinThreshold' value='1' autocomplete='off' autocorrect='off' autocapitalize='off' spellcheck='false'" +
-                    "style='margin:0;width:" + (el.offsetWidth / 6) + "px; height:" + (17) + "px'/>";
-            str += "<br>";
-            el.innerHTML = str;
-        } //end setupSearchAllTableVersions()
+			str += "<br>";
+			str += "<input type='text' id='searchMinThreshold' value='1' autocomplete='off' autocorrect='off' autocapitalize='off' spellcheck='false'" +
+					"style='margin:0;width:" + (el.offsetWidth / 6) + "px; height:" + (17) + "px'/>";
+			str += "<br>";
+			el.innerHTML = str;
+		} //end setupSearchAllTableVersions()
 
 		//==============================================================================
 		//setupCopyAndMoveRows
@@ -9501,7 +9936,38 @@
 					}
 
 
-					str += _OK_CANCEL_DIALOG_STR;
+					if (colType == "UID" || colType == "UniqueData")
+					{
+						str += _OK_CANCEL_DIALOG_STR;
+					}
+					else
+					{
+						var sibCtx = getSiblingContext();
+						var sibBtns = " | " +
+							"<a class='popUpOkCancel' onclick='editCellSetAllSiblings(\"table\"); event.stopPropagation();' " +
+							"onmouseup='event.stopPropagation();' " +
+							"title='Set this value for all records in the table' style='color:blue'>" +
+							"<b style='color:blue;font-size: 14px;'>Set for all in Table</b></a>";
+						if (sibCtx.groupContainerIdString)
+							sibBtns += " | " +
+								"<a class='popUpOkCancel' onclick='editCellSetAllSiblings(\"group\"); event.stopPropagation();' " +
+								"onmouseup='event.stopPropagation();' " +
+								"title='Set this value for all records in the group' style='color:blue'>" +
+								"<b style='color:blue;font-size: 14px;'>Set for all in Group</b></a>";
+						var sibW = sibCtx.groupContainerIdString ? 490 : 325;
+						str += "<div title='' style='padding:5px;background-color:#eeeeee;" +
+							"border:1px solid #555555;position:relative;z-index:2000;" +
+							"width:" + sibW + "px;height:20px;margin:0 -" + (sibW + 27) + "px -32px 10px;" +
+							" font-size: 16px; white-space:nowrap; text-align:center;'>" +
+							"<a class='popUpOkCancel' onclick='editCellOK(); event.stopPropagation();' " +
+							"onmouseup='event.stopPropagation();' title='Accept Changes' style='color:green'>" +
+							"<b style='color:green;font-size: 16px;'>OK</b></a> | " +
+							"<a class='popUpOkCancel' onclick='editCellCancel(); event.stopPropagation();' " +
+							"onmouseup='event.stopPropagation();' title='Discard Changes' style='color:red'>" +
+							"<b style='color:red;font-size: 16px;'>Cancel</b></a>" +
+							sibBtns +
+							"</div>";
+					}
 
 					el.innerHTML = str;
 
@@ -11027,8 +11493,33 @@
 
 						controlString += "</div>";
 					}
-					else
-						controlString = _OK_CANCEL_DIALOG_STR;
+					else {
+						var isUniqueCol = (colType == "UID" || colType == "UniqueData");
+						var hasGroupId = !isUniqueCol && localTableHasGroupIdForRow(r);
+						var tableW = isUniqueCol ? 95 : (hasGroupId ? 490 : 325);
+						controlString = "<div title='' style='padding:5px;background-color:#eeeeee;" +
+							"border:1px solid #555555;position:relative;z-index:2000;" +
+							"width:" + tableW + "px;height:20px;margin:0 -" + (tableW + 27) + "px -32px 10px;" +
+							" font-size: 16px; white-space:nowrap; text-align:center;'>" +
+							"<a class='popUpOkCancel' onclick='editCellOK(); event.stopPropagation();' " +
+							"onmouseup='event.stopPropagation();' title='Accept Changes' style='color:green'>" +
+							"<b style='color:green;font-size: 16px;'>OK</b></a> | " +
+							"<a class='popUpOkCancel' onclick='editCellCancel(); event.stopPropagation();' " +
+							"onmouseup='event.stopPropagation();' title='Discard Changes' style='color:red'>" +
+							"<b style='color:red;font-size: 16px;'>Cancel</b></a>" +
+							(isUniqueCol ? "" :
+								" | <a class='popUpOkCancel' onclick='editCellSetAllInTable(); event.stopPropagation();' " +
+								"onmouseup='event.stopPropagation();' " +
+								"title='Set this value for all records in the table' style='color:blue'>" +
+								"<b style='color:blue;font-size: 14px;'>Set for all in Table</b></a>") +
+							(hasGroupId ?
+								" | <a class='popUpOkCancel' onclick='editCellSetAllInGroup(); event.stopPropagation();' " +
+								"onmouseup='event.stopPropagation();' " +
+								"title='Set this value for all records sharing the same GroupID' style='color:blue'>" +
+								"<b style='color:blue;font-size: 14px;'>Set for all in Group</b></a>"
+								: "") +
+							"</div>";
+					}
 
 					str += controlString;
 				}
@@ -11180,6 +11671,43 @@
 					if (e.preventDefault)
 						e.preventDefault();
 				}
+				else if (e.keyCode == 8) //BACKSPACE in tree-view: navigate back
+				{
+					var t = e.target;
+					if (t && (t.tagName == "INPUT" || t.tagName == "TEXTAREA" || t.isContentEditable))
+						return;
+					if (navigateBack())
+					{
+						event.stopImmediatePropagation();
+						if (e.preventDefault)
+							e.preventDefault();
+						return false;
+					}
+				}
+			}
+			else if ((e.key == "ArrowLeft" || e.key == "ArrowRight") &&
+				!_editingCellEl &&
+				window._specificTableVersionNav) {
+				// LEFT/RIGHT arrow: navigate to previous/next version in Specific Table View
+				var displayEl = document.getElementById("display");
+				if (displayEl && displayEl.children[0] &&
+					displayEl.children[0].textContent == "Specific Table View") {
+					var nav = window._specificTableVersionNav;
+					var curIdx = nav.allVersions.indexOf(nav.currentVersion);
+					var targetVersion;
+					if (e.key == "ArrowLeft" && curIdx > 0)
+						targetVersion = nav.allVersions[curIdx - 1];
+					else if (e.key == "ArrowRight" && curIdx >= 0 &&
+						curIdx < nav.allVersions.length - 1)
+						targetVersion = nav.allVersions[curIdx + 1];
+					if (targetVersion !== undefined) {
+						e.stopImmediatePropagation();
+						if (e.preventDefault)
+							e.preventDefault();
+						setupSpecificTable(nav.tableName,
+							"" + targetVersion, nav.backLinkStr);
+					}
+				}
 			}
 			else if (e.key == "Escape" && _editingCellEl) {
 				Debug.log(e.key);
@@ -11231,6 +11759,19 @@
 					if (e.preventDefault)
 						e.preventDefault();
 					return false;
+				}
+				else if (e.keyCode == 8 && !_editingCellEl)
+				{
+					var t = e.target;
+					if (t && (t.tagName == "INPUT" || t.tagName == "TEXTAREA" || t.isContentEditable))
+						return;
+					if (navigateBack())
+					{
+						e.stopImmediatePropagation();
+						if (e.preventDefault)
+							e.preventDefault();
+						return false;
+					}
 				}
 			}
 			//else no handler, so allow infrastructure DesktopContent/Debug action
@@ -14395,6 +14936,415 @@
 		} //end updateStatusFieldDisplayForRecord()
 
 		//==============================================================================
+		//getSiblingContext ~~
+		//	Returns context for "Set for all" buttons when editing a leaf value.
+		//	tableName: always set (from treeEditingTargetTable_)
+		//	groupContainerIdString: set only when the parent UID is under a GroupID link
+		function getSiblingContext() {
+			var ctx = {
+				tableName: treeEditingTargetTable_,
+				groupContainerIdString: null
+			};
+			if (!treeEditingNodeParentIdString_) return ctx;
+
+			var parentDepth = parseInt(treeEditingNodeParentIdString_.split('-')[0]);
+			if (parentDepth > 1) {
+				var grandparentEl = document.getElementById("treeNode-ParentId-" +
+					treeEditingNodeParentIdString_);
+				if (grandparentEl) {
+					var grandparentIdString = grandparentEl.textContent;
+					var linkTypeEl = document.getElementById("treeNode-childLinkIdType-" +
+						grandparentIdString);
+					if (linkTypeEl && linkTypeEl.textContent == "GroupID")
+						ctx.groupContainerIdString = grandparentIdString;
+				}
+			}
+			return ctx;
+		} //end getSiblingContext()
+
+		//==============================================================================
+		//extractCurrentEditValue ~~
+		//	Reads the new value from the currently active tree-view edit input.
+		function extractCurrentEditValue() {
+			if (!_editingCellEl) return undefined;
+			var newValue;
+
+			if (treeEditingNodeType_ == "value-bool") {
+				var sel = _editingCellEl.getElementsByTagName("select")[0];
+				if (sel.selectedIndex < 0) sel.selectedIndex = 0;
+				newValue = sel.options[sel.selectedIndex].value;
+			}
+			else if (treeEditingNodeType_ == "value-bitmap") {
+				newValue = encodeURIComponent(_editingCellEl.textContent);
+			}
+			else {
+				var sel;
+				if ((sel = _editingCellEl.getElementsByTagName("textarea")).length)
+					newValue = sel[0].value;
+				else if ((sel = _editingCellEl.getElementsByTagName("select")).length) {
+					if (sel[0].style.display == "none")
+						newValue = _editingCellEl.getElementsByTagName("input")[0].value;
+					else
+						newValue = sel[0].options[sel[0].selectedIndex].value;
+				}
+				else
+					newValue = _editingCellEl.getElementsByTagName("input")[0].value;
+
+				newValue = encodeURIComponent(newValue.trim());
+			}
+			return newValue;
+		} //end extractCurrentEditValue()
+
+		//==============================================================================
+		//editCellSetAllSiblings ~~
+		//	mode: "table" or "group"
+		//	"table" - sets value for ALL UIDs in the table (fetches from server)
+		//	"group" - sets value for group-member UIDs visible under the GroupID link
+		function editCellSetAllSiblings(mode) {
+			if (_siblingSaving_) {
+				Debug.log("Already processing a Set-for-all operation. Please wait.");
+				return;
+			}
+			if (!_editingCellEl) return;
+
+			var newValue = extractCurrentEditValue();
+			if (newValue === undefined) return;
+
+			var targetTable = treeEditingTargetTable_;
+			var targetColumn = treeEditingTargetColumn_;
+			var editNodeType = treeEditingNodeType_;
+
+			if (mode == "group") {
+				var ctx = getSiblingContext();
+				if (!ctx.groupContainerIdString) {
+					Debug.log("No group context found.", Debug.WARN_PRIORITY);
+					return;
+				}
+				var childrenContainer = document.getElementById(
+					"treeNode-ChildrenOf-" + ctx.groupContainerIdString);
+				if (!childrenContainer) {
+					Debug.log("Cannot find group sibling container.", Debug.WARN_PRIORITY);
+					return;
+				}
+				var allUidEls = childrenContainer.getElementsByClassName(
+					"treeNode-Value-nodeEditType-uid");
+				var siblingUidEls = [];
+				for (var i = 0; i < allUidEls.length; ++i) {
+					var sibIdStr = allUidEls[i].id.substr("treeNode-Value-".length);
+					var sibParentEl = document.getElementById("treeNode-ParentId-" + sibIdStr);
+					if (sibParentEl && sibParentEl.textContent == ctx.groupContainerIdString)
+						siblingUidEls.push(allUidEls[i]);
+				}
+				if (!siblingUidEls.length) {
+					Debug.log("No sibling records found in group.", Debug.WARN_PRIORITY);
+					return;
+				}
+
+				var decodedVal = decodeURIComponent(newValue);
+				if (!confirm("Set '" + targetColumn + "' to '" +
+					decodedVal + "' for " + siblingUidEls.length +
+					" record" + (siblingUidEls.length != 1 ? "s" : "") +
+					" in the group?"))
+					return;
+
+				for (var i = 0; i < siblingUidEls.length; ++i) {
+					var sibUid = localExtractUidFromNode(siblingUidEls[i]);
+					if (sibUid)
+						_siblingSaveQueue_.push({
+							tableName: targetTable,
+							uid: sibUid,
+							column: targetColumn,
+							newValue: newValue,
+							editNodeType: editNodeType
+						});
+				}
+
+				editCellCancel();
+				_siblingSavedUIDs_ = [];
+				processSiblingSaveQueue();
+			}
+			else if (mode == "table") {
+				var tableVersion = -1;
+				for (var j = 0; j < treeMemberNames_.length; ++j)
+					if (targetTable == treeMemberNames_[j] &&
+						(treeMemberVersions_[j] | 0) != -1) {
+						tableVersion = treeMemberVersions_[j];
+						break;
+					}
+				if (tableVersion == -1) {
+					Debug.log("Could not find table '" + targetTable +
+						"' in tree members.", Debug.HIGH_PRIORITY);
+					return;
+				}
+
+				DesktopContent.XMLHttpRequest(
+					"Request?RequestType=getSpecificTable" +
+					"&dataOffset=0&chunkSize=0" +
+					"&tableName=" + targetTable +
+					"&version=" + tableVersion,
+					"",
+					function(req, reqParam, errStr) {
+						if (errStr) {
+							Debug.err(errStr);
+							return;
+						}
+						var err = DesktopContent.getXMLValue(req, "Error");
+						if (err) {
+							Debug.err(err);
+							return;
+						}
+
+						var colCSVEls = req.responseXML.getElementsByTagName(
+							"CurrentVersionRows")[0].getElementsByTagName("ColCSV");
+						if (!colCSVEls.length) {
+							Debug.log("No data rows in table.", Debug.WARN_PRIORITY);
+							return;
+						}
+						var colTypeEls = req.responseXML.getElementsByTagName(
+							"CurrentVersionColumnHeaders")[0].getElementsByTagName("ColumnType");
+						var uidColIndex = 0;
+						for (var ci = 0; ci < colTypeEls.length; ++ci)
+							if (colTypeEls[ci].getAttribute("value") == "UID") {
+								uidColIndex = ci;
+								break;
+							}
+						var csvVal = colCSVEls[uidColIndex].getAttribute("value");
+						var allUIDs = csvVal.length ?
+							csvVal.split(",").map(decodeURIComponent) : [];
+						if (!allUIDs.length) {
+							Debug.log("No UIDs found in table.", Debug.WARN_PRIORITY);
+							return;
+						}
+
+						var decodedVal = decodeURIComponent(newValue);
+						if (!confirm("Set '" + targetColumn + "' to '" +
+							decodedVal + "' for " + allUIDs.length +
+							" record" + (allUIDs.length != 1 ? "s" : "") +
+							" in table '" + targetTable + "'?"))
+							return;
+
+						for (var i = 0; i < allUIDs.length; ++i) {
+							_siblingSaveQueue_.push({
+								tableName: targetTable,
+								uid: allUIDs[i],
+								column: targetColumn,
+								newValue: newValue,
+								editNodeType: editNodeType
+							});
+						}
+
+						editCellCancel();
+						_siblingSavedUIDs_ = [];
+						processSiblingSaveQueue();
+					},
+					0, 0, true
+				);
+			}
+
+			function localExtractUidFromNode(uidEl) {
+				var sibIdString = uidEl.id.substr("treeNode-Value-".length);
+				var sibDepth = parseInt(sibIdString.split('-')[0]);
+				if (sibDepth == 1) {
+					var uidText = "";
+					for (var k = 0; k < uidEl.childNodes.length; ++k)
+						if (uidEl.childNodes[k].nodeType === 3)
+							uidText += uidEl.childNodes[k].nodeValue;
+					return uidText.trim();
+				}
+				else {
+					var txt = uidEl.textContent;
+					var parts = txt.split('=');
+					if (parts.length > 1)
+						return parts[parts.length - 1].split(')')[0].trim();
+					return txt.trim();
+				}
+			}
+		} //end editCellSetAllSiblings()
+
+		//==============================================================================
+		//processSiblingSaveQueue ~~
+		function processSiblingSaveQueue() {
+			if (_siblingSaving_) return;
+			if (!_siblingSaveQueue_.length) return;
+			var item = _siblingSaveQueue_[0];
+
+			var tableVersion = -1;
+			var tableIndex = -1;
+			for (var j = 0; j < treeMemberNames_.length; ++j)
+				if (item.tableName == treeMemberNames_[j] &&
+					(treeMemberVersions_[j] | 0) != -1) {
+					tableVersion = treeMemberVersions_[j];
+					tableIndex = j;
+					break;
+				}
+			if (tableIndex == -1) {
+				Debug.err("Could not find tree member table '" + item.tableName +
+					"' for sibling save.");
+				_siblingSaveQueue_ = [];
+				return;
+			}
+
+			_siblingSaving_ = true;
+			DesktopContent.XMLHttpRequest(
+				"Request?RequestType=saveTreeNodeEdit" +
+				"&editNodeType=" + item.editNodeType +
+				"&targetTable=" + item.tableName +
+				"&targetTableVersion=" + tableVersion +
+				"&targetUID=" + encodeURIComponent(item.uid) +
+				"&targetColumn=" + item.column,
+				"newValue=" + item.newValue,
+				function(req, reqParam, errStr) {
+					_siblingSaving_ = false;
+					var failed = false;
+
+					if (errStr) {
+						Debug.err(errStr);
+						failed = true;
+					}
+					else {
+						var err = DesktopContent.getXMLValue(req, "Error");
+						if (err) {
+							if (err.indexOf("is the same as the current value") > 0)
+								Debug.log(err);
+							else {
+								Debug.err(err);
+								failed = true;
+							}
+						}
+					}
+
+					if (!failed && req && req.responseXML) {
+						var names = req.responseXML.getElementsByTagName("savedName");
+						var versions = req.responseXML.getElementsByTagName("savedVersion");
+						for (var i = 0; i < names.length; ++i) {
+							var rn = DesktopContent.getXMLValue(names[i]);
+							for (var j = 0; j < treeMemberNames_.length; ++j)
+								if (rn == treeMemberNames_[j]) {
+									treeMemberVersions_[j] =
+										DesktopContent.getXMLValue(versions[i]);
+									break;
+								}
+						}
+						_siblingSavedUIDs_.push(item.uid);
+					}
+
+					var lastItem = _siblingSaveQueue_[0];
+					_siblingSaveQueue_.shift();
+
+					if (failed) {
+						Debug.log("Aborting Set-for-all after error on UID '" +
+							item.uid + "'. " + _siblingSaveQueue_.length +
+							" remaining saves skipped.", Debug.HIGH_PRIORITY);
+						_siblingSaveQueue_ = [];
+						refreshTreeTableVersions();
+						return;
+					}
+
+					if (!_siblingSaveQueue_.length) {
+						treeHasChanged();
+						refreshTreeTableVersions();
+						updateSiblingFieldDisplays(
+							lastItem.tableName, lastItem.column,
+							lastItem.newValue, lastItem.editNodeType,
+							_siblingSavedUIDs_);
+						Debug.log("Set-for-all complete for column '" +
+							lastItem.column + "' in table '" +
+							lastItem.tableName + "'.");
+					}
+
+					processSiblingSaveQueue();
+				},
+				0, 0, true
+			);
+		} //end processSiblingSaveQueue()
+
+		//==============================================================================
+		//updateSiblingFieldDisplays ~~
+		function updateSiblingFieldDisplays(tableName, columnName, newValue, editNodeType, savedUIDs) {
+			var els = document.getElementsByClassName(
+				"treeNode-Value-leafNode-ColumnName-" + columnName);
+			var decodedValue = decodeURIComponent(newValue);
+
+			for (var i = 0; i < els.length; ++i) {
+				var idString = els[i].id.substr("treeNode-Value-leafNode-".length);
+				var parentIdEl = document.getElementById("treeNode-ParentId-" + idString);
+				if (!parentIdEl) continue;
+				var parentIdString = parentIdEl.textContent;
+				var depth = parseInt(idString.split('-')[0]);
+
+				var table;
+				if (depth == 2) {
+					var gpIdEl = document.getElementById("treeNode-ParentId-" + parentIdString);
+					if (!gpIdEl) continue;
+					var tableEl = document.getElementById("treeNode-Value-" + gpIdEl.textContent);
+					if (!tableEl) continue;
+					table = tableEl.textContent;
+				}
+				else {
+					var pel = document.getElementById("treeNode-linkTableName-" + parentIdString);
+					if (!pel) {
+						var gpIdEl = document.getElementById("treeNode-ParentId-" + parentIdString);
+						if (gpIdEl)
+							pel = document.getElementById("treeNode-linkTableName-" + gpIdEl.textContent);
+					}
+					if (!pel) continue;
+					table = pel.textContent;
+				}
+
+				if (table != tableName) continue;
+
+				if (savedUIDs && savedUIDs.length) {
+					var uidEl = document.getElementById("treeNode-Value-" + parentIdString);
+					if (!uidEl) continue;
+					var uidText = "";
+					for (var k = 0; k < uidEl.childNodes.length; ++k)
+						if (uidEl.childNodes[k].nodeType === 3)
+							uidText += uidEl.childNodes[k].nodeValue;
+					uidText = uidText.trim();
+					if (depth != 2) {
+						var parts = uidText.split('=');
+						if (parts.length > 1)
+							uidText = parts[parts.length - 1].split(')')[0].trim();
+					}
+					if (savedUIDs.indexOf(uidText) < 0) continue;
+				}
+
+				if (editNodeType == "value-bool") {
+					var color = (decodedValue == "On" || decodedValue == "Yes" ||
+						decodedValue == "True") ?
+						"rgb(16, 204, 16)" : "rgb(255, 0, 0)";
+					els[i].innerHTML =
+						"<div style='float:left'>" + decodedValue + "</div>" +
+						"<div style='width:10px;height:10px;background-color:" + color +
+						";float:left;border-radius:7px;border:2px solid white;" +
+						"margin:2px 0 0 6px;'></div>";
+
+					if (columnName == "Status" || columnName == "Enabled")
+						updateParentStatusDot(parentIdString,
+							(decodedValue == "On" || decodedValue == "Yes" ||
+								decodedValue == "True"));
+				}
+				else {
+					els[i].innerHTML = "";
+					els[i].appendChild(document.createTextNode(decodedValue));
+				}
+
+				var titleEl = document.getElementById("treeNode-Field-title-" + idString);
+				if (titleEl) {
+					var titleStr = titleEl.title;
+					if (titleStr) {
+						var ti = titleStr.indexOf("Value: ");
+						if (ti > 0)
+							titleStr = titleStr.substr(0, ti) +
+								"Value: \t" + decodedValue + "\n";
+						titleEl.title = titleStr;
+						els[i].title = titleStr;
+					}
+				}
+			}
+		} //end updateSiblingFieldDisplays()
+
+		//==============================================================================
 		//editTreeNodePropagateChange ~~
 		//	arguments are different depending on treeEditingNodeType_.
 		//	After propagating change,
@@ -15552,6 +16502,244 @@
 		} //end editCellOK()
 
 		//==============================================================================
+		//editCellSetAllInTable ~~
+		//	Sets the current edit value for all rows in the table (Table View only).
+		function editCellSetAllInTable() {
+			if (!_editingCellEl) return;
+
+			var c = _editingCellPos[1];
+
+			var newValue;
+			try {
+				var sel;
+				if ((sel = _editingCellEl.getElementsByTagName("select")).length) {
+					sel = sel[0];
+					if (sel.style.display == "none")
+						newValue = _editingCellEl.getElementsByTagName("input")[0].value;
+					else {
+						if (sel.selectedIndex < 0) sel.selectedIndex = 0;
+						newValue = sel.options[sel.selectedIndex].value;
+					}
+				}
+				else if ((sel = _editingCellEl.getElementsByTagName("textarea")).length)
+					newValue = sel[0].value;
+				else
+					newValue = _editingCellEl.getElementsByTagName("input")[0].value;
+			}
+			catch(err) {
+				Debug.log("Error extracting value: " + err);
+				return;
+			}
+
+			var tableEl = document.getElementById("SubSystemTable");
+			var rows = tableEl.getElementsByTagName("tr");
+
+			var numDataRows;
+			if (_tableViewIsTransposed)
+				numDataRows = rows[_CONFIG_DATA_COL_OFFSET + c].getElementsByTagName("td").length + 1 - _CONFIG_DATA_ROW_OFFSET;
+			else
+				numDataRows = rows.length - _CONFIG_DATA_ROW_OFFSET;
+
+			if (!confirm("Set this column to '" + newValue +
+				"' for " + numDataRows + " record" +
+				(numDataRows != 1 ? "s" : "") + " in the table?"))
+				return;
+
+			var boolTypeTrues = ["On","True","Yes"];
+			var statusTypeFalses = ["Off","False","No"];
+			var isTrue = false;
+			var isFalse = false;
+			for (var i = 0; i < boolTypeTrues.length; ++i)
+				if (boolTypeTrues[i] == newValue) { isTrue = true; break; }
+			for (var i = 0; !isTrue && i < statusTypeFalses.length; ++i)
+				if (statusTypeFalses[i] == newValue) { isFalse = true; break; }
+
+			for (var ri = 0; ri < numDataRows; ++ri) {
+				var cell;
+				if (_tableViewIsTransposed)
+					cell = rows[_CONFIG_DATA_COL_OFFSET + c].getElementsByTagName("td")[_CONFIG_DATA_ROW_OFFSET - 1 + ri];
+				else
+					cell = rows[_CONFIG_DATA_ROW_OFFSET + ri].getElementsByTagName("td")[_CONFIG_DATA_COL_OFFSET + c];
+
+				if (!cell) continue;
+				if (cell == _editingCellEl) continue;
+
+				cell.innerHTML = "";
+				cell.appendChild(document.createTextNode(newValue));
+
+				if (isTrue)
+					cell.style.backgroundColor = _TABLE_BOOL_TYPE_TRUE_COLOR;
+				else if (isFalse)
+					cell.style.backgroundColor = _TABLE_BOOL_TYPE_FALSE_COLOR;
+			}
+
+			editCellOK();
+		} //end editCellSetAllInTable()
+
+		//==============================================================================
+		//localTableHasGroupIdForRow ~~
+		function localTableHasGroupIdForRow(r) {
+			var tableEl = document.getElementById("SubSystemTable");
+			if (!tableEl) return false;
+			var rows = tableEl.getElementsByTagName("tr");
+			var numCols = _tableViewIsTransposed ?
+				(rows.length - _CONFIG_DATA_COL_OFFSET) :
+				(rows[0].getElementsByTagName("td").length - _CONFIG_DATA_COL_OFFSET);
+			for (var ci = 0; ci < numCols; ++ci) {
+				var ct;
+				if (_tableViewIsTransposed)
+					ct = rows[_CONFIG_DATA_COL_OFFSET + ci].getElementsByTagName("td")[0].childNodes[0].childNodes[0].innerText;
+				else
+					ct = rows[0].getElementsByTagName("td")[_CONFIG_DATA_COL_OFFSET + ci].childNodes[0].childNodes[0].innerText;
+				if (ct.indexOf("GroupID") != 0) continue;
+				var cellVal;
+				if (_tableViewIsTransposed)
+					cellVal = rows[_CONFIG_DATA_COL_OFFSET + ci].getElementsByTagName("td")[_CONFIG_DATA_ROW_OFFSET - 1 + r].textContent.trim();
+				else
+					cellVal = rows[_CONFIG_DATA_ROW_OFFSET + r].getElementsByTagName("td")[_CONFIG_DATA_COL_OFFSET + ci].textContent.trim();
+				if (cellVal && cellVal != "" && cellVal != "DEFAULT")
+					return true;
+			}
+			return false;
+		} //end localTableHasGroupIdForRow()
+
+		//==============================================================================
+		//editCellSetAllInGroup ~~
+		function editCellSetAllInGroup() {
+			if (!_editingCellEl) return;
+
+			var r = _editingCellPos[0];
+			var c = _editingCellPos[1];
+
+			var newValue;
+			try {
+				var sel;
+				if ((sel = _editingCellEl.getElementsByTagName("select")).length) {
+					sel = sel[0];
+					if (sel.style.display == "none")
+						newValue = _editingCellEl.getElementsByTagName("input")[0].value;
+					else {
+						if (sel.selectedIndex < 0) sel.selectedIndex = 0;
+						newValue = sel.options[sel.selectedIndex].value;
+					}
+				}
+				else if ((sel = _editingCellEl.getElementsByTagName("textarea")).length)
+					newValue = sel[0].value;
+				else
+					newValue = _editingCellEl.getElementsByTagName("input")[0].value;
+			}
+			catch(err) {
+				Debug.log("Error extracting value: " + err);
+				return;
+			}
+
+			var tableEl = document.getElementById("SubSystemTable");
+			var rows = tableEl.getElementsByTagName("tr");
+
+			var numCols = _tableViewIsTransposed ?
+				(rows.length - _CONFIG_DATA_COL_OFFSET) :
+				(rows[0].getElementsByTagName("td").length - _CONFIG_DATA_COL_OFFSET);
+			var numDataRows = _tableViewIsTransposed ?
+				(rows[_CONFIG_DATA_COL_OFFSET].getElementsByTagName("td").length + 1 - _CONFIG_DATA_ROW_OFFSET) :
+				(rows.length - _CONFIG_DATA_ROW_OFFSET);
+
+			var myGroupIds = [];
+			for (var ci = 0; ci < numCols; ++ci) {
+				var ct;
+				if (_tableViewIsTransposed)
+					ct = rows[_CONFIG_DATA_COL_OFFSET + ci].getElementsByTagName("td")[0].childNodes[0].childNodes[0].innerText;
+				else
+					ct = rows[0].getElementsByTagName("td")[_CONFIG_DATA_COL_OFFSET + ci].childNodes[0].childNodes[0].innerText;
+				if (ct.indexOf("GroupID") != 0) continue;
+				var cellVal;
+				if (_tableViewIsTransposed)
+					cellVal = rows[_CONFIG_DATA_COL_OFFSET + ci].getElementsByTagName("td")[_CONFIG_DATA_ROW_OFFSET - 1 + r].textContent.trim();
+				else
+					cellVal = rows[_CONFIG_DATA_ROW_OFFSET + r].getElementsByTagName("td")[_CONFIG_DATA_COL_OFFSET + ci].textContent.trim();
+				if (cellVal && cellVal != "" && cellVal != "DEFAULT") {
+					var parts = cellVal.split('|');
+					for (var pi = 0; pi < parts.length; ++pi) {
+						var gid = parts[pi].trim();
+						//scope by GroupID column index so same value in a different
+						//	GroupID column does not match
+						if (gid && myGroupIds.indexOf(ci + ":" + gid) < 0)
+							myGroupIds.push(ci + ":" + gid);
+					}
+				}
+			}
+
+			if (!myGroupIds.length) {
+				Debug.log("No GroupID found for this record.", Debug.WARN_PRIORITY);
+				return;
+			}
+
+			var matchingRows = [];
+			for (var ri = 0; ri < numDataRows; ++ri) {
+				if (ri == r) { matchingRows.push(ri); continue; }
+				var isMatch = false;
+				for (var ci = 0; ci < numCols && !isMatch; ++ci) {
+					var ct;
+					if (_tableViewIsTransposed)
+						ct = rows[_CONFIG_DATA_COL_OFFSET + ci].getElementsByTagName("td")[0].childNodes[0].childNodes[0].innerText;
+					else
+						ct = rows[0].getElementsByTagName("td")[_CONFIG_DATA_COL_OFFSET + ci].childNodes[0].childNodes[0].innerText;
+					if (ct.indexOf("GroupID") != 0) continue;
+					var cellVal;
+					if (_tableViewIsTransposed)
+						cellVal = rows[_CONFIG_DATA_COL_OFFSET + ci].getElementsByTagName("td")[_CONFIG_DATA_ROW_OFFSET - 1 + ri].textContent.trim();
+					else
+						cellVal = rows[_CONFIG_DATA_ROW_OFFSET + ri].getElementsByTagName("td")[_CONFIG_DATA_COL_OFFSET + ci].textContent.trim();
+					if (!cellVal || cellVal == "" || cellVal == "DEFAULT") continue;
+					var parts = cellVal.split('|');
+					for (var pi = 0; pi < parts.length; ++pi) {
+						if (myGroupIds.indexOf(ci + ":" + parts[pi].trim()) >= 0) {
+							isMatch = true;
+							break;
+						}
+					}
+				}
+				if (isMatch) matchingRows.push(ri);
+			}
+
+			if (!confirm("Set this column to '" + newValue +
+				"' for " + matchingRows.length + " record" +
+				(matchingRows.length != 1 ? "s" : "") +
+				" in the group (GroupID: " + myGroupIds.map(function(s) { return s.substring(s.indexOf(":") + 1); }).join(", ") + ")?"))
+				return;
+
+			var boolTypeTrues = ["On","True","Yes"];
+			var statusTypeFalses = ["Off","False","No"];
+			var isTrue = false;
+			var isFalse = false;
+			for (var i = 0; i < boolTypeTrues.length; ++i)
+				if (boolTypeTrues[i] == newValue) { isTrue = true; break; }
+			for (var i = 0; !isTrue && i < statusTypeFalses.length; ++i)
+				if (statusTypeFalses[i] == newValue) { isFalse = true; break; }
+
+			for (var mi = 0; mi < matchingRows.length; ++mi) {
+				var ri = matchingRows[mi];
+				var cell;
+				if (_tableViewIsTransposed)
+					cell = rows[_CONFIG_DATA_COL_OFFSET + c].getElementsByTagName("td")[_CONFIG_DATA_ROW_OFFSET - 1 + ri];
+				else
+					cell = rows[_CONFIG_DATA_ROW_OFFSET + ri].getElementsByTagName("td")[_CONFIG_DATA_COL_OFFSET + c];
+
+				if (!cell) continue;
+				if (cell == _editingCellEl) continue;
+
+				cell.innerHTML = "";
+				cell.appendChild(document.createTextNode(newValue));
+
+				if (isTrue)
+					cell.style.backgroundColor = _TABLE_BOOL_TYPE_TRUE_COLOR;
+				else if (isFalse)
+					cell.style.backgroundColor = _TABLE_BOOL_TYPE_FALSE_COLOR;
+			}
+
+			editCellOK();
+		} //end editCellSetAllInGroup()
+
+		//==============================================================================
 		//tableLinkTooltip
 		var allTableNames_forTooltip_ = [];
 		function tableLinkTooltip(prependString) {
@@ -16171,20 +17359,23 @@
 
 										var dataStr = "data:text/csv;charset=utf-8,";
 										try {
-											var rows = req.responseXML.getElementsByTagName(
-												"CurrentVersionRows")[0].getElementsByTagName("Row");
+											var colCSVEls = req.responseXML.getElementsByTagName(
+												"CurrentVersionRows")[0].getElementsByTagName("ColCSV");
+											var dlColArrays = [];
+											for (var ci = 0; ci < colCSVEls.length; ++ci) {
+												var csvVal = colCSVEls[ci].getAttribute("value");
+												dlColArrays.push(csvVal.length ? csvVal.split(",").map(decodeURIComponent) : []);
+											}
+											var dlNumRows = dlColArrays.length ? dlColArrays[0].length : 0;
 
-											var rowEntries;
-											for (var r = 0; r < rows.length; ++r) {
+											for (var r = 0; r < dlNumRows; ++r) {
 												if (r)
 													dataStr += encodeURI(rowDel); //encoded \n
 
-												rowEntries = rows[r].getElementsByTagName("Entry");
-
-												for (var c = 0; c < rowEntries.length; ++c) {
+												for (var c = 0; c < dlColArrays.length; ++c) {
 													if (c)
 														dataStr += encodeURI(colDel);
-													dataStr += encodeURIComponent(rowEntries[c].getAttribute("value").
+													dataStr += encodeURIComponent(dlColArrays[c][r].
 														replace(new RegExp(rowDel, 'g'), "${OTS_RECORD_DELIMETER}").
 														replace(new RegExp(colDel, 'g'), "${OTS_FIELD_DELIMETER}"));
 												}
@@ -16416,20 +17607,20 @@
 											tableName + "-v" + _memberMapForGroupSave[tableName] + "'...");
 										return;
 									}
-									var rows = req.responseXML.getElementsByTagName(
-										"CurrentVersionRows")[0].getElementsByTagName("Row");
+									var ucColCSVEls = req.responseXML.getElementsByTagName(
+										"CurrentVersionRows")[0].getElementsByTagName("ColCSV");
+									var ucColArrays = [];
+									for (var ci = 0; ci < ucColCSVEls.length; ++ci) {
+										var csvVal = ucColCSVEls[ci].getAttribute("value");
+										ucColArrays.push(csvVal.length ? csvVal.split(",").map(decodeURIComponent) : []);
+									}
+									var ucNumRows = ucColArrays.length ? ucColArrays[0].length : 0;
 
 									var currCols = [];
-									//add data to cols
-									{
-										var rowEntries;
-										for (var r = 0; r < rows.length; ++r) {
-											rowEntries = rows[r].getElementsByTagName("Entry");
-
-											currCols.push([]);
-											for (var c = 0; c < rowEntries.length; ++c)
-												currCols[currCols.length - 1].push(rowEntries[c].getAttribute("value"));
-										}
+									for (var r = 0; r < ucNumRows; ++r) {
+										currCols.push([]);
+										for (var c = 0; c < ucColArrays.length; ++c)
+											currCols[currCols.length - 1].push(ucColArrays[c][r]);
 									}
 									console.log("Existing cols", currCols);
 									console.log("Final src", src);
@@ -17028,42 +18219,42 @@
 		} //end popUpClearVersionsPrompt()
 
 		//==============================================================================
-        //popUpSearchFieldPrompt
-        function popUpSearchFieldPrompt(tableName) {
-            console.log("CfgGUI popUpSearchFieldPrompt");
-            console.log("TableName " + tableName);
+		//popUpSearchFieldPrompt
+		function popUpSearchFieldPrompt(tableName) {
+			console.log("CfgGUI popUpSearchFieldPrompt");
+			console.log("TableName " + tableName);
 
-            var el = document.getElementById("searchTextInAllTableVersions");
-            var searchText = el ? el.value : "";
-            Debug.log("Search field value: " + searchText);
+			var el = document.getElementById("searchTextInAllTableVersions");
+			var searchText = el ? el.value : "";
+			Debug.log("Search field value: " + searchText);
 
 			var el = document.getElementById("activeOnlyFilter");
 			var activeOnlyFilter = el.checked;
 			console.log("activeOnlyFilter " + activeOnlyFilter);
 
-            var el = document.getElementById("searchMinThreshold");
-            var searchMinThreshold = el ? el.value : 1;
-            Debug.log("Search field value: " + searchMinThreshold);
+			var el = document.getElementById("searchMinThreshold");
+			var searchMinThreshold = el ? el.value : 1;
+			Debug.log("Search field value: " + searchMinThreshold);
 
 			var el = document.getElementById("searchVersionToCheck");
-            var searchVersionToCheck = el ? el.value : "";
-            Debug.log("Search field value: " + searchVersionToCheck);
+			var searchVersionToCheck = el ? el.value : "";
+			Debug.log("Search field value: " + searchVersionToCheck);
 
-            DesktopContent.XMLHttpRequest("Request?RequestType=SearchFieldInTableVersions" +
-                "&searchText=" + encodeURIComponent(searchText) +
-                "&tableName=" + encodeURIComponent(tableName) +
+			DesktopContent.XMLHttpRequest("Request?RequestType=SearchFieldInTableVersions" +
+				"&searchText=" + encodeURIComponent(searchText) +
+				"&tableName=" + encodeURIComponent(tableName) +
 				"&searchVersionToCheck=" + encodeURIComponent(searchVersionToCheck) +
 				"&activeOnly=" + encodeURIComponent(activeOnlyFilter),
-                "",
-                function(req){
-                    var req = arguments[0];
-                    var errStr = arguments[2];
-                    if (errStr) {
-                        Debug.err(errStr);
-                        return;
-                    }
+				"",
+				function(req){
+					var req = arguments[0];
+					var errStr = arguments[2];
+					if (errStr) {
+						Debug.err(errStr);
+						return;
+					}
 
-                    var results = req.responseXML.getElementsByTagName("Match");
+					var results = req.responseXML.getElementsByTagName("Match");
 					var escapedSearchText = encodeHTML(searchText);
 					if(results.length == 0)
 					{
@@ -17071,65 +18262,65 @@
 						return;
 					}
 
-                    var matchStr = "";
-                    var columnStr = "";
-                    var matchColumnMap = new Map();
-                    var prevVersion = -1;
-                    for (var i = 0; i < results.length; ++i) {
-                        var matchVersion = DesktopContent.getXMLValue(results[i], "MatchVersion");
-                        if(matchVersion != prevVersion)
-                        {
-                            if(matchColumnMap.size > 0)
-                            {
-                                columnStr = "";
-                                for (let [column, count] of matchColumnMap) {
-                                    if(count >= searchMinThreshold)
-                                        columnStr += "\tColumn: <b>" + column + "</b>, Count: <b>" + count + "</b><br>";
-                                }
-                                if(columnStr != "")
-                                {
-                                    matchStr += "<br>";
-                                    matchStr += "<a href='#' onclick='setupSpecificTable(\"" + tableName + "\",\"" + prevVersion + "\", \"setupTableViewMode(\\\"anchorTag-" + tableName + "\\\");\"); return false;'>" +
-                                            "Table " + tableName + "-v" + prevVersion + "</a><br>";
-                                    matchStr += columnStr;
-                                }
-                            }
-                            prevVersion = matchVersion;
-                            matchColumnMap = new Map();
-                        }
+					var matchStr = "";
+					var columnStr = "";
+					var matchColumnMap = new Map();
+					var prevVersion = -1;
+					for (var i = 0; i < results.length; ++i) {
+						var matchVersion = DesktopContent.getXMLValue(results[i], "MatchVersion");
+						if(matchVersion != prevVersion)
+						{
+							if(matchColumnMap.size > 0)
+							{
+								columnStr = "";
+								for (let [column, count] of matchColumnMap) {
+									if(count >= searchMinThreshold)
+										columnStr += "\tColumn: <b>" + column + "</b>, Count: <b>" + count + "</b><br>";
+								}
+								if(columnStr != "")
+								{
+									matchStr += "<br>";
+									matchStr += "<a href='#' onclick='setupSpecificTable(\"" + tableName + "\",\"" + prevVersion + "\", \"setupTableViewMode(\\\"anchorTag-" + tableName + "\\\");\"); return false;'>" +
+											"Table " + tableName + "-v" + prevVersion + "</a><br>";
+									matchStr += columnStr;
+								}
+							}
+							prevVersion = matchVersion;
+							matchColumnMap = new Map();
+						}
 
-                        var matchColumn = DesktopContent.getXMLValue(results[i], "MatchColumn");
-                        if(matchColumnMap.has(matchColumn))
-                            matchColumnMap.set(matchColumn, matchColumnMap.get(matchColumn)+1);
-                        else
-                            matchColumnMap.set(matchColumn, 1);
-                    }
+						var matchColumn = DesktopContent.getXMLValue(results[i], "MatchColumn");
+						if(matchColumnMap.has(matchColumn))
+							matchColumnMap.set(matchColumn, matchColumnMap.get(matchColumn)+1);
+						else
+							matchColumnMap.set(matchColumn, 1);
+					}
 
-                    // for last version looped through
-                    if(matchColumnMap.size > 0)
-                    {
-                        columnStr = "";
-                        for (let [column, count] of matchColumnMap) {
-                            if(count >= searchMinThreshold)
-                                columnStr += "\tColumn: <b>" + column + "</b>, Count: <b>" + count + "</b><br>";
-                        }
-                        if(columnStr != "")
-                        {
-                            matchStr += "<br>";
-                            matchStr += "<a href='#' onclick='setupSpecificTable(\"" + tableName + "\",\"" + prevVersion + "\", \"setupTableViewMode(\\\"anchorTag-" + tableName + "\\\");\"); return false;'>" +
-                                    "Table " + tableName + "-v" + prevVersion + "</a><br>";
-                            matchStr += columnStr;
-                        }
-                    }
+					// for last version looped through
+					if(matchColumnMap.size > 0)
+					{
+						columnStr = "";
+						for (let [column, count] of matchColumnMap) {
+							if(count >= searchMinThreshold)
+								columnStr += "\tColumn: <b>" + column + "</b>, Count: <b>" + count + "</b><br>";
+						}
+						if(columnStr != "")
+						{
+							matchStr += "<br>";
+							matchStr += "<a href='#' onclick='setupSpecificTable(\"" + tableName + "\",\"" + prevVersion + "\", \"setupTableViewMode(\\\"anchorTag-" + tableName + "\\\");\"); return false;'>" +
+									"Table " + tableName + "-v" + prevVersion + "</a><br>";
+							matchStr += columnStr;
+						}
+					}
 
 					const resultStr = "Search Results For: <b>" + escapedSearchText + "</b><br>" + matchStr;
-                    Debug.log("resultStr " + resultStr);
+					Debug.log("resultStr " + resultStr);
 
 					Debug._errTruncLen = -1;
 					Debug.info(DesktopContent.tooltipConditionString(resultStr));
 					Debug._errTruncLen = undefined;
-                }, 0);
-        } //end popUpSearchFieldPrompt()
+				}, 0);
+		} //end popUpSearchFieldPrompt()
 
 		//==============================================================================
 		//popUpSaveNewTableForm
@@ -17819,27 +19010,58 @@
 			el.style.display = "none";
 
 			//set position and size
-			var w = 300;
+			var w = 310;
 			var h = 200;
 			ConfigurationAPI.setPopUpPosition(el, w /*w*/, h /*h*/);
 
 			var defaultAlias = "myAlias";
+			var aliasChoices = [
+				"Default",
+				"SubsystemCommon",
+				"SubsystemCommonOverride",
+				"SubsystemCommonContext",
+				"SubsystemCommonContextOverride",
+			];
 			var str = "<a id='" +
 				"popUpDialog" +
 				"-header' onclick='var el = document.getElementById(" +
 				"\"popUpDialog\"); if(el) el.parentNode.removeChild(el); return false;'>Cancel</a><br><br>";
 
 			str += "<div id='popUpDialog-div'>";
-			str += "Please enter the Alias you would like to assign to version &apos;" +
+			str += "Please choose or enter the Alias you would like to assign to version &apos;" +
 				_version + "&apos; of <b>" +
 				_currentTableName + "</b>:<br><br>";
-			str += "<input type='text' id='popUpDialog-alias' value='" +
-				defaultAlias + "'></input>";
+
+			str += "<div style='white-space:nowrap;'>";
+
+			str += "<select id='popUpDialog-aliasSelect' " +
+				"style='float:left;'>";
+			for(var i = 0; i < aliasChoices.length; ++i)
+				str += "<option>" + aliasChoices[i] + "</option>";
+			str += "</select>";
+
+			str += "<input type='text' " +
+				"id='popUpDialog-alias' " +
+				"style='display:none;float:left;width:200px;' " +
+				"value=''></input>";
+
+			str += "<div style='display:block;" +
+				"margin: -2px 0 -7px 14px;' " +
+				"class='treeNode-Value-editIcon' id='popUpDialog-aliasEditIcon' " +
+				"onclick='handlePopUpAliasEditToggle();' " +
+				"title='Toggle free-form editing' " +
+				"></div>";
+
+			str += "</div>";
+
 			str += "</div><br><br>";
 
 			var onmouseupJS = "";
-			onmouseupJS += "ConfigurationAPI.setTableAliasInActiveBackbone(" +
-				"document.getElementById(\"popUpDialog-alias\").value" +
+			onmouseupJS += "var sel = document.getElementById(\"popUpDialog-aliasSelect\");" +
+				"var tel = document.getElementById(\"popUpDialog-alias\");" +
+				"var aliasVal = (tel.style.display != \"none\") ? tel.value : sel.value;" +
+				"ConfigurationAPI.setTableAliasInActiveBackbone(" +
+				"aliasVal" +
 				",\"" +
 				_currentTableName + "\",\"" +
 				_version + "\",0,/*done handler*/ function()" +
@@ -17862,9 +19084,8 @@
 			document.getElementById("display").appendChild(el); //add element to display div
 			el.style.display = "block";
 
-			//select comment text
-			ConfigurationAPI.setCaretPosition(document.getElementById("popUpDialog-alias"),
-				0, defaultAlias.length);
+			//show pencil icon
+			document.getElementById("popUpDialog-aliasEditIcon").style.display = "block";
 		} //end popUpVersionAliasForm()
 
 		//==============================================================================
@@ -19374,6 +20595,82 @@
 			Debug.log("evaluateJS = " + str);
 			eval(str);
 		} //end evaluateJS()
+
+		//==============================================================================
+		//navHistoryPush ~~
+		//	detects the current view from the DOM and pushes its
+		//	reconstruct string onto the history stack
+		function navHistoryPush() {
+			if (_navHistoryPushDisabled) return;
+			var displayEl = document.getElementById("display");
+			if (!displayEl || !displayEl.children[0]) return;
+			var viewTag = displayEl.children[0].textContent;
+			var navStr = "";
+
+			if (viewTag == "System View")
+				navStr = "setupSystemViewMode();";
+			else if (viewTag == "Group View")
+				navStr = "setupGroupViewMode();";
+			else if (viewTag == "Table View")
+				navStr = "setupTableViewMode();";
+			else if (viewTag == "Specific Table View")
+				navStr = "setupSpecificTable(" +
+					JSON.stringify(_currentTableName) + "," +
+					JSON.stringify("" + _version) + "," +
+					JSON.stringify(_tableViewBackLinkStr || "") +
+					");";
+			else {
+				var treeViewEl = document.getElementById("treeView-ConfigGroupLink");
+				if (treeViewEl)
+					navStr = "setupTableGroupTreeView(" +
+						JSON.stringify(treeGroupName_) + "," +
+						JSON.stringify("" + treeGroupKey_) + "," +
+						JSON.stringify(treeViewBackLinkStr_ || "") +
+						");";
+			}
+
+			if (!navStr || navStr == "") {
+				var links = displayEl.getElementsByTagName("a");
+				for (var i = 0; i < links.length; ++i) {
+					if (links[i].textContent == "Refresh") {
+						var onclick = links[i].getAttribute("onclick");
+						if (onclick) {
+							var endIdx = onclick.indexOf("; return false;");
+							if (endIdx < 0) endIdx = onclick.indexOf(";return false;");
+							navStr = endIdx >= 0 ? onclick.substring(0, endIdx + 1) : onclick;
+						}
+						break;
+					}
+				}
+			}
+
+			if (!navStr || navStr == "") return;
+			if (_navHistory.length > 0 &&
+				_navHistory[_navHistory.length - 1] == navStr) return;
+			_navHistory.push(navStr);
+			Debug.log("navHistoryPush depth=" + _navHistory.length +
+				" pushed=" + navStr);
+		} //end navHistoryPush()
+
+		//navigateBack ~~
+		//	pops the navigation history and restores the previous view
+		//	used by mouse back button and Backspace key
+		function navigateBack() {
+			if (_navHistory.length > 0) {
+				var navStr = _navHistory.pop();
+				Debug.log("navigateBack depth=" + _navHistory.length +
+					" restoring=" + navStr);
+				_navHistoryPushDisabled = true;
+				try {
+					evaluateJS(navStr);
+				}
+				finally {
+					_navHistoryPushDisabled = false;
+				}
+				return true;
+			}
+			return false;
+		} //end navigateBack()
 
 		//==============================================================================
 		//createEditTableMenu ~~
@@ -20910,6 +22207,27 @@
 			}
 
 		} //end handleEditTreeAliasEditToggle()
+
+		//==============================================================================
+		//handlePopUpAliasEditToggle ~~
+		function handlePopUpAliasEditToggle() {
+			Debug.log("handlePopUpAliasEditToggle");
+
+			var sel = document.getElementById("popUpDialog-aliasSelect");
+			var tel = document.getElementById("popUpDialog-alias");
+			if(sel.style.display == "none") {
+				sel.style.display = "block";
+				tel.style.display = "none";
+			}
+			else {
+				tel.style.width = ((sel.offsetWidth > 150 ? sel.offsetWidth : 150) - 2) + "px";
+				sel.style.display = "none";
+				if(tel.value == "")
+					tel.value = "myAlias";
+				tel.style.display = "block";
+				ConfigurationAPI.setCaretPosition(tel, 0, tel.value.length);
+			}
+		} //end handlePopUpAliasEditToggle()
 
 		//==============================================================================
 		//bodyMouseMoveHandler ~~

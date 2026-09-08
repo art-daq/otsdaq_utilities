@@ -52,6 +52,8 @@
 
 		//for lockout
 		var _usernameWithLock = "";
+		var _prefUsername = "";
+		var _desktopUserPermissions = "";
 
 		//functions:
 		//init()
@@ -83,6 +85,14 @@
 		/////////////////////////////////////////////////////////////////////////////////////////
 		/////////////////////////////////////////////////////////////////////////////////////////
 
+		function escapeHtml(str) {
+			return String(str)
+				.replace(/&/g, '&amp;')
+				.replace(/</g, '&lt;')
+				.replace(/>/g, '&gt;')
+				.replace(/"/g, '&quot;')
+				.replace(/'/g, '&#39;');
+		}
 
 		//=====================================================================================
 		//init called once body has loaded
@@ -183,7 +193,7 @@
 				if (i) str += "<br>";
 				str += "<a onmouseup='Javascript:setLayout(" + (i + 1) +
 					",event)' class='winLayoutLink' id='winLayoutLink" + (i + 1) + "'>" +
-					"<li>User Preset-" + (i + 1) + " (Click to set)</li></a>";
+					"<span>User Preset-" + (i + 1) + " (Click to set)</span></a>";
 
 				Debug.log("_layoutAliasArray[" + i + "] " + _layoutAliasArray[i]);
 
@@ -191,26 +201,28 @@
 				if (_layoutAliasArray[i] == "-1" || _layoutAliasArray[i] == (i + 1).toString())
 					str += " <input type='text' id='winLayoutAlias" + (i + 1) + "' placeholder='Enter Alias'>";
 				else
-					str += " <input type='text' id='winLayoutAlias" + (i + 1) + "' value='" + _layoutAliasArray[i] + "'>";
+					str += " <input type='text' id='winLayoutAlias" + (i + 1) + "' value='" + escapeHtml(_layoutAliasArray[i]) + "'>";
 				str += "<div class='winLayoutText' id='winLayoutText" + (i + 1) + "'></div>";
 			}
-			str += "<div id='windSystemLayoutDiv' style='display:none; white-space:nowrap;'>" +
-				"<hr width='100%'/>";
-			for (var i = 0; i < _NUM_SYS_LAYOUTS; ++i) {
-				if (i) str += "<br>";
-				str += "<a onmouseup='Javascript:setLayout(" + (_NUM_USER_LAYOUTS + i + 1) +
-					",event)' class='winLayoutLink' id='winSysLayoutLink" + (i + 1) + "'>" +
-					"<li>System Preset-" + (i + 1) + " (Click to set)</li></a>";
-
-				str += "Layout Alias: ";
-				if (_sysLayoutAliasArray[i] == "-1" || _sysLayoutAliasArray[i] == (i + 1).toString())
-					str += "<input type='text' id='winSysLayoutAlias" + (i + 1) + "' placeholder='Enter Alias'>";
-				else
-					str += "<input type='text' id='winSysLayoutAlias" + (i + 1) + "' value='" + _sysLayoutAliasArray[i] + "'>";
-				str += "<div class='winLayoutText' id='winSysLayoutText" + (i + 1) + "'></div>";
-			}
-			str += "</div>";
 			document.getElementById("windLayoutDiv").innerHTML = str;
+
+			//system presets get their own column (#windSystemLayoutDiv); visibility for
+			//system admins is toggled in extractLayoutToForm() based on _sysLayoutArray privileges
+			var sysStr = "";
+			for (var i = 0; i < _NUM_SYS_LAYOUTS; ++i) {
+				if (i) sysStr += "<br>";
+				sysStr += "<a onmouseup='Javascript:setLayout(" + (_NUM_USER_LAYOUTS + i + 1) +
+					",event)' class='winLayoutLink' id='winSysLayoutLink" + (i + 1) + "'>" +
+					"<span>System Preset-" + (i + 1) + " (Click to set)</span></a>";
+
+				sysStr += "Layout Alias: ";
+				if (_sysLayoutAliasArray[i] == "-1" || _sysLayoutAliasArray[i] == (i + 1).toString())
+					sysStr += " <input type='text' id='winSysLayoutAlias" + (i + 1) + "' placeholder='Enter Alias'>";
+				else
+					sysStr += " <input type='text' id='winSysLayoutAlias" + (i + 1) + "' value='" + escapeHtml(_sysLayoutAliasArray[i]) + "'>";
+				sysStr += "<div class='winLayoutText' id='winSysLayoutText" + (i + 1) + "'></div>";
+			}
+			document.getElementById("windSystemLayoutDiv").innerHTML = sysStr;
 		}
 
 		//=====================================================================================
@@ -255,10 +267,29 @@
 				el = document.createElement("div");
 				el.setAttribute("id", "Settings-colorBox" + i);
 				el.setAttribute("class", "Settings-el Settings-colorBox");
+				el.style.cursor = "pointer";
+				el.title = "Click to open color picker";
+				el.setAttribute("role", "button");
+				el.setAttribute("tabindex", "0");
+				el.setAttribute("aria-label", "Open color picker");
+				(function (colorIndex) {
+					el.onmouseup = function (e) {
+						openColorPicker(colorIndex);
+						if (e) e.stopPropagation(); //eat event away from body
+					};
+					el.onkeydown = function (e) {
+						var key = e && (e.key || e.keyCode);
+						if (key === "Enter" || key === " " || key === 13 || key === 32) {
+							openColorPicker(colorIndex);
+							if (e.preventDefault) e.preventDefault();
+							if (e.stopPropagation) e.stopPropagation();
+						}
+					};
+				})(i);
 				colorDiv.appendChild(el); //add inputs
 
 				el = document.createElement("div");
-				el.setAttribute("id", "clearDiv");
+				el.setAttribute("class", "clearDiv");
 				colorDiv.appendChild(el); //new line
 			}
 
@@ -296,22 +327,13 @@
 				else
 					el.innerHTML = "Layout Details: <a href='#' onmouseup='showLayoutText(" +
 						(i + 1) + ",true,event); return false;'>show</a>";
-
-				//update alias input to match current alias array
-				var aliasEl = document.getElementById("winLayoutAlias" + (i + 1));
-				if (aliasEl) {
-					if (_layoutAliasArray[i] == "-1" || _layoutAliasArray[i] == (i + 1).toString() ||
-						_layoutAliasArray[i] == (i + 1)) {
-						aliasEl.value = "";
-						aliasEl.setAttribute("placeholder", "Enter Alias");
-					}
-					else
-						aliasEl.value = _layoutAliasArray[i];
-				}
 			}
 
 			//if user has privileges _sysLayoutArray is populated
-			el = document.getElementById("windSystemLayoutDiv");
+			//toggle the whole sub-column wrapper (not just the inner div) so that, for
+			//non-admin users, the hidden column doesn't reserve empty flex space and
+			//the remaining title/column stay centered
+			el = document.getElementById("windSystemLayoutCol");
 			if (!_sysLayoutArray || !_sysLayoutArray.length) //no priveleges
 			{
 				el.style.display = "none";
@@ -326,18 +348,6 @@
 				else
 					el.innerHTML = "Layout Details: <a href='#' onmouseup='showLayoutText(" +
 						(i + 1) + ",true,event,1); return false;'>show</a>";
-
-				//update system alias input to match current alias array
-				var sysAliasEl = document.getElementById("winSysLayoutAlias" + (i + 1));
-				if (sysAliasEl) {
-					if (_sysLayoutAliasArray[i] == "-1" || _sysLayoutAliasArray[i] == (i + 1).toString() ||
-						_sysLayoutAliasArray[i] == (i + 1)) {
-						sysAliasEl.value = "";
-						sysAliasEl.setAttribute("placeholder", "Enter Alias");
-					}
-					else
-						sysAliasEl.value = _sysLayoutAliasArray[i];
-				}
 			}
 
 		} //end extractLayoutToForm()
@@ -363,24 +373,41 @@
 			//get username with lock, "" means no one has lock
 			_usernameWithLock = DesktopContent.getXMLValue(req, "username_with_lock");
 			var pref_username = DesktopContent.getXMLValue(req, "pref_username");
+			_prefUsername = pref_username;
 			var ots_owner = DesktopContent.getXMLValue(req, "ots_owner");
 			var ots_remote_address = DesktopContent.getXMLValue(req, "ots_remote_address");
 			var desktop_user_permissions = DesktopContent.getXMLValue(req, "desktop_user_permissions");
+			_desktopUserPermissions = desktop_user_permissions;
 
 
 			var el = document.getElementById("header");
-			el.innerHTML = "This page gives access to preferences/account selections for user <i><b>" +
-				pref_username + "</b></i> on " + ots_owner + " ots" +
-				(ots_remote_address ? (" (" + ots_remote_address + ")") : "") +
-				"." + "<br><br>" +
-				"Your ots access permissions are '" + desktop_user_permissions + ".'" +
-				"<br><br>" +
-				((_usernameWithLock && _usernameWithLock != "") ?
-					(_usernameWithLock + " currently has the " + ots_owner + " ots lock. " +
-						(_usernameWithLock == pref_username ? " <a onclick='lockToUsername(-1,false,\"" +
-							pref_username + "\");'>Click</a> to unlock." : "")) :
-					(ots_owner + " ots is currently unlocked. <a onclick='lockToUsername(-1,true,\"" +
-						pref_username + "\");'>Click</a> to lock."));
+			var lockedBySelf = _usernameWithLock && _usernameWithLock == pref_username;
+			var lockedByOther = _usernameWithLock && _usernameWithLock != "" && !lockedBySelf;
+			var lockBadgeClass = lockedByOther ? "lockBadge--lockedOther" :
+				(lockedBySelf ? "lockBadge--lockedSelf" : "lockBadge--unlocked");
+			var lockBadgeText = lockedByOther ?
+				("<b>" + escapeHtml(_usernameWithLock) + "</b> currently has the " + escapeHtml(ots_owner) + " ots lock") :
+				(lockedBySelf ?
+					("You currently have the " + escapeHtml(ots_owner) + " ots lock") :
+					(escapeHtml(ots_owner) + " ots is currently unlocked"));
+			var lockBadgeAction = (_usernameWithLock && _usernameWithLock != "") ?
+				(lockedBySelf ?
+					(" &ndash; <a onclick='lockToUsername(-1,false," + escapeHtml(JSON.stringify(pref_username)) + ");'>Click to unlock</a>") :
+					((desktop_user_permissions && desktop_user_permissions.indexOf("allUsers: 255") >= 0) ?
+						(" &ndash; <a style='color:inherit' onclick='lockToUsername(-1,false," + escapeHtml(JSON.stringify(_usernameWithLock)) + ");'>Click to force unlock</a>") :
+						"")) :
+				(" &ndash; <a onclick='lockToUsername(-1,true," + escapeHtml(JSON.stringify(pref_username)) + ");'>Click to lock</a>");
+			el.innerHTML =
+				"<div class='userHeaderCard'>" +
+					"<div class='userHeaderTitle'>Preferences &amp; Account Settings for <b>" + escapeHtml(pref_username) + "</b> " +
+						"<span class='userHeaderSub'>on " + escapeHtml(ots_owner) + " ots" +
+						(ots_remote_address ? (" (" + escapeHtml(ots_remote_address) + ")") : "") + "</span>" +
+					"</div>" +
+					"<div class='userHeaderMeta'>" +
+						"<span class='permBadge'>Access: " + escapeHtml(desktop_user_permissions) + "</span> " +
+						"<span class='lockBadge " + lockBadgeClass + "'>" + lockBadgeText + lockBadgeAction + "</span>" +
+					"</div>" +
+				"</div>";
 
 			//pass preferences to Desktop	but remove user accounts from message to Desktop
 			if (_mailbox) {
@@ -639,12 +666,15 @@
 			if (el) //in wiz mode, there is now jump link
 			{
 				if (_usernameWithLock && _usernameWithLock != "") //insert user with lock if applicable
-					htmlStr += "<div style='color:yellow; margin-bottom:10px;'>Note: <i>" + _usernameWithLock + "</i> currently has the ots Lock.</div>";
+				{
+					htmlStr += "<div class='accountsLockNote'>Note: <b>" + _usernameWithLock + "</b> currently has the ots Lock.</div>";
+					htmlStr += "<br><br>";
+				}
 
 				if (_accountsArray[0] && _accountsArray[0].length) //If have permissions, add Jump to Link
 				{
 					if (_mailbox) //only add jump link if there is a large Preferences section
-						htmlStr += "<div id='prefs'><a style='color:#880000' onClick=\"event.preventDefault(); DesktopContent.scrollIntoViewY('accountsDiv', false)\">Jump to Accounts Section</a><div>";
+					htmlStr += "<div id='prefs'><a style='color:#3072ed' onClick=\"event.preventDefault(); DesktopContent.scrollIntoViewY('accountsDiv', false)\">Jump to Accounts Section</a></div>";
 
 					el.innerHTML = htmlStr;
 				}
@@ -656,7 +686,25 @@
 			htmlStr = "";
 			htmlStr += "<br>";
 			if (!DesktopContent._sequence && _mailbox) //in normal mode, add jump link
-				htmlStr += "<hr width='75%'><center><a style='color:#880000' onClick=\"event.preventDefault(); DesktopContent.scrollIntoViewY('prefs', false)\">Jump to Preferences Section</a></center><h1>Accounts</h1>";
+				htmlStr += "<hr width='75%'><center><a style='color:#3072ed' onClick=\"event.preventDefault(); DesktopContent.scrollIntoViewY('prefs', false)\">Jump to Preferences Section</a></center><h1>Accounts</h1>";
+
+			//show current lock status just above the search box
+			if (_usernameWithLock && _usernameWithLock != "") {
+				if (_usernameWithLock == _prefUsername)
+					htmlStr += "<center><div class='accountsLockNote accountsLockNote--self'>You currently have the ots lock &ndash; " +
+						"<a onclick='lockToUsername(-1,false," + JSON.stringify(_prefUsername).replace(/'/g, "&#39;") + ");'>Click to unlock</a></div></center>";
+				else {
+					var isAdmin = _desktopUserPermissions && _desktopUserPermissions.indexOf("allUsers: 255") >= 0;
+					htmlStr += "<center><div class='accountsLockNote accountsLockNote--other'>Note: <b>" + escapeHtml(_usernameWithLock) + "</b> currently has the ots lock" +
+						(isAdmin ?
+							(" &ndash; <a style='color:inherit' onclick='lockToUsername(-1,false," + JSON.stringify(_usernameWithLock).replace(/'/g, "&#39;") + ");'>Click to force unlock</a>") :
+							".") +
+						"</div></center>";
+				}
+			}
+			else
+				htmlStr += "<center><div class='accountsLockNote accountsLockNote--unlocked'>ots is currently unlocked &ndash; " +
+					"<a onclick='lockToUsername(-1,true," + JSON.stringify(_prefUsername).replace(/'/g, "&#39;") + ");'>Click to lock</a></div></center>";
 
 			htmlStr += "<div id='accountsSearchDiv'>Search: " +
 				"<input onkeyup='handleSearchKeyUp();' type='text' id='accountsSearchBox' value='" + _AccountsLastSearch + "'></div>";
@@ -674,18 +722,6 @@
 
 			htmlStr += "<center>" + _AccountsOrderArray.length + " of " +
 				_accountsArray[0].length + " accounts match search.<br>(" + _AccountsPageSize + " per page)</center><br>";
-			htmlStr += "<div id='accountsPageNav'>Navigate: ";
-			htmlStr += "<a onmouseup='setAccountsPage(" + (_AccountsPageIndex - 1) + ")'; event.stopPropagation(); return false;'>&nbsp;Prev </a>";
-
-			for (i = (_AccountsPageIndex - _AccountsPageNavWidth < 0) ? 0 : (_AccountsPageIndex - _AccountsPageNavWidth);
-				i < _AccountsPageIndex + _AccountsPageNavWidth && i < numOfPages; ++i) {
-				htmlStr += "&nbsp;&nbsp;&nbsp;&nbsp;<a onmouseup='Javascript:setAccountsPage(" + i + ")';event.stopPropagation(); return false;'> " +
-					(i == _AccountsPageIndex ? "<b>" : "") + (i + 1) + (i == _AccountsPageIndex ? "</b>" : "") + " </a>";
-			}
-
-			htmlStr += "&nbsp;&nbsp;&nbsp;&nbsp;";
-			htmlStr += "<a onmouseup='Javascript:setAccountsPage(" + (_AccountsPageIndex + 1) + ")';event.stopPropagation(); return false;'> Next&nbsp;</a>";
-			htmlStr += "</div>";
 
 			htmlStr += "<center><div id='accountsPermNote'>" +
 				"<a onclick='showPermissionsTooltip(true /*alwaysShow*/);'>" +
@@ -695,7 +731,7 @@
 
 			//////////////////////////////////////////////////////
 			//accounts table
-			htmlStr += "<div id='accountsTableDiv'>";
+			htmlStr += "<div id='accountsTableDiv' class='accountsWidthMatch'>";
 			htmlStr += "<table><tr>";
 			for (j = 0; j < _accountFields.length - 1; ++j) //exclude NAC column, and place at end
 				htmlStr += "<td class='accountsHeaderFld'>" +
@@ -752,9 +788,23 @@
 			htmlStr += "</table>";
 			htmlStr += "</div>";
 
-			htmlStr += "<center style='padding-top: 5px;'><input id='theRealDelete' style='display:none; background-color: #EAABAB' type='submit' onmouseup='reallyDelete(event);' value='Really Delete!'></center><br>";
+			htmlStr += "<div id='accountsPageNav'>Navigate: ";
+			htmlStr += "<a onmouseup='setAccountsPage(" + (_AccountsPageIndex - 1) + "); event.stopPropagation(); return false;'>&nbsp;Prev </a>";
+
+			for (i = (_AccountsPageIndex - _AccountsPageNavWidth < 0) ? 0 : (_AccountsPageIndex - _AccountsPageNavWidth);
+				i < _AccountsPageIndex + _AccountsPageNavWidth && i < numOfPages; ++i) {
+				htmlStr += "&nbsp;&nbsp;&nbsp;&nbsp;<a onmouseup='Javascript:setAccountsPage(" + i + "); event.stopPropagation(); return false;'> " +
+					(i == _AccountsPageIndex ? "<b>" : "") + (i + 1) + (i == _AccountsPageIndex ? "</b>" : "") + " </a>";
+			}
+
+			htmlStr += "&nbsp;&nbsp;&nbsp;&nbsp;";
+			htmlStr += "<a onmouseup='Javascript:setAccountsPage(" + (_AccountsPageIndex + 1) + "); event.stopPropagation(); return false;'> Next&nbsp;</a>";
+			htmlStr += "</div>";
+
+			htmlStr += "<center style='padding-top: 5px;'><input id='theRealDelete' style='display:none' type='submit' onmouseup='reallyDelete(event);' value='Really Delete!'></center><br>";
 			//////////////////////////////////////////////////////
 			//add new account option
+			htmlStr += "<div class='accountsWidthMatch'>";
 			htmlStr += "<h3 style='margin-bottom: -30px; margin-top: 10px;'>Create New Account:</h3>";
 			htmlStr += "<table><tr>";
 			for (j = 0; j < _accountFields.length - 1; ++j) //omit nac field
@@ -767,8 +817,10 @@
 			htmlStr += "<td></td><br><br>";
 			htmlStr += "</tr></table>";
 			htmlStr += "<center><div style='padding-top: 10px'><input id='newacct' type='submit' onmouseup='createNewAccount(event);' value='Create New Account'></div></center>";
+			htmlStr += "</div>";
 
 			el.innerHTML = htmlStr;
+
 
 
 
@@ -977,6 +1029,330 @@
 				extractRGBtoForm(extractFormToRGB(i), i);
 			return true;
 		} //end colorEditHandler()
+
+		//=====================================================================================
+		//openColorPicker ~~
+		//	open a custom color-wheel popup for color box 'i'. As the user drags on the
+		//	wheel (hue/saturation) and the brightness slider, the R/G/B inputs are updated
+		//	live and the form is refreshed.
+		var _colorWheelState = { index: -1, hue: 0, sat: 0, val: 1 };
+		function openColorPicker(i) {
+			_colorWheelState.index = i;
+
+			//seed wheel HSV from the color box's current R/G/B values
+			function clamp255(v) {
+				v = parseInt(v);
+				if (isNaN(v) || v < 0) return 0;
+				return v > 255 ? 255 : v;
+			}
+			var r = clamp255(document.getElementById("Settings-colorInput" + i + "0").value);
+			var g = clamp255(document.getElementById("Settings-colorInput" + i + "1").value);
+			var b = clamp255(document.getElementById("Settings-colorInput" + i + "2").value);
+			var hsv = _rgbToHsv(r, g, b);
+			_colorWheelState.hue = hsv[0];
+			_colorWheelState.sat = hsv[1];
+			_colorWheelState.val = hsv[2];
+
+			_buildColorWheelPopup();
+			_drawColorWheel();
+			_syncColorWheelToInputs(); //ensure inputs reflect seed (in case clamped)
+
+			var popup = document.getElementById("Settings-colorWheelPopup");
+			popup.style.display = "block";
+
+			//position the popup near the clicked color box
+			var box = document.getElementById("Settings-colorBox" + i);
+			if (box && box.getBoundingClientRect) {
+				var rect = box.getBoundingClientRect();
+				var top = rect.bottom + window.pageYOffset + 6;
+				var left = rect.left + window.pageXOffset;
+				//keep it on-screen horizontally
+				var maxLeft = window.pageXOffset + document.documentElement.clientWidth - 230;
+				if (left > maxLeft) left = maxLeft;
+				if (left < 4) left = 4;
+				popup.style.top = top + "px";
+				popup.style.left = left + "px";
+			}
+		} //end openColorPicker()
+
+		//=====================================================================================
+		//_buildColorWheelPopup ~~ lazily create the color-wheel popup DOM (once)
+		function _buildColorWheelPopup() {
+			if (document.getElementById("Settings-colorWheelPopup")) return;
+
+			var popup = document.createElement("div");
+			popup.setAttribute("id", "Settings-colorWheelPopup");
+			popup.style.position = "absolute";
+			popup.style.zIndex = "10000";
+			popup.style.display = "none";
+			popup.style.padding = "10px";
+			popup.style.background = "rgba(40,40,40,0.97)";
+			popup.style.border = "1px solid #888";
+			popup.style.borderRadius = "6px";
+			popup.style.boxShadow = "0 4px 16px rgba(0,0,0,0.5)";
+			popup.style.textAlign = "center";
+			popup.onmouseup = function (e) { if (e) e.stopPropagation(); }; //don't let body cancel
+			popup.onmousedown = function (e) { if (e) e.stopPropagation(); };
+
+			//custom cursor ~~ a transparent ring (no crosshair lines) so the wheel color
+			//under the pointer stays visible while picking
+			var _wheelCursorSvg = "<svg xmlns='http://www.w3.org/2000/svg' width='22' height='22'>" +
+				"<circle cx='11' cy='11' r='8' fill='none' stroke='white' stroke-width='2'/>" +
+				"<circle cx='11' cy='11' r='8' fill='none' stroke='black' stroke-width='1'/>" +
+				"</svg>";
+			var _wheelCursor = "url('data:image/svg+xml;utf8," +
+				encodeURIComponent(_wheelCursorSvg) + "') 11 11, default";
+
+			var canvas = document.createElement("canvas");
+			canvas.setAttribute("id", "Settings-colorWheelCanvas");
+			canvas.width = 200;
+			canvas.height = 200;
+			canvas.style.cursor = _wheelCursor;
+			canvas.style.borderRadius = "50%";
+			canvas.style.display = "block";
+
+			//wrapper adds a margin around the wheel so the mouse can travel past the
+			//edge; edge colors remain selectable because saturation is clamped to 1.
+			var WHEEL_PAD = 24; //px of interactive margin around the wheel
+			var wheelWrap = document.createElement("div");
+			wheelWrap.setAttribute("id", "Settings-colorWheelWrap");
+			wheelWrap.style.display = "inline-block";
+			wheelWrap.style.padding = WHEEL_PAD + "px";
+			wheelWrap.style.cursor = _wheelCursor;
+			wheelWrap.appendChild(canvas);
+			popup.appendChild(wheelWrap);
+
+			var computeHueSat = function (e) {
+				var rect = canvas.getBoundingClientRect();
+				var cx = canvas.width / 2, cy = canvas.height / 2;
+				var x = (e.clientX - rect.left) - cx;
+				var y = (e.clientY - rect.top) - cy;
+				var dist = Math.sqrt(x * x + y * y);
+				var radius = canvas.width / 2;
+				var sat = dist / radius;
+				if (sat > 1) sat = 1;
+				var hue = Math.atan2(y, x) * 180 / Math.PI;
+				if (hue < 0) hue += 360;
+				return [hue, sat];
+			};
+			//hover/drag: preview the color on the swatch only (do NOT commit to inputs)
+			wheelWrap.onmousemove = function (e) {
+				var hs = computeHueSat(e);
+				var rgb = _hsvToRgb(hs[0], hs[1], _colorWheelState.val);
+				var swatch = document.getElementById("Settings-colorWheelSwatch");
+				if (swatch)
+					swatch.style.backgroundColor = "rgb(" + rgb[0] + "," + rgb[1] + "," + rgb[2] + ")";
+
+				//Throttle expensive wheel redraws
+				_colorWheelState._previewHue = hs[0];
+				_colorWheelState._previewSat = hs[1];
+				if (_colorWheelState._rafPending) return;
+				_colorWheelState._rafPending = true;
+				requestAnimationFrame(function () {
+					_colorWheelState._rafPending = false;
+					_drawColorWheel(_colorWheelState._previewHue, _colorWheelState._previewSat);
+				});
+			};
+			//leaving the wheel area: restore preview to the committed color
+			wheelWrap.onmouseleave = function () {
+				_drawColorWheel();
+				var rgb = _hsvToRgb(_colorWheelState.hue, _colorWheelState.sat, _colorWheelState.val);
+				var swatch = document.getElementById("Settings-colorWheelSwatch");
+				if (swatch)
+					swatch.style.backgroundColor = "rgb(" + rgb[0] + "," + rgb[1] + "," + rgb[2] + ")";
+			};
+			//left click: lock in the selected color and commit to the R/G/B inputs
+			wheelWrap.onmousedown = function (e) {
+				if (e && e.button !== 0) return; //left click only
+				var hs = computeHueSat(e);
+				_colorWheelState.hue = hs[0];
+				_colorWheelState.sat = hs[1];
+				_drawColorWheel();
+				_syncColorWheelToInputs(); //commit
+				if (e) e.preventDefault();
+			};
+
+			//brightness (value) slider
+			var sliderWrap = document.createElement("div");
+			sliderWrap.style.margin = "8px 0 4px 0";
+			var sliderLabel = document.createElement("div");
+			sliderLabel.setAttribute("id", "Settings-colorWheelValueLabel");
+			sliderLabel.innerHTML = "Brightness";
+			sliderLabel.style.color = "#fff";
+			sliderLabel.style.fontSize = "12px";
+			sliderLabel.style.marginBottom = "2px";
+			sliderWrap.appendChild(sliderLabel);
+			var slider = document.createElement("input");
+			slider.setAttribute("id", "Settings-colorWheelValue");
+			slider.setAttribute("type", "range");
+			slider.setAttribute("min", "0");
+			slider.setAttribute("max", "100");
+			slider.setAttribute("value", "100");
+			slider.style.width = "180px";
+			slider.oninput = function () {
+				_colorWheelState.val = parseInt(slider.value) / 100;
+				_drawColorWheel();
+				_syncColorWheelToInputs();
+			};
+			sliderWrap.appendChild(slider);
+			popup.appendChild(sliderWrap);
+
+			//preview swatch + Close button
+			var footer = document.createElement("div");
+			footer.style.marginTop = "6px";
+			footer.style.display = "flex";
+			footer.style.alignItems = "center";
+			footer.style.justifyContent = "space-between";
+
+			var swatch = document.createElement("div");
+			swatch.setAttribute("id", "Settings-colorWheelSwatch");
+			swatch.style.width = "40px";
+			swatch.style.height = "24px";
+			swatch.style.border = "1px solid #fff";
+			swatch.style.borderRadius = "3px";
+			footer.appendChild(swatch);
+
+			var closeBtn = document.createElement("input");
+			closeBtn.setAttribute("type", "submit");
+			closeBtn.setAttribute("class", "DesktopDashboard-button");
+			closeBtn.setAttribute("value", "Close");
+			closeBtn.onmouseup = function (e) {
+				document.getElementById("Settings-colorWheelPopup").style.display = "none";
+				if (e) e.stopPropagation();
+			};
+			footer.appendChild(closeBtn);
+
+			popup.appendChild(footer);
+			document.body.appendChild(popup);
+
+			//Close popup when clicking outside of it (capture to work even when other handlers stopPropagation)
+			if (!window._settingsColorWheelCloseHooked) {
+				window._settingsColorWheelCloseHooked = true;
+				document.addEventListener("mouseup", function (e) {
+					var p = document.getElementById("Settings-colorWheelPopup");
+					if (!p || p.style.display === "none") return;
+					if (e && e.target && p.contains(e.target)) return;
+					p.style.display = "none";
+				}, true);
+			}
+		} //end _buildColorWheelPopup()
+
+		//=====================================================================================
+		//_drawColorWheel ~~ render the HSV wheel at current brightness with a selection marker.
+		//	If previewHue/previewSat are provided, also draw a lighter hover marker there.
+		function _drawColorWheel(previewHue, previewSat) {
+			var canvas = document.getElementById("Settings-colorWheelCanvas");
+			if (!canvas) return;
+			var ctx = canvas.getContext("2d");
+			var w = canvas.width, h = canvas.height;
+			var cx = w / 2, cy = h / 2, radius = w / 2;
+			var val = _colorWheelState.val;
+
+			var image = ctx.createImageData(w, h);
+			var data = image.data;
+			for (var py = 0; py < h; ++py) {
+				for (var px = 0; px < w; ++px) {
+					var dx = px - cx, dy = py - cy;
+					var dist = Math.sqrt(dx * dx + dy * dy);
+					var idx = (py * w + px) * 4;
+					if (dist > radius) {
+						data[idx + 3] = 0; //transparent outside circle
+						continue;
+					}
+					var hue = Math.atan2(dy, dx) * 180 / Math.PI;
+					if (hue < 0) hue += 360;
+					var sat = dist / radius;
+					var rgb = _hsvToRgb(hue, sat, val);
+					data[idx] = rgb[0];
+					data[idx + 1] = rgb[1];
+					data[idx + 2] = rgb[2];
+					data[idx + 3] = 255;
+				}
+			}
+			ctx.putImageData(image, 0, 0);
+
+			//draw selection marker
+			var ang = _colorWheelState.hue * Math.PI / 180;
+			var mr = _colorWheelState.sat * radius;
+			var mx = cx + mr * Math.cos(ang);
+			var my = cy + mr * Math.sin(ang);
+			ctx.beginPath();
+			ctx.arc(mx, my, 6, 0, 2 * Math.PI);
+			ctx.strokeStyle = "#000";
+			ctx.lineWidth = 2;
+			ctx.stroke();
+			ctx.beginPath();
+			ctx.arc(mx, my, 6, 0, 2 * Math.PI);
+			ctx.strokeStyle = "#fff";
+			ctx.lineWidth = 1;
+			ctx.stroke();
+
+			//draw hover preview marker (if provided and different from committed)
+			if (typeof previewHue === "number" && typeof previewSat === "number") {
+				var pang = previewHue * Math.PI / 180;
+				var pr = previewSat * radius;
+				var pmx = cx + pr * Math.cos(pang);
+				var pmy = cy + pr * Math.sin(pang);
+				ctx.beginPath();
+				ctx.arc(pmx, pmy, 5, 0, 2 * Math.PI);
+				ctx.strokeStyle = "rgba(255,255,255,0.9)";
+				ctx.lineWidth = 2;
+				ctx.stroke();
+			}
+		} //end _drawColorWheel()
+
+		//=====================================================================================
+		//_syncColorWheelToInputs ~~ push current wheel HSV into the R/G/B inputs + refresh form
+		function _syncColorWheelToInputs() {
+			var i = _colorWheelState.index;
+			if (i < 0) return;
+			var rgb = _hsvToRgb(_colorWheelState.hue, _colorWheelState.sat, _colorWheelState.val);
+			for (var j = 0; j < 3; ++j)
+				document.getElementById("Settings-colorInput" + i + j).value = rgb[j];
+			extractRGBtoForm(extractFormToRGB(i), i); //refresh box + inputs (handles alpha)
+			var swatch = document.getElementById("Settings-colorWheelSwatch");
+			if (swatch) swatch.style.backgroundColor = "rgb(" + rgb[0] + "," + rgb[1] + "," + rgb[2] + ")";
+			var slider = document.getElementById("Settings-colorWheelValue");
+			if (slider) slider.value = Math.round(_colorWheelState.val * 100);
+		} //end _syncColorWheelToInputs()
+
+		//=====================================================================================
+		//_hsvToRgb ~~ h in [0,360), s,v in [0,1] -> [r,g,b] each in [0,255]
+		function _hsvToRgb(h, s, v) {
+			var c = v * s;
+			var x = c * (1 - Math.abs(((h / 60) % 2) - 1));
+			var m = v - c;
+			var r = 0, g = 0, b = 0;
+			if (h < 60) { r = c; g = x; b = 0; }
+			else if (h < 120) { r = x; g = c; b = 0; }
+			else if (h < 180) { r = 0; g = c; b = x; }
+			else if (h < 240) { r = 0; g = x; b = c; }
+			else if (h < 300) { r = x; g = 0; b = c; }
+			else { r = c; g = 0; b = x; }
+			return [
+				Math.round((r + m) * 255),
+				Math.round((g + m) * 255),
+				Math.round((b + m) * 255)
+			];
+		} //end _hsvToRgb()
+
+		//=====================================================================================
+		//_rgbToHsv ~~ r,g,b in [0,255] -> [h(0-360), s(0-1), v(0-1)]
+		function _rgbToHsv(r, g, b) {
+			r /= 255; g /= 255; b /= 255;
+			var max = Math.max(r, g, b), min = Math.min(r, g, b);
+			var d = max - min;
+			var h = 0;
+			if (d != 0) {
+				if (max == r) h = ((g - b) / d) % 6;
+				else if (max == g) h = (b - r) / d + 2;
+				else h = (r - g) / d + 4;
+				h *= 60;
+				if (h < 0) h += 360;
+			}
+			var s = max == 0 ? 0 : d / max;
+			return [h, s, max];
+		} //end _rgbToHsv()
 
 		//=====================================================================================
 		//setLayout ~~
@@ -1323,54 +1699,50 @@
 				<input class='prefBtn' type='submit' value='Save Preferences'
 					   onmouseup='saveGenPreferences(); event.stopPropagation(); return false;' />
 				<br>
-				<h3>Color Scheme:</h3>
-				<table>
-					<td>
-						<div id='colorInputs'></div>
-						<div id='clearDiv'></div>
-						<a target='_blank' href='http://www.colorschemer.com/online'>RGB Generator</a>
-						<a onmouseup='defaultColors(); return false;'>Default Colors</a>
-					</td>
-				</table>
-				<h3>Desktop Window Arrangement Presets:</h3>
-				<div id='windLayoutDiv'>
-					<!-- <a onmouseup='Javascript:setLayout(1,event)' class='winLayoutLink' id='winLayoutLink1'><li>Set Current Window Layout as User Preset-1</li></a>
-					<div class='winLayoutText' id='winLayoutText1'></div>
-					<br>
-					<a onmouseup='Javascript:setLayout(2,event)' class='winLayoutLink' id='winLayoutLink2'><li>Set Current Window Layout as User Preset-2</li></a>
-					<div class='winLayoutText' id='winLayoutText2'></div>
-					<br>
-					<a onmouseup='Javascript:setLayout(3,event)' class='winLayoutLink' id='winLayoutLink3'><li>Set Current Window Layout as User Preset-3</li></a>
-					<div class='winLayoutText' id='winLayoutText3'></div>
 
-					<div id='windSystemLayoutDiv' style='display:none'>
-							<hr width='50%'/>
-							<a onmouseup='Javascript:setLayout(4,event)' class='winLayoutLink' id='winSysLayoutLink1'><li>Set Current Window Layout as System Preset-1</li></a>
-							<div class='winLayoutText' id='winSysLayoutText1'></div>
-							<br>
-							<a onmouseup='Javascript:setLayout(5,event)' class='winLayoutLink' id='winSysLayoutLink2'><li>Set Current Window Layout as System Preset-2</li></a>
-							<div class='winLayoutText' id='winSysLayoutText2'></div>
-					</div> -->
+				<div class='genPrefsColumns'>
+					<div class='genPrefsCol' style='width: 544px'>
+						<h3>Color Scheme:</h3>
+						<table>
+							<td>
+								<div id='colorInputs'></div>
+								<div class='clearDiv'></div>
+								<a target='_blank' href='http://www.colorschemer.com/online'>RGB Generator</a>
+								<a onmouseup='defaultColors(); return false;'>Default Colors</a>
+							</td>
+						</table>
+
+						<div class='clearDiv'></div>
+						<h3>Misc. Personal Customizations:</h3>
+						<center>
+							<div id='miscCustomizationsBox'>
+								<button class='reset' onmouseup='Javascript:resetUserTooltips()'>Reset My Tooltips</button> <!--onmouseup='Javascript:resetUserTooltips()'-->
+
+								<button class='silence' onclick='Javascript:silenceUserTooltips()'>Silence My Tooltips</button>
+							</div>
+						</center>
+					</div>
+
+					<div class='genPrefsCol'>
+						<h3>Desktop Window Arrangement Presets:</h3>
+						<div class='genPrefsSubCol' style='width: 544px'>
+							<div id='windLayoutDiv'></div>
+
+							<div id='windSystemLayoutCol' style='display:none'>
+								<div id='windSystemLayoutDiv'></div>
+							</div>
+						</div>
+					</div>
 				</div>
 			</center>
 
 
-			<div id='clearDiv'></div>
+			<div class='clearDiv'></div>
 
-			<br>
-			<center><input class='prefBtn' type='submit' value='Save Preferences' onmouseup='saveGenPreferences(event); return false;' /></center>
+			<!-- <br>
+			<center><input class='prefBtn' type='submit' value='Save Preferences' onmouseup='saveGenPreferences(event); return false;' /></center> -->
 
 		</div> <!-- end genPreferences -->
-
-		<div id='clearDiv'></div>
-		<h3>Misc. Personal Customizations:</h3>
-
-		<center>
-			<button class='reset' onmouseup='Javascript:resetUserTooltips()'>Reset My Tooltips</button> <!--onmouseup='Javascript:resetUserTooltips()'-->
-
-			<button class='silence' onclick='Javascript:silenceUserTooltips()'>Silence My Tooltips</button>
-		</center>
-
 
 		<a name="ACCOUNTS_LABEL"></a>
 		<div id='accountsDiv'></div>

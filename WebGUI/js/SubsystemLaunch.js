@@ -32,9 +32,9 @@ else if (typeof Globals == 'undefined')
 SubsystemLaunch.MENU_PRIMARY_COLOR = "rgb(220, 187, 165)";
 SubsystemLaunch.MENU_SECONDARY_COLOR = "rgb(130, 51, 51)";
 
-SubsystemLaunch.SUBSYSTEM_FIELDS = ["name","url","status","progress","detail","lastStatusTime","configAlias","configAliasChoices","fsmMode","fsmIncluded","landingPage"];
+SubsystemLaunch.SUBSYSTEM_FIELDS = ["name","url","status","progress","detail","lastStatusTime","lastStatusChangeTime","configAlias","configAliasChoices","fsmMode","fsmIncluded","landingPage"];
 SubsystemLaunch.SUBSYSTEM_FIELDS_NAME = SubsystemLaunch.SUBSYSTEM_FIELDS.indexOf("name");
-SubsystemLaunch.SUBSYSTEM_STATUS_FIELDS = ["name","url","status","progress","detail","lastStatusTime","configAlias","configAliasChoices","fsmMode","fsmIncluded","consoleErrCount","consoleWarnCount"];
+SubsystemLaunch.SUBSYSTEM_STATUS_FIELDS = ["name","url","status","progress","detail","lastStatusTime","lastStatusChangeTime","configAlias","configAliasChoices","fsmMode","fsmIncluded","consoleErrCount","consoleWarnCount"];
 SubsystemLaunch.SUBSYSTEM_STATUS_FIELDS_STATUS = SubsystemLaunch.SUBSYSTEM_STATUS_FIELDS.indexOf("status");
 SubsystemLaunch.SUBSYSTEM_STATUS_FIELDS_INCLUDED = SubsystemLaunch.SUBSYSTEM_STATUS_FIELDS.indexOf("fsmIncluded");
 SubsystemLaunch.SUBSYSTEM_STATUS_FIELDS_ALIASES = SubsystemLaunch.SUBSYSTEM_STATUS_FIELDS.indexOf("configAliasChoices");
@@ -77,6 +77,7 @@ SubsystemLaunch.create = function() {
 	//
 	//		'public' member functions: -------
 	//	this.handleSubsystemActionSelect(el, subsystemIndex)
+	//	this.handleSystemConfigAliasSelect(value)
 	//	this.handleSubsystemConfigAliasSelect(value, subsystemIndex)
 	//	this.getSubsystemConfigAliasSelectInfo(subsystemIndex)
 	//	this.bootSubsystem(subsystemIndex)
@@ -180,7 +181,7 @@ SubsystemLaunch.create = function() {
 
 
 			window.onclick = function () {
-				Debug.log("User clicked window, resetting timer...");
+				Debug.log("DIAG: window.onclick fired, resetting timer. nonce=",_statusRequestNonce);
 				window.clearTimeout(_getStatusTimer);
 				_getStatusTimer = window.setTimeout(getCurrentStatus,1000);
 			}; //end window onclick handler
@@ -486,16 +487,17 @@ SubsystemLaunch.create = function() {
 
 			{ //system status div -------------------------
 				let numOfCols = 4;
+				let consoleRowH = (redrawMode == 2) ? 54 : 90;
 				el = document.createElement("div");
 				el.setAttribute("id","systemStatusDiv");
 				str = "<table cellspacing='5px'>";
 				str += "<tr><th colspan=" + numOfCols + ">System Status</th></tr>";
-				str += "<tr><td id='systemStatusState'>";
+				str += "<tr style='height: 25px;'><td id='systemStatusState'>";
 				//add state
 				str += SubsystemLaunch.system.state;
 				str += "</td><td id='systemStatusTimeInState'>";
 				str += "</td><td id='systemStatus_runNumber'>";
-				str += "</td><td style='cursor: pointer; white-space: nowrap;' id='systemStatusActiveUsers' " +
+				str += "</td><td style='cursor: pointer; white-space: nowrap; width: 240px;' id='systemStatusActiveUsers' " +
 					"onclick='SubsystemLaunch.openChatWindow();' title='Click to open Chat window'>";
 				str += "</td></tr>";
 				str += "<tr><td>";
@@ -520,7 +522,8 @@ SubsystemLaunch.create = function() {
 							"</option>";
 					}
 					str += "</select>";
-					str += "</td><td id='systemConfigAliasTranslation' colspan=" + (numOfCols-2) + " title='Click to copy text' onclick='SubsystemLaunch.copyText(this);'>";
+					str += "</td><td id='systemConfigAliasTranslation' colspan=" + (numOfCols-2) + " style='vertical-align: top;' title='Click to copy text' onclick='SubsystemLaunch.copyText(this);'>";
+					str += "<div class='system_scroll_wrap' style='height: 50px; overflow-y: auto;'>";
 					var aliasTranslation = ""; //set as innerText to handle special HTML chars
 					if (selc >= 0) {
 						str += "Configure Alias '" + SubsystemLaunch.system.systemAliases[selc].name +
@@ -539,7 +542,7 @@ SubsystemLaunch.create = function() {
 					else
 						str += "&lt;=== Please select a valid System Configure Alias!";
 
-					str += "</td><td  >";
+					str += "</div></td><td style='width: 240px;'>";
 					str += "<button class='systemFsmActionButton' id='systemManualFsmAction_Configure' " +
 						"onClick='SubsystemLaunch.launcher.handleSubsystemActionSelect(this, -1);'" +
 						"title='Configure the entire System (all included subsystems)'" +
@@ -555,51 +558,74 @@ SubsystemLaunch.create = function() {
 						"onClick='SubsystemLaunch.launcher.handleSubsystemActionSelect(this, -1);'" +
 						"title='Halt the entire System (all included subsystems)'" +
 						">Halt</button>";
+					str += "<div id='systemRelaunchButton' " +
+						"title='Click to relaunch the top-level ots system in Normal Mode' " +
+						"onclick='SubsystemLaunch.launcher.bootTopLevel();' " +
+						"></div>";
 					str += "</td></tr>";
 				}
 
-				str += "<tr><td colspan=" + numOfCols + " style='text-align: left'>Active State Machine: <label id='systemStatus_activeFsm' class='subtext' title='Click to copy text' onclick='SubsystemLaunch.copyText(this);'></label>";
-				str += "</td></tr>";
+				str += "<tr><td colspan=" + numOfCols + " style='text-align: left; padding-top: 4px; padding-bottom: 4px;'>";
+				str += "<div class='system_scroll_wrap' style='max-height: 90px; overflow-y: auto;'>Active State Machine: <label id='systemStatus_activeFsm' class='subtext' title='Click to copy text' onclick='SubsystemLaunch.copyText(this);'></label>";
+				str += "</div></td></tr>";
 				if(SubsystemLaunch.system.lastRunLogEntry) //if not undefined
 				{
-					str += "<tr><td colspan=" + numOfCols + " style='text-align: left'>Last Run Type: <label id='systemStatus_lastRunLogEntry' class='subtext' title='Click to copy text' onclick='SubsystemLaunch.copyText(this);'></label>";
+					str += "<tr><td colspan=" + numOfCols + " style='text-align: left; padding-top: 4px; padding-bottom: 4px;'>Last Run Type: <label id='systemStatus_lastRunLogEntry' class='subtext' title='Click to copy text' onclick='SubsystemLaunch.copyText(this);'></label>";
 					str += "</td></tr>";
 				}
-				str += "<tr><td colspan=" + numOfCols + " style='text-align: left'>Last Logbook Entry: <label id='systemStatus_lastLogbookEntry' class='subtext' title='Click to copy text' onclick='SubsystemLaunch.copyText(this);'></label>";
+				str += "<tr><td colspan=" + numOfCols + " style='text-align: left; padding-top: 4px; padding-bottom: 4px;'>Last Logbook Entry: <label id='systemStatus_lastLogbookEntry' class='subtext' title='Click to copy text' onclick='SubsystemLaunch.copyText(this);'></label>";
 				str += "</td></tr>";
-				str += "<tr><td colspan=" + numOfCols + " style='text-align: left'>Last System Message: <label id='systemStatus_lastSystemMessage' class='subtext' title='Click to copy text' onclick='SubsystemLaunch.copyText(this);'></label>";
+				str += "<tr><td colspan=" + numOfCols + " style='text-align: left; padding-top: 4px; padding-bottom: 4px;'>Last System Message: <label id='systemStatus_lastSystemMessage' class='subtext' title='Click to copy text' onclick='SubsystemLaunch.copyText(this);'></label>";
 				str += "</td></tr>";
-				str += "<tr><td colspan=" + numOfCols + " style='text-align: left'>Log File Rollover Mode: <label id='systemStatus_logRolloverMode' class='subtext' title='Click to copy text' onclick='SubsystemLaunch.copyText(this);'></label>";
+				str += "<tr><td colspan=" + numOfCols + " style='text-align: left; padding-top: 4px; padding-bottom: 4px;'>Log File Rollover Mode: <label id='systemStatus_logRolloverMode' class='subtext' title='Click to copy text' onclick='SubsystemLaunch.copyText(this);'></label>";
 				str += "</td></tr>";
 
 				//console err/warn count
-				str += "<tr><td rowspan=1 style='text-align: right; padding-right: 5px; padding-left: 5px; white-space: nowrap;'>";
-				str += "<a onclick='SubsystemLaunch.resetConsoleCounts(-1);' id='systemStatus_consoleInfoCount' class='hover_link' title='Click to reset Console counts and relatch first messages'>";
-				str += SubsystemLaunch.system.consoleInfoCount;
-				str += "</a>";
-				str += "</td><td colspan=" + (numOfCols-1) + " style='text-align: left'>First Console Info: <label id='systemStatus_consoleFirstInfoMessage' class='subtext' title='Click to copy text' onclick='SubsystemLaunch.copyText(this);'></label>";
+				str += "<tr><td rowspan=1 style='white-space: nowrap; width: 200px; height: " + consoleRowH + "px;'>";
+				str += "<a onclick='SubsystemLaunch.resetConsoleCounts(-1);' class='hover_link' " +
+					"style='display:inline-block; width:130px; text-align:right; margin-left:20px;' " +
+					"title='Click to reset Console counts and relatch first messages'>Console Info #:</a>" +
+					"<a onclick='SubsystemLaunch.resetConsoleCounts(-1);' id='systemStatus_consoleInfoCount' class='hover_link' " +
+					"style='display:inline-block; width:60px; text-align:left; padding-left:15px;' " +
+					"title='Click to reset Console counts and relatch first messages'>" +
+					(SubsystemLaunch.system.consoleInfoCount||"").replace(/.*: /,"") +
+					"</a>";
+				str += "</td><td colspan=" + (numOfCols-1) + " style='text-align: left; vertical-align: top;'>";
+				str += "<div class='system_scroll_wrap' style='height: " + consoleRowH + "px; overflow-y: auto;'>First Console Info: <label id='systemStatus_consoleFirstInfoMessage' class='subtext' title='Click to copy text' onclick='SubsystemLaunch.copyText(this);'></label>";
 				// str += "</td></tr><tr><td colspan=" + (numOfCols-1) + " style='text-align: left'>";
 				str += "<br>";
 				str += "Last Console Info: <label id='systemStatus_consoleInfoMessage' class='subtext' title='Click to copy text' onclick='SubsystemLaunch.copyText(this);'></label>";
-				str += "</td></tr>";
-				str += "<tr><td rowspan=1 style='text-align: right; padding-right: 5px; padding-left: 5px; white-space: nowrap;'>";
-				str += "<a onclick='SubsystemLaunch.resetConsoleCounts(-1);' id='systemStatus_consoleWarnCount' class='hover_link' title='Click to reset Console counts and relatch first messages'>";
-				str += SubsystemLaunch.system.consoleWarnCount;
-				str += "</a>";
-				str += "</td><td colspan=" + (numOfCols-1) + " style='text-align: left'>First Console Warning: <label id='systemStatus_consoleFirstWarnMessage' class='subtext' title='Click to copy text' onclick='SubsystemLaunch.copyText(this);'></label>";
+				str += "</div></td></tr>";
+				str += "<tr><td rowspan=1 style='white-space: nowrap; width: 200px; height: " + consoleRowH + "px;'>";
+				str += "<a onclick='SubsystemLaunch.resetConsoleCounts(-1);' class='hover_link' " +
+					"style='display:inline-block; width:130px; text-align:right; margin-left:20px;' " +
+					"title='Click to reset Console counts and relatch first messages'>Console Warn #:</a>" +
+					"<a onclick='SubsystemLaunch.resetConsoleCounts(-1);' id='systemStatus_consoleWarnCount' class='hover_link' " +
+					"style='display:inline-block; width:60px; text-align:left; padding-left:15px;' " +
+					"title='Click to reset Console counts and relatch first messages'>" +
+					(SubsystemLaunch.system.consoleWarnCount||"").replace(/.*: /,"") +
+					"</a>";
+				str += "</td><td colspan=" + (numOfCols-1) + " style='text-align: left; vertical-align: top;'>";
+				str += "<div class='system_scroll_wrap' style='height: " + consoleRowH + "px; overflow-y: auto;'>First Console Warning: <label id='systemStatus_consoleFirstWarnMessage' class='subtext' title='Click to copy text' onclick='SubsystemLaunch.copyText(this);'></label>";
 				// str += "</td></tr><tr><td colspan=" + (numOfCols-1) + " style='text-align: left'>";
 				str += "<br>";
 				str += "Last Console Warning: <label id='systemStatus_consoleWarnMessage' class='subtext' title='Click to copy text' onclick='SubsystemLaunch.copyText(this);'></label>";
-				str += "</td></tr>";
-				str += "<tr><td rowspan=1 style='text-align: right; padding-right: 5px; white-space: nowrap;'>";
-				str += "<a onclick='SubsystemLaunch.resetConsoleCounts(-1);' id='systemStatus_consoleErrCount' class='hover_link' title='Click to reset Console counts and relatch first messages'>";
-				str += SubsystemLaunch.system.consoleErrCount;
-				str += "</a>";
-				str += "</td><td colspan=" + (numOfCols-1) + " style='text-align: left'>First Console Error: <label id='systemStatus_consoleFirstErrMessage' class='subtext' title='Click to copy text' onclick='SubsystemLaunch.copyText(this);'></label>";
+				str += "</div></td></tr>";
+				str += "<tr><td rowspan=1 style='white-space: nowrap; width: 200px; height: " + consoleRowH + "px;'>";
+				str += "<a onclick='SubsystemLaunch.resetConsoleCounts(-1);' class='hover_link' " +
+					"style='display:inline-block; width:130px; text-align:right; margin-left:20px;' " +
+					"title='Click to reset Console counts and relatch first messages'>Console Err #:</a>" +
+					"<a onclick='SubsystemLaunch.resetConsoleCounts(-1);' id='systemStatus_consoleErrCount' class='hover_link' " +
+					"style='display:inline-block; width:60px; text-align:left; padding-left:15px;' " +
+					"title='Click to reset Console counts and relatch first messages'>" +
+					(SubsystemLaunch.system.consoleErrCount||"").replace(/.*: /,"") +
+					"</a>";
+				str += "</td><td colspan=" + (numOfCols-1) + " style='text-align: left; vertical-align: top;'>";
+				str += "<div class='system_scroll_wrap' style='height: " + consoleRowH + "px; overflow-y: auto;'>First Console Error: <label id='systemStatus_consoleFirstErrMessage' class='subtext' title='Click to copy text' onclick='SubsystemLaunch.copyText(this);'></label>";
 				// str += "</td></tr><tr><td colspan=" + (numOfCols-1) + " style='text-align: left'>";
 				str += "<br>";
 				str += "Last Console Error: <label id='systemStatus_consoleErrMessage' class='subtext' title='Click to copy text' onclick='SubsystemLaunch.copyText(this);'></label>";
-				str += "</td></tr>";
+				str += "</div></td></tr>";
 
 
 				str += "</table>";
@@ -674,7 +700,7 @@ SubsystemLaunch.create = function() {
 						// 	},"",true);
 					}
 					else if(fields[i] == "State")
-						str += "<th style='width:120px'>" + fields[i] + "</th>";
+						str += "<th style='width:150px'>" + fields[i] + "</th>";
 					else
 						str += "<th>" + fields[i] + "</th>";
 				}
@@ -853,16 +879,26 @@ SubsystemLaunch.create = function() {
 
 		var parentTd = document.getElementById('systemConfigAliasTranslation');
 		if(parentTd) {
-			if(SubsystemLaunch.system.subsystemCommonList) {
+			{
+				var commonTypes = ["SubsystemCommon", "SubsystemCommonOverride", "SubsystemCommonContext", "SubsystemCommonContextOverride"];
+				var commonKeys = ["subsystemCommonList", "subsystemCommonOverrideList", "subsystemCommonContextList", "subsystemCommonContextOverrideList"];
+				for(var ci = 0; ci < commonTypes.length; ++ci) {
+					var span = document.createElement('span');
+					span.id = 'subsystemCommonSpan_' + commonTypes[ci];
+					span.innerText = SubsystemLaunch.system[commonKeys[ci]]
+						? ("\n" + commonTypes[ci] + " tables: " + SubsystemLaunch.system[commonKeys[ci]])
+						: "";
+					parentTd.appendChild(span);
+				}
+			}
+			{
 				var span = document.createElement('span');
-				span.innerText = "\nSubsystemCommon tables: " + SubsystemLaunch.system.subsystemCommonList;
+				span.id = 'systemConfigAliasGlobalFields';
 				parentTd.appendChild(span);
 			}
-			if(SubsystemLaunch.system.subsystemCommonOverrideList) {
-				var span = document.createElement('span');
-				span.innerText = "\nSubsystemCommonOverride tables: " + SubsystemLaunch.system.subsystemCommonOverrideList;
-				parentTd.appendChild(span);
-			}
+			if(SubsystemLaunch.system.selectedSystemAlias)
+				SubsystemLaunch.launcher.handleSystemConfigAliasSelect(
+					SubsystemLaunch.system.selectedSystemAlias);
 		}
 
 		displayStatus(); //fill elements with data
@@ -1034,9 +1070,13 @@ SubsystemLaunch.create = function() {
 		++_statusRequestNonce;
 	}
 	function getCurrentStatus() {
-		// Debug.log("getCurrentStatus()");
+		Debug.log("DIAG: getCurrentStatus() called, prevNonce=",_statusRequestNonce);
 		window.clearTimeout(_getStatusTimer);
+
+		if(DesktopContent._isSystemBlackout) return;
+
 		const currentStatusNonce = ++_statusRequestNonce;
+		Debug.log("DIAG: getCurrentStatus() nonce now=",currentStatusNonce);
 
 		//getRemoteSubsystemStatus returns iterator status and does not request next run number (which is expensive)
 		//	.. so only get run number 1:10
@@ -1061,9 +1101,11 @@ SubsystemLaunch.create = function() {
 		//===========
 		function localGetStatusHandler(req, responseNonce) {
 			if(responseNonce != _statusRequestNonce) {
-				Debug.log("Ignoring stale status response",responseNonce,_statusRequestNonce);
+				Debug.log("DIAG: Ignoring stale status response, responseNonce=",responseNonce,
+					"currentNonce=",_statusRequestNonce);
 				return;
 			}
+			Debug.log("DIAG: Processing status response, nonce=",responseNonce);
 
 			//subsystems --------------------
 			{
@@ -1104,12 +1146,20 @@ SubsystemLaunch.create = function() {
 					for (var i = 0; i < fields.length; ++i) {
 						if (i == SubsystemLaunch.SUBSYSTEM_STATUS_FIELDS_STATUS) {
 							var status = subsystemArrs[fields[i]][j].getAttribute('value');
+							if(status != SubsystemLaunch.subsystems[j][fields[i]])
+								Debug.log("DIAG: status change for",SubsystemLaunch.subsystems[j].name,
+									"old=",SubsystemLaunch.subsystems[j][fields[i]],
+									"new=",status,
+									"nonce=",responseNonce);
 							if(SubsystemLaunch.subsystems[j].fsmIncluded && //give popup warning if subsystem included and new unknown status
 									status == SubsystemLaunch.SUBSYSTEM_STATUS_UNKOWN &&
 								status != SubsystemLaunch.subsystems[j][fields[i]]) {
-								Debug.warn("From Subsystem '" +
-									SubsystemLaunch.subsystems[j].name + " (" + SubsystemLaunch.subsystems[j].url + ")... " +
-									"Status is UNKNOWN. This may indicate that the Subsystem is offline or unreachable, or if intermittent, too many TRACE levels may be enabled.");
+								var rebootAge = SubsystemLaunch.subsystems[j]._rebootTime
+									? (Date.now() - SubsystemLaunch.subsystems[j]._rebootTime) / 1000 : 999;
+								if(rebootAge > 60)
+									Debug.warn("From Subsystem '" +
+										SubsystemLaunch.subsystems[j].name + " (" + SubsystemLaunch.subsystems[j].url + ")... " +
+										"Status is UNKNOWN. This may indicate that the Subsystem is offline or unreachable, or if intermittent, too many TRACE levels may be enabled.");
 							}
 
 							if (status.indexOf("Launching") == 0) {
@@ -1124,12 +1174,37 @@ SubsystemLaunch.create = function() {
 								//	Check: if old status did not start with an error prefix,
 								//	then this is a genuinely new error to display.
 								var oldStatus = SubsystemLaunch.subsystems[j][fields[i]];
-								if(!oldStatus || (oldStatus.indexOf("Fail") != 0 &&
+								var isNewError = !oldStatus || (oldStatus.indexOf("Fail") != 0 &&
 										oldStatus.indexOf("Error") != 0 &&
-										oldStatus.indexOf("Soft") != 0))
-									Debug.err("From Subsystem '" +
-										SubsystemLaunch.subsystems[j].name + "'... " +
-										status);
+										oldStatus.indexOf("Soft") != 0);
+
+								if(isNewError)
+								{
+									let lastStatusChangeTime = subsystemArrs["lastStatusChangeTime"][j] ?
+										subsystemArrs["lastStatusChangeTime"][j].getAttribute('value') :
+										SubsystemLaunch.subsystems[j].lastStatusChangeTime;
+									let secondsAgo = SubsystemLaunch.extractErrorSecondsAgo(status);
+
+									if(secondsAgo == -1 && lastStatusChangeTime)
+									{
+										let parsed = Date.parse(lastStatusChangeTime);
+										if(!Number.isNaN(parsed) && parsed > 0)
+											secondsAgo = Math.floor((Date.now() - parsed) / 1000);
+									}
+
+									if(SubsystemLaunch.isFirstTime() && secondsAgo > 60)
+									{
+										Debug.warn("Here is the last error from Subsystem '" +
+											SubsystemLaunch.subsystems[j].name + "' [" + secondsAgo + " seconds ago]... " +
+											status);
+									}
+									else if(secondsAgo == -1 || secondsAgo < 60)
+									{
+										Debug.err("From Subsystem '" +
+											SubsystemLaunch.subsystems[j].name + "'... " +
+											status);
+									}
+								}
 							}
 
 							SubsystemLaunch.subsystems[j][fields[i]] = status;
@@ -1166,6 +1241,24 @@ SubsystemLaunch.create = function() {
 				// Debug.log("subsystem obj", SubsystemLaunch.subsystems);
 			} //end subsystems ------
 
+
+			//subsystem common table lists (updated each poll) ----------
+			{
+				var commonTypes = ["SubsystemCommon", "SubsystemCommonOverride", "SubsystemCommonContext", "SubsystemCommonContextOverride"];
+				var commonKeys = ["subsystemCommonList", "subsystemCommonOverrideList", "subsystemCommonContextList", "subsystemCommonContextOverrideList"];
+				var commonXmlTags = ["SubsystemCommonList", "SubsystemCommonOverrideList", "SubsystemCommonContextList", "SubsystemCommonContextOverrideList"];
+				for(var ci = 0; ci < commonTypes.length; ++ci) {
+					var val = DesktopContent.getXMLValue(req, commonXmlTags[ci]) || "";
+					if(val != SubsystemLaunch.system[commonKeys[ci]]) {
+						SubsystemLaunch.system[commonKeys[ci]] = val;
+						var span = document.getElementById('subsystemCommonSpan_' + commonTypes[ci]);
+						if(span)
+							span.innerText = val
+								? ("\n" + commonTypes[ci] + " tables: " + val)
+								: "";
+					}
+				}
+			} //end subsystem common table lists ----------
 
 			//system state ------------------------
 			{
@@ -1355,6 +1448,11 @@ SubsystemLaunch.create = function() {
 						(" (" + SubsystemLaunch.system.activeFsmWindow + ")"):"") +
 					((SubsystemLaunch.system.activeFsmStatus && SubsystemLaunch.system.inTransition)?
 						(" - " + SubsystemLaunch.system.activeFsmStatus):"");
+			else if(fieldIds[i] == "consoleInfoCount" || fieldIds[i] == "consoleWarnCount" || fieldIds[i] == "consoleErrCount") {
+				var countVal = SubsystemLaunch.system[fieldIds[i]];
+				var colonPos = countVal.lastIndexOf(": ");
+				el.innerText = colonPos >= 0 ? countVal.substring(colonPos + 2) : countVal;
+			}
 			else
 				el.innerText = SubsystemLaunch.system[fieldIds[i]];
 		}
@@ -1370,6 +1468,15 @@ SubsystemLaunch.create = function() {
 					fieldIds[i] == "fsmMode") {
 					el = document.getElementById("subsystem_" + fieldIds[i] +
 						"_select_" + s);
+					var pendingKey = (fieldIds[i] == "configAlias") ? "_pendingConfigAlias" : "_pendingFsmMode";
+					var pendingVal = SubsystemLaunch.subsystems[s][pendingKey];
+					if (pendingVal !== undefined) {
+						if (SubsystemLaunch.subsystems[s][fieldIds[i]] == pendingVal) {
+							delete SubsystemLaunch.subsystems[s][pendingKey];
+						} else {
+							continue;
+						}
+					}
 					if (el.value != SubsystemLaunch.subsystems[s][fieldIds[i]]) {
 						if(SubsystemLaunch.subsystems[s].configAliasChoices)
 							Debug.warn("The selected " + fieldIds[i] + " for Subsystem '" +
@@ -1423,15 +1530,15 @@ SubsystemLaunch.create = function() {
 				else {
 					el = document.getElementById("subsystem_" + s + "_" + fieldIds[i]);
 
-					if(fieldIds[i] == "detail" && SubsystemLaunch.subsystems[s].lastStatusTime &&
-							SubsystemLaunch.subsystems[s].lastStatusTime != "0")
+					if(fieldIds[i] == "detail" && SubsystemLaunch.subsystems[s].lastStatusChangeTime &&
+							SubsystemLaunch.subsystems[s].lastStatusChangeTime != "0")
 					{
 						//use a temporary element to decode html entities (like &lt; &apos; and &gt;)
 						const tel = document.createElement("textarea");
 						tel.innerHTML = decodeURIComponent(SubsystemLaunch.subsystems[s][fieldIds[i]]);
 
 						const detailText = tel.value + " ( " +
-										SubsystemLaunch.subsystems[s].lastStatusTime + " )";
+										SubsystemLaunch.subsystems[s].lastStatusChangeTime + " )";
 
 						const scrollEl = document.getElementById("subsystem_" + s + "_detail_scroll");
 						if (scrollEl) {
@@ -1442,9 +1549,15 @@ SubsystemLaunch.create = function() {
 						else el.innerText = detailText;
 					}
 					else if(fieldIds[i] == "status")
+					{
+						Debug.log("DIAG: displayStatus rendering s=",s,
+							"name=",SubsystemLaunch.subsystems[s].name,
+							"status=",SubsystemLaunch.subsystems[s].status.substring(0,40),
+							"nonce=",_statusRequestNonce);
 						localDisplayState(el,
 							SubsystemLaunch.subsystems[s].status,
 							SubsystemLaunch.subsystems[s].progress);
+					}
 					else
 						el.innerText = SubsystemLaunch.subsystems[s][fieldIds[i]];
 
@@ -1529,7 +1642,7 @@ SubsystemLaunch.create = function() {
 				cell.style.background = "rgb(240,240,240)";
 				statusString += " " + progressNum + " %";
 			}
-			cell.innerHTML = "<div style='position:relative; z-index:2; white-space: nowrap;'>" + statusString + "</div>";
+			cell.innerHTML = "<div style='position:relative; z-index:2; white-space: nowrap; width:100%; overflow:hidden;'>" + statusString + "</div>";
 
 			// Debug.log("Status",progressNum, statusString, cell.offsetWidth, cell.offsetHeight);
 
@@ -1729,6 +1842,8 @@ SubsystemLaunch.create = function() {
 		var targetSubsystem = SubsystemLaunch.subsystems[subsystemIndex].name;
 
 		window.clearTimeout(_getStatusTimer);
+		invalidatePendingStatusResponses();
+		SubsystemLaunch.subsystems[subsystemIndex]._pendingConfigAlias = value;
 
 		DesktopContent.XMLHttpRequest("Request?RequestType=setRemoteSubsystemFsmControl" +
 				"&targetSubsystem=" + targetSubsystem +
@@ -1736,15 +1851,44 @@ SubsystemLaunch.create = function() {
 				"&controlType=configAlias",
 				"", //end post data,
 			function (req) {
+					if(!req) //error
+						delete SubsystemLaunch.subsystems[subsystemIndex]._pendingConfigAlias;
 					window.clearTimeout(_getStatusTimer);
 					_getStatusTimer = window.setTimeout(getCurrentStatus,1000); //in 1 sec
 				},  //end handler
-				0, 0, false,//reqParam, progressHandler, callHandlerOnErr,
+				0, 0, true,//reqParam, progressHandler, callHandlerOnErr,
 				false,//doNotShowLoadingOverlay,
 				true //targetGatewaySupervisor
 		); //end setRemoteSubsystemFsmControl request
 
 	}	//end handleSubsystemConfigAliasSelect()
+
+	//=====================================================================================
+	this.handleSystemConfigAliasSelect = function (value) {
+		Debug.log("handleSystemConfigAliasSelect()", value);
+		SubsystemLaunch.system.selectedSystemAlias = value;
+		if(!value) {
+			var el = document.getElementById("systemConfigAliasGlobalFields");
+			if(el) el.innerText = "";
+			return;
+		}
+
+		DesktopContent.XMLHttpRequest("Request?RequestType=getAliasGlobalFields" +
+				"&configAlias=" + encodeURIComponent(value),
+				"",
+			function (req) {
+					var globalFieldsStr = DesktopContent.getXMLValue(req, "global_fields_string") || "";
+					if(globalFieldsStr.indexOf(" | ") === 0)
+						globalFieldsStr = globalFieldsStr.substring(3);
+					var el = document.getElementById('systemConfigAliasGlobalFields');
+					if(el)
+						el.innerText = globalFieldsStr;
+				},
+				0, 0, false,
+				true,
+				true
+		);
+	}	//end handleSystemConfigAliasSelect()
 
 	//=====================================================================================
 	this.getSubsystemConfigAliasSelectInfo = function (subsystemIndex) {
@@ -1793,19 +1937,30 @@ SubsystemLaunch.create = function() {
 						//force state display for user feedback
 						SubsystemLaunch.subsystems[subsystemIndex].status = "Rebooting...";
 						SubsystemLaunch.subsystems[subsystemIndex].progress = 0;
+						SubsystemLaunch.subsystems[subsystemIndex]._rebootTime = Date.now();
 						displayStatus();
 
 						DesktopContent.XMLHttpRequest("Request?RequestType=gatewayLaunchOTSInstance" +
 						"&targetSubsystem=" + targetSubsystem,
 						"",
-							function (req) {
+							function (req, reqParam, errStr) {
+								if(!req) {
+									if(errStr)
+										Debug.err("Reboot failed for '" + targetSubsystem + "': " + errStr);
+									SubsystemLaunch.subsystems[subsystemIndex].status = "";
+									SubsystemLaunch.subsystems[subsystemIndex]._rebootTime = undefined;
+									displayStatus();
+									window.clearTimeout(_getStatusTimer);
+									_getStatusTimer = window.setTimeout(getCurrentStatus,1000);
+									return;
+								}
 								Debug.info("Reboot launched for '" + targetSubsystem + "'...!");
 
 								window.clearTimeout(_getStatusTimer);
 								_getStatusTimer = window.setTimeout(getCurrentStatus,1000); //in 1 sec
 
 							}, //request handler
-						0 /*reqParam*/, 0 /*progressHandler*/, false /*callHandlerOnErr*/,
+						0 /*reqParam*/, 0 /*progressHandler*/, true /*callHandlerOnErr*/,
 						false /*doNoShowLoadingOverlay*/,
 						true /*targetGatewaySupervisor*/);
 
@@ -1821,6 +1976,78 @@ SubsystemLaunch.create = function() {
 	}	//end bootSubsystem()
 
 	//=====================================================================================
+	this.bootTopLevel = function () {
+		Debug.log("bootTopLevel()");
+
+		DesktopContent.popUpVerification(
+			"Are you sure you want to relaunch the <b>top-level ots system</b> in Normal Mode?",
+			function () {
+				DesktopContent.popUpVerification(
+					"Are you REALLY sure you want to relaunch the <b>top-level ots system</b>?",
+					function () {
+						Debug.log("Relaunching top-level ots...");
+
+						window.clearTimeout(_getStatusTimer);
+						invalidatePendingStatusResponses();
+
+						DesktopContent.systemBlackout(true);
+						window.setTimeout(function() {
+							DesktopContent.XMLHttpRequest("Request?RequestType=gatewayLaunchOTS",
+								"",
+								function(req, id, errStr) {
+									if(req) {
+										var err = DesktopContent.getXMLValue(req, "Error");
+										if(err) {
+											Debug.err(err);
+											DesktopContent.systemBlackout(false);
+											return;
+										}
+									}
+									else if(errStr &&
+										errStr.indexOf("Request was interrupted") < 0) {
+										Debug.err("Relaunch failed: " + errStr);
+										DesktopContent.systemBlackout(false);
+										return;
+									}
+
+									var countDown = 20;
+									Debug.log("Attempting to restart the top-level system in Normal Mode... " +
+										"\n\n Please wait " + countDown +
+										" seconds.", Debug.INFO_PRIORITY);
+									localCountDown();
+									function localCountDown() {
+										Debug.log("Waiting " + countDown + " seconds for startup...",
+											Debug.INFO_PRIORITY);
+										window.setTimeout(function() {
+											--countDown;
+											if(countDown == 0) {
+												DesktopContent.systemBlackout(false);
+												Debug.log("And we are back!", Debug.INFO_PRIORITY);
+												window.clearTimeout(_getStatusTimer);
+												_getStatusTimer = window.setTimeout(getCurrentStatus, 1000);
+												return;
+											}
+											localCountDown();
+										}, 1000);
+									}
+								},
+								0 /*reqParam*/, 0 /*progressHandler*/,
+								true /*callHandlerOnErr*/,
+								false /*doNotShowLoadingOverlay*/,
+								true /*targetGatewaySupervisor*/,
+								true /*ignoreSystemBlock*/);
+						}, 1000); //delay to guarantee blackout starts
+
+					}, //end handler
+					0,"#efeaea",0,"#770000",0 /* getUserInput [optional] */ ,
+					350 /* dialogWidth [optional] */); //end second verify
+			},
+			0,"#efeaea",0,"#770000",0 /* getUserInput [optional] */ ,
+			350 /* dialogWidth [optional] */); //end first verify
+
+	}	//end bootTopLevel()
+
+	//=====================================================================================
 	this.handleSubsystemFsmModeSelect = function (value, subsystemIndex) {
 		Debug.log("handleSubsystemFsmModeSelect()", value, subsystemIndex);
 		if(value == "") return; //assume user is clearing
@@ -1828,6 +2055,8 @@ SubsystemLaunch.create = function() {
 		var targetSubsystem = SubsystemLaunch.subsystems[subsystemIndex].name;
 
 		window.clearTimeout(_getStatusTimer);
+		invalidatePendingStatusResponses();
+		SubsystemLaunch.subsystems[subsystemIndex]._pendingFsmMode = value;
 
 		DesktopContent.XMLHttpRequest("Request?RequestType=setRemoteSubsystemFsmControl" +
 				"&targetSubsystem=" + targetSubsystem +
@@ -1835,9 +2064,12 @@ SubsystemLaunch.create = function() {
 				"&controlType=mode",
 				"", //end post data,
 			function (req) {
+					if(!req) //error
+						delete SubsystemLaunch.subsystems[subsystemIndex]._pendingFsmMode;
+					window.clearTimeout(_getStatusTimer);
 					_getStatusTimer = window.setTimeout(getCurrentStatus,1000); //in 1 sec
 				},  //end handler
-				0, 0, false,//reqParam, progressHandler, callHandlerOnErr,
+				0, 0, true,//reqParam, progressHandler, callHandlerOnErr,
 				false,//doNotShowLoadingOverlay,
 				true //targetGatewaySupervisor
 		); //end setRemoteSubsystemFsmControl request
@@ -1861,7 +2093,9 @@ SubsystemLaunch.create = function() {
 
 		if (subsystemIndex == -1) {
 			Debug.log("System action - activeFsm", SubsystemLaunch.system.activeFsm,
-				SubsystemLaunch.system.activeFsmWindow
+				SubsystemLaunch.system.activeFsmWindow,
+				"command", command,
+				"system.state", SubsystemLaunch.system.state
 			);
 
 			var configAlias;
@@ -1969,7 +2203,9 @@ SubsystemLaunch.create = function() {
 					SubsystemLaunch.system.state == "Failed" ||
 					SubsystemLaunch.system.state == "Initial"))
 			{
-				Debug.log("Do batch Halt fsmName",_fsmName);
+				Debug.log("DIAG: Entering batch Halt path. fsmName=",_fsmName,
+					"system.state=",SubsystemLaunch.system.state,
+					"numSubsystems=",SubsystemLaunch.subsystems.length);
 
 				//send Halt to all checked subsystems individually
 
@@ -1993,26 +2229,44 @@ SubsystemLaunch.create = function() {
 
 				for(let s = 0; s < SubsystemLaunch.subsystems.length; ++s)
 				{
+					Debug.log("DIAG: batch Halt loop s=",s,
+						"name=",SubsystemLaunch.subsystems[s].name,
+						"fsmIncluded=",SubsystemLaunch.subsystems[s].fsmIncluded,
+						"inTransition=",SubsystemLaunch.subsystems[s].inTransition,
+						"status=",SubsystemLaunch.subsystems[s].status,
+						"fsmMode=",SubsystemLaunch.subsystems[s].fsmMode,
+						"fsmMode==DoNotHalt?",SubsystemLaunch.subsystems[s].fsmMode == "Do Not Halt",
+						"status.startsWith(Failed)?",SubsystemLaunch.subsystems[s].status.startsWith("Failed"));
 					if(SubsystemLaunch.subsystems[s].fsmIncluded &&
 						!SubsystemLaunch.subsystems[s].inTransition)
 					{
 						//mirror DoNotHalt broadcast logic from GatewaySupervisor.cc:9165-9194:
 						//Halt is never sent to a DoNotHalt subsystem; if it is Running/Paused,
 						//send Stop instead, otherwise leave it alone.
-						if(SubsystemLaunch.subsystems[s].fsmMode == "DoNotHalt")
+						//Exception: Failed subsystems must be Halted to recover.
+						if(SubsystemLaunch.subsystems[s].fsmMode == "Do Not Halt" &&
+							!SubsystemLaunch.subsystems[s].status.startsWith("Failed"))
 						{
 							if(SubsystemLaunch.subsystems[s].status == "Running" ||
 							   SubsystemLaunch.subsystems[s].status == "Paused")
 							{
-								Debug.log("Sending Stop (DoNotHalt mode) to subsystem",s,SubsystemLaunch.subsystems[s]);
+								Debug.log("DIAG: Sending Stop (DoNotHalt mode) to subsystem",s,SubsystemLaunch.subsystems[s]);
 								SubsystemLaunch.launcher.handleSubsystemActionSelect(stopEl,s);
 							}
 							else
-								Debug.log("Skipping DoNotHalt subsystem for batch Halt",s,SubsystemLaunch.subsystems[s]);
+								Debug.log("DIAG: Skipping DoNotHalt subsystem for batch Halt",s,SubsystemLaunch.subsystems[s]);
 							continue;
 						}
-						Debug.log("Sending halt to subsystem",s,SubsystemLaunch.subsystems[s]);
+						Debug.log("DIAG: Sending Halt to subsystem",s,
+							"name=",SubsystemLaunch.subsystems[s].name,
+							"fsmMode=",SubsystemLaunch.subsystems[s].fsmMode,
+							"status=",SubsystemLaunch.subsystems[s].status);
 						SubsystemLaunch.launcher.handleSubsystemActionSelect(el,s);
+					}
+					else
+					{
+						Debug.log("DIAG: Skipping subsystem (not included or in transition) s=",s,
+							"name=",SubsystemLaunch.subsystems[s].name);
 					}
 				}
 
@@ -2059,8 +2313,15 @@ SubsystemLaunch.create = function() {
 								displayStatus();
 
 								var allSubsystemsHalted = true;
+								Debug.log("DIAG: polling loop, checking subsystems for halted...");
 								for(let s = 0; s < SubsystemLaunch.subsystems.length; ++s)
 								{
+									Debug.log("DIAG: poll s=",s,
+										"name=",SubsystemLaunch.subsystems[s].name,
+										"fsmIncluded=",SubsystemLaunch.subsystems[s].fsmIncluded,
+										"inTransition=",SubsystemLaunch.subsystems[s].inTransition,
+										"status=",SubsystemLaunch.subsystems[s].status,
+										"fsmMode=",SubsystemLaunch.subsystems[s].fsmMode);
 									if(SubsystemLaunch.subsystems[s].fsmIncluded &&
 										(SubsystemLaunch.subsystems[s].inTransition ||
 											SubsystemLaunch.subsystems[s].status != "Halted"))
@@ -2068,13 +2329,24 @@ SubsystemLaunch.create = function() {
 										//DoNotHalt subsystems never reach "Halted" — treat them as done
 										//once they are no longer in transition and not actively
 										//Running/Paused (i.e. any Stop we issued has settled).
-										if(SubsystemLaunch.subsystems[s].fsmMode == "DoNotHalt" &&
+										//Exception: Failed subsystems were sent Halt and must reach "Halted".
+										if(SubsystemLaunch.subsystems[s].fsmMode == "Do Not Halt" &&
 											!SubsystemLaunch.subsystems[s].inTransition &&
 											SubsystemLaunch.subsystems[s].status != "Running" &&
-											SubsystemLaunch.subsystems[s].status != "Paused")
+											SubsystemLaunch.subsystems[s].status != "Paused" &&
+											!SubsystemLaunch.subsystems[s].status.startsWith("Failed"))
+										{
+											Debug.log("DIAG: DoNotHalt subsystem treated as done s=",s,
+												"name=",SubsystemLaunch.subsystems[s].name,
+												"status=",SubsystemLaunch.subsystems[s].status);
 											continue;
+										}
 
-										Debug.log("Not yet halted at subsystem",s,SubsystemLaunch.subsystems[s]);
+										Debug.log("DIAG: Not yet halted at subsystem s=",s,
+											"name=",SubsystemLaunch.subsystems[s].name,
+											"status=",SubsystemLaunch.subsystems[s].status,
+											"inTransition=",SubsystemLaunch.subsystems[s].inTransition,
+											"fsmMode=",SubsystemLaunch.subsystems[s].fsmMode);
 										allSubsystemsHalted = false;
 										break;
 									}
@@ -2121,11 +2393,14 @@ SubsystemLaunch.create = function() {
 			}
 			else
 			{
-				Debug.log("Do fsmName",_fsmName);
+				Debug.log("DIAG: Taking standard (non-batch) path for command=",command,
+					"system.state=",SubsystemLaunch.system.state,
+					"fsmName=",_fsmName);
 
 
 				window.clearTimeout(_getStatusTimer);
 				invalidatePendingStatusResponses();
+				Debug.log("DIAG: standard path invalidated, nonce now=",_statusRequestNonce);
 				SubsystemLaunch.system.error = ""; //clear error for next command response
 				//force state display for user feedback
 				SubsystemLaunch.system.inTransition = true;
@@ -2178,6 +2453,13 @@ SubsystemLaunch.create = function() {
 		}
 
 		//at this point, ready to send command!
+
+		Debug.log("DIAG: commandRemoteSubsystem dispatch, subsystemIndex=",subsystemIndex,
+			"name=",SubsystemLaunch.subsystems[subsystemIndex].name,
+			"command=",command,
+			"fsmName=",SubsystemLaunch.launcher.getFsmName(),
+			"status=",SubsystemLaunch.subsystems[subsystemIndex].status,
+			"fsmMode=",SubsystemLaunch.subsystems[subsystemIndex].fsmMode);
 
 		window.clearTimeout(_getStatusTimer);
 		invalidatePendingStatusResponses();
@@ -2948,6 +3230,10 @@ SubsystemLaunch.initSubsystemRecords = function (returnHandler) {
 					DesktopContent.getXMLValue(req, "SubsystemCommonList") || "";
 				SubsystemLaunch.system.subsystemCommonOverrideList =
 					DesktopContent.getXMLValue(req, "SubsystemCommonOverrideList") || "";
+				SubsystemLaunch.system.subsystemCommonContextList =
+					DesktopContent.getXMLValue(req, "SubsystemCommonContextList") || "";
+				SubsystemLaunch.system.subsystemCommonContextOverrideList =
+					DesktopContent.getXMLValue(req, "SubsystemCommonContextOverrideList") || "";
 			} //end subsystem common/override -----
 
 			//system state ------------------------

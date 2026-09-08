@@ -67,7 +67,10 @@ class ConfigurationGUISupervisor : public CoreSupervisorBase
 																	const std::string&      configList);
 
 	void 					handleTablesXML							(HttpXmlDocument&       xmldoc,
-																	ConfigurationManagerRW* cfgMgr);
+																	ConfigurationManagerRW* cfgMgr,
+																	const std::string&		filterStartTime,
+																	const std::string&		filterEndTime,
+																	const std::string&		filterMode = "created" /* "created" or "loaded" */);
 	void 					handleGetTableXML						(HttpXmlDocument&       xmldoc,
 																	ConfigurationManagerRW* cfgMgr,
 																	const std::string&      tableName,
@@ -219,7 +222,12 @@ class ConfigurationGUISupervisor : public CoreSupervisorBase
 
 	void  					handleGetArtdaqNodeRecordsXML			(HttpXmlDocument&       xmlOut,
 																	ConfigurationManagerRW* cfgMgr,
-																	const std::string&      modifiedTables);
+																	const std::string&      modifiedTables,
+																	const std::string&      tableGroup      = "",
+																	TableGroupKey           tableGroupKey   = TableGroupKey(),
+																	const std::string&      contextGroup    = "",
+																	TableGroupKey           contextGroupKey = TableGroupKey(),
+																	bool                    suppressMultiNode = false);
 	void  					handleSaveArtdaqNodeRecordsXML			(const std::string&      nodeString,
 																	const std::string&      subsystemString,
 																	HttpXmlDocument&        xmlOut,
