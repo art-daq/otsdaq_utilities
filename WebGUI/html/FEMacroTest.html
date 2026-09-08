@@ -237,6 +237,25 @@
 			resize: both;
 		}
 
+		#sequenceTooltip {
+			position: fixed;
+			z-index: 1001;
+			display: none;
+			pointer-events: none;
+			max-width: min(600px, calc(100vw - 16px));
+			max-height: calc(100vh - 16px);
+			box-sizing: border-box;
+			overflow: hidden;
+			white-space: pre-wrap;
+			overflow-wrap: anywhere;
+			padding: 8px 10px;
+			border: 1px solid #c4e9f5;
+			border-radius: 5px;
+			background-color: #002540;
+			color: #c4e9f5;
+			box-shadow: 0 2px 6px rgba(0, 0, 0, 0.3);
+		}
+
 		.vbox {
 			display: grid;
 			grid-template-columns: 1fr;
@@ -1666,6 +1685,7 @@ Here is the json string received:
 		//redraw ~~
 		function redraw() {
 			Debug.log("redraw()");
+			hideSequenceTooltip();
 
 			var maxRow = layoutMaxRow_;
 			var maxCol = layoutMaxCol_;
@@ -1752,8 +1772,8 @@ Here is the json string received:
 						"<div style='display: flex; flex-direction: column; align-items: flex-start; width: 100%;'>" +
 						"<div style='display: flex; justify-content: space-between; align-items: center; width: 100%;'>" +
 						"<h3>Macro-of-Macros (MoM) Sequence Mode</h3>" +
-						"<span id='currentMacroDisplay'>No Macro Running</span>" +
 						"</div>" +
+						"<div id='currentMacroDisplay' style='width:100%; color:#cc5500; font-weight:bold;'></div>" +
 						"<div style='display: flex; justify-content: flex-end; width: 100%;'>" +
 						"<span id='currentDelayDisplay'>Delay: 0s</span>" +
 						"</div>" +
@@ -3916,10 +3936,50 @@ Here is the json string received:
 			overwriteBtn.disabled = status;
 		} //end statusEditButtons()
 
+		function showSequenceTooltip(event, component) {
+			if (event.buttons) {
+				hideSequenceTooltip();
+				return;
+			}
+			var tooltip = document.getElementById("sequenceTooltip");
+			if (!tooltip) {
+				tooltip = document.createElement("div");
+				tooltip.id = "sequenceTooltip";
+				tooltip.setAttribute("role", "tooltip");
+				document.body.appendChild(tooltip);
+				window.addEventListener("scroll", hideSequenceTooltip, true);
+				window.addEventListener("resize", hideSequenceTooltip);
+				window.addEventListener("blur", hideSequenceTooltip);
+				window.addEventListener("mousedown", hideSequenceTooltip);
+				window.addEventListener("keydown", function (keyEvent) {
+					if (keyEvent.key === "Escape") hideSequenceTooltip();
+				});
+			}
+			tooltip.textContent = component.getAttribute("data-sequence-tooltip");
+			tooltip.style.left = "0px";
+			tooltip.style.top = "0px";
+			tooltip.style.display = "block";
+			var maxTooltipWidth = Math.min(600, window.innerWidth - 16);
+			var left = event.clientX + 12;
+			var top = event.clientY + 12;
+			if (left + maxTooltipWidth > window.innerWidth - 8)
+				left = event.clientX - tooltip.offsetWidth - 12;
+			if (top + tooltip.offsetHeight > window.innerHeight - 8)
+				top = event.clientY - tooltip.offsetHeight - 12;
+			tooltip.style.left = Math.max(8, left) + "px";
+			tooltip.style.top = Math.max(8, top) + "px";
+		}
+
+		function hideSequenceTooltip() {
+			var tooltip = document.getElementById("sequenceTooltip");
+			if (tooltip) tooltip.style.display = "none";
+		}
+
 		//=====================================================================================
 		//showSequence ~~
 		function showSequence(target, seq) {
 			Debug.log(target, seq);
+			hideSequenceTooltip();
 			var container = document.getElementById(target);
 			container.innerHTML = "";
 			var GUIIndex = 0;
@@ -3933,41 +3993,54 @@ Here is the json string received:
 				else
 					className += "dark";
 
-				// create the record name
+				var isDelay = command["macroType"] === "__delay__";
 				var recordName = "";
 				var titleArgs = "";
-				var inputArgs = command["inputArgs"].split(";");
-				for (var j = 0; j < inputArgs.length; j++) {
-					var tuple = inputArgs[j].split(",");
-					if (tuple[0] !== "") {
-						var argName = decodeURIComponent(tuple[0]);
-						var argVal = decodeURIComponent(tuple[1]);
-						if (j)
-							recordName += "; ";
-						recordName += argName + "=" + argVal;
-						titleArgs += "\n    " + argName + "=" + argVal;
+				var recordText = "";
+				var titleText = "";
+
+				if (isDelay) {
+					var delayTuple = command["inputArgs"].split(",");
+					var delaySec = delayTuple.length > 1 ? decodeURIComponent(delayTuple[1]) : "?";
+					recordText = "⏱ Delay";
+					recordName = delaySec + "s";
+					titleText = "#" + (GUIIndex + 1) + " Delay: " + delaySec + " seconds";
+				} else {
+					var inputArgs = command["inputArgs"].split(";");
+					for (var j = 0; j < inputArgs.length; j++) {
+						var tuple = inputArgs[j].split(",");
+						if (tuple[0] !== "") {
+							var argName = decodeURIComponent(tuple[0]);
+							var argVal = decodeURIComponent(tuple[1]);
+							if (j)
+								recordName += "; ";
+							recordName += argName + "=" + argVal;
+							titleArgs += "\n    " + argName + "=" + argVal;
+						}
 					}
+
+					if (command["feUID"] === "*" && command["feClass"] !== "*")
+						recordText = "(all " + command["feClass"] + ") ";
+					else
+						recordText = "(" + command["feUID"] + ") ";
+
+					recordText += command["macroName"];
+
+					titleText = "#" + (GUIIndex + 1) + " " + recordText +
+						(titleArgs === "" ? "\n    No arguments" : titleArgs);
 				}
-
-				// build the record text
-				var recordText = ""
-				if (command["feUID"] === "*" && command["feClass"] !== "*")
-					recordText = "(all " + command["feClass"] + ") ";
-				else
-					recordText = "(" + command["feUID"] + ") ";
-
-				recordText += command["macroName"];
-
-				var titleText = "#" + (GUIIndex + 1) + " " + recordText +
-					(titleArgs === "" ? "\n    No arguments" : titleArgs);
 
 				container.innerHTML += DesktopContent.htmlOpen(
 					"div",
 					{
 						"id": "sequenceComponent-" + index,
 						"class": className,
+						"data-sequence-tooltip": escapeHistoryHtml(titleText),
+						"onmouseenter": "showSequenceTooltip(event, this)",
+						"onmousemove": "showSequenceTooltip(event, this)",
+						"onmouseleave": "hideSequenceTooltip()",
 					},
-					"<span title='" + titleText.replace(/'/g, "&#39;") + "'><i>#" + (GUIIndex + 1) + "</i> " + recordText + ": " + (recordName === "" ? "No arguments" : recordName) + "</span>",
+					"<span><i>#" + (GUIIndex + 1) + "</i> " + recordText + ": " + (recordName === "" ? "No arguments" : recordName) + "</span>",
 					true);
 
 				GUIIndex++;
@@ -3994,10 +4067,44 @@ Here is the json string received:
 					downBtn.innerHTML = "<span>&ShortDownArrow;</v>";
 					downBtn.setAttribute("onClick", "moveDownSequence(" + index + ")");
 
+					// edit button
+					var editBtn = document.createElement("button");
+					editBtn.className = "sequence-btn";
+					editBtn.innerHTML = "<span>&#9998;</span>";
+					editBtn.setAttribute("onClick", "toggleSequenceEdit(" + index + ")");
+
 					sequenceAction.appendChild(downBtn);
+					sequenceAction.appendChild(editBtn);
 					sequenceAction.appendChild(removeBtn);
 					sequenceAction.appendChild(upBtn);
 					FEsequence.appendChild(sequenceAction);
+
+					// hidden inline edit area
+					var editDiv = document.createElement("div");
+					editDiv.id = "sequenceEdit-" + index;
+					editDiv.style.display = "none";
+					editDiv.style.gridColumn = "1 / -1";
+					editDiv.style.marginTop = "4px";
+					if (isDelay) {
+						var curDelay = command["inputArgs"].split(",");
+						var curVal = curDelay.length > 1 ? decodeURIComponent(curDelay[1]) : "5";
+						editDiv.innerHTML =
+							"Duration (s): <input type='number' id='seqEditValue-" + index + "' " +
+							"value='" + curVal + "' min='0' onfocus='this.select()' " +
+							"style='font-size:calc(1em - 2px);width:60px;' /> " +
+							"<button onclick='onDelayEditChange(" + index + ")' " +
+							"style='font-size:calc(1em - 2px);margin-left:2px;'>Set</button>";
+					} else {
+						editDiv.innerHTML =
+							"<select id='seqEditSelect-" + index + "' " +
+							"onchange='onSequenceEditInputChange(" + index + ")' " +
+							"style='font-size:calc(1em - 2px);max-width:55%;'></select> " +
+							"<input type='text' id='seqEditValue-" + index + "' " +
+							"onfocus='this.select()' style='font-size:calc(1em - 2px);width:30%;' /> " +
+							"<button onclick='onSequenceEditValueChange(" + index + ")' " +
+							"style='font-size:calc(1em - 2px);margin-left:2px;'>Set</button>";
+					}
+					FEsequence.appendChild(editDiv);
 				}
 			}
 		} //end showSequence()
@@ -4006,15 +4113,40 @@ Here is the json string received:
 		//showPopupSaveSequence ~~
 		function showPopupSaveSequence(overwrite) {
 			Debug.logv({ overwrite });
+			var popup = document.getElementById("popupSaveSequence");
+			var saveAsDiv = document.getElementById("saveAsDiv");
+			var overwriteDiv = document.getElementById("overwriteDiv");
+
 			if (overwrite) {
-				var sequenceName = document.getElementById("select-sequence").value;
-				Debug.log("showPopupSaveSequence overwrite", sequenceName);
-				//force name into position for save
-				document.getElementById("sequenceName").innerText = sequenceName;
-				saveSequence(1);
+				saveAsDiv.style.display = "none";
+				overwriteDiv.style.display = "block";
+				var sourceSelect = document.getElementById("select-sequence");
+				var overwriteSelect = document.getElementById("overwriteSequenceSelect");
+				overwriteSelect.innerHTML = "";
+				var hasOptions = false;
+				for (var i = 0; i < sourceSelect.options.length; i++) {
+					var val = sourceSelect.options[i].value;
+					if (val === "None" || val === "Unnamed" || val === "undefined")
+						continue;
+					hasOptions = true;
+					var opt = document.createElement("option");
+					opt.value = val;
+					opt.textContent = val;
+					overwriteSelect.appendChild(opt);
+				}
+				if (!hasOptions) {
+					var opt = document.createElement("option");
+					opt.textContent = "No saved sequences";
+					opt.disabled = true;
+					overwriteSelect.appendChild(opt);
+				}
+				popup.style.display = "grid";
+				popup.style.gridTemplateColumns = "1fr";
 				return;
 			}
-			var popup = document.getElementById("popupSaveSequence");
+
+			saveAsDiv.style.display = "block";
+			overwriteDiv.style.display = "none";
 			var sequenceNameInput = document.getElementById("sequenceName");
 			popup.style.display = "grid";
 			popup.style.gridTemplateColumns = "1fr";
@@ -4023,10 +4155,25 @@ Here is the json string received:
 		} //end showPopupSaveSequence()
 
 		//=====================================================================================
+		//confirmOverwriteSequence ~~
+		function confirmOverwriteSequence() {
+			var overwriteSelect = document.getElementById("overwriteSequenceSelect");
+			var selectedName = overwriteSelect.value;
+			if (!selectedName) return;
+			document.getElementById("sequenceName").value = selectedName;
+			document.getElementById("popupSaveSequence").style.display = "none";
+			saveSequence(1);
+		} //end confirmOverwriteSequence()
+
+		//=====================================================================================
 		//hidePopupSaveSequence ~~
 		function hidePopupSaveSequence() {
 			var popup = document.getElementById("popupSaveSequence");
 			popup.style.display = "none";
+			var nameInput = document.getElementById("sequenceName");
+			if (nameInput) nameInput.value = "";
+			var errSpan = document.getElementById("sequenceName-error");
+			if (errSpan) errSpan.innerText = "";
 		} //end hidePopupSaveSequence()
 
 		//=====================================================================================
@@ -4182,6 +4329,7 @@ Here is the json string received:
 		//=====================================================================================
 		//toggleSequenceMode ~~
 		function toggleSequenceMode() {
+			hideSequenceTooltip();
 			sequenceMode_ = !sequenceMode_;
 			var sequenceModule = document.getElementById("macroModule-sequence");
 			if (sequenceMode_) {
@@ -4468,6 +4616,8 @@ Here is the json string received:
 			var builderActions = document.getElementById("sequence-builder-buttons");
 			builderActions.style.display = "flex";
 			document.getElementById("sequence-builder-buttons-top").style.display = "flex";
+			var displayEl = document.getElementById("currentMacroDisplay");
+			if (displayEl) displayEl.textContent = "No Macro Running - Edit Mode";
 		} //end newSequence()
 
 		//=====================================================================================
@@ -4520,14 +4670,16 @@ Here is the json string received:
 			sequenceBuilding_ = true;
 			var momWarn = document.getElementById("history-mom-warning");
 			if (momWarn) momWarn.style.display = "";
-			// close active view
+			// close active view (clear read-only display without clearing selectedSequence_)
 			tempSequence_ = selectedSequence_;
-			selectSequence();
+			showSequence("show-sequence", {});
 			showSequence("sequence-builder", tempSequence_);
 			var builderActions = document.getElementById("sequence-builder-buttons");
 			builderActions.style.display = "flex";
 			document.getElementById("sequence-builder-buttons-top").style.display = "flex";
 			document.getElementById("sequenceName").value = document.getElementById("select-sequence").value;
+			var displayEl = document.getElementById("currentMacroDisplay");
+			if (displayEl) displayEl.textContent = "No Macro Running - Edit Mode";
 		} //end editSequence()
 
 		//=====================================================================================
@@ -4550,6 +4702,42 @@ Here is the json string received:
 		} //end delaySequence()
 
 		//=====================================================================================
+		//addDelayToSequence ~~
+		function addDelayToSequence() {
+			if (!sequenceBuilding_) {
+				alert("Please switch to Edit mode first (click Edit) before adding a Delay action.");
+				return;
+			}
+			var delayVal = parseFloat(document.getElementById('delayActionInput').value);
+			if (isNaN(delayVal) || delayVal <= 0) {
+				alert("Please enter a valid number greater than 0");
+				return;
+			}
+			var delayEntry = JSON.stringify({
+				"feClass": "__delay__",
+				"feUID": "__delay__",
+				"macroType": "__delay__",
+				"macroName": "Delay",
+				"inputArgs": "Duration%20(s)," + encodeURIComponent(delayVal),
+				"outputArgs": "",
+				"saveOutputs": 0
+			});
+			appendMacroToSequence(delayEntry);
+			document.getElementById('popupSetSequenceDelay').style.display = 'none';
+		} //end addDelayToSequence()
+
+		//=====================================================================================
+		//handleEnterPressDelayAction ~~
+		function handleEnterPressDelayAction(event) {
+			if (event.key === "Enter" || event.keyCode === 13) {
+				event.preventDefault();
+				addDelayToSequence();
+				return false;
+			}
+			return true;
+		} //end handleEnterPressDelayAction()
+
+		//=====================================================================================
 		//selectSequence ~~
 		function selectSequence(elem = "undefined") {
 			Debug.log("selectSequence", elem);
@@ -4567,36 +4755,51 @@ Here is the json string received:
 				return;
 			}
 
-			closeSequence();	 				// close the sequence-building if it is open
-			showSequence("show-sequence", {}); 	// reset the sequence of commands to prepare for load
+			// remove stale "Unnamed" placeholder if selecting a real sequence
+			if (elem !== "Unnamed") {
+				var sel = document.getElementById("select-sequence");
+				var unnamedOpt = sel ? sel.querySelector("option[value='Unnamed']") : null;
+				if (unnamedOpt) unnamedOpt.remove();
+			}
+
+			var wasEditing = sequenceBuilding_;
+			closeSequence();
+			showSequence("show-sequence", {});
 
 			// call the API
 			DesktopContent.XMLHttpRequest("Request?RequestType=getFEMacroSequence" +
 				"&name=" + elem,
 				"",
 				function (req) {
-					// request hendler
 					Debug.log("selectSequence() getFEMacroSequence was called.");
 					var sequenceString = DesktopContent.getXMLValue(req, "FEsequence");
 					if (!sequenceString) {
 						Debug.err("Sequence returned is empty!");
 						return;
 					}
-					Debug.log(sequenceString);
 					try {
-						selectedSequence_ = JSON.parse(decodeURI(sequenceString));
+						var rawSequence = JSON.parse(sequenceString);
+						for (var key in rawSequence) {
+							if (typeof rawSequence[key] === 'object') {
+								rawSequence[key] = JSON.stringify(rawSequence[key]);
+							}
+						}
+						selectedSequence_ = rawSequence;
 					}
 					catch (e) {
 						Debug.err("Error while parsing returned sequence data! Notify admins - here was the error:", e);
 						return;
 					}
 
-					updateCurrentMacroDisplay("No Macro Running", 0, 0);
 					currentIndex = 0;
-					// fill the list
-					showSequence("show-sequence", selectedSequence_);
-					// active buttons
-					statusActionButtons(false);
+
+					if (wasEditing) {
+						editSequence();
+					} else {
+						updateCurrentMacroDisplay("No Macro Running", 0, 0);
+						showSequence("show-sequence", selectedSequence_);
+						statusActionButtons(false);
+					}
 				}
 			);
 		} //end selectSequence()
@@ -4635,12 +4838,15 @@ Here is the json string received:
 					}
 
 			// prepare the payload of the API call
-			var postData = "FEsequence=" + encodeURIComponent(JSON.stringify(tempSequence_)) +
-				"&sequenceName=" + encodeURIComponent(sequenceName.value);
-
-
-			Debug.log(JSON.stringify(tempSequence_));
-			Debug.log("Sequence Name:", sequenceName.value);
+			// Store values as objects (not JSON strings) to avoid backslash
+			// escaping issues in the XML round trip
+			var sequenceToSave = {};
+			for (var key in tempSequence_) {
+				sequenceToSave[key] = JSON.parse(tempSequence_[key]);
+			}
+			var savedName = sequenceName.value;
+			var postData = "FEsequence=" + encodeURIComponent(JSON.stringify(sequenceToSave)) +
+				"&sequenceName=" + encodeURIComponent(savedName);
 
 			// API call
 			DesktopContent.XMLHttpRequest("Request?RequestType=saveFEMacroSequence" +
@@ -4658,30 +4864,31 @@ Here is the json string received:
 					}
 
 					// Update the dropdown based on whether it's a new sequence or not
-					if (isNewSequence) {
-						// Check if the "Unnamed" option exists and update it
+					if (overwrite) {
+						var unnamedOption = sequenceSelector.querySelector("option[value='Unnamed']");
+						if (unnamedOption) unnamedOption.remove();
+					}
+					else if (isNewSequence) {
 						var unnamedOption = sequenceSelector.querySelector("option[value='Unnamed']");
 						if (unnamedOption) {
-							unnamedOption.text = sequenceName.value;
-							unnamedOption.value = sequenceName.value;
+							unnamedOption.text = savedName;
+							unnamedOption.value = savedName;
 						}
 					}
 					else {
-						// Check if an option with this name already exists
-						var existingOption = Array.from(sequenceSelector.options).find(option => option.value === sequenceName.value);
+						var existingOption = Array.from(sequenceSelector.options).find(option => option.value === savedName);
 						if (!existingOption) {
-							// Add a new option for the saved sequence
 							var option = document.createElement("option");
-							option.text = sequenceName.value;
-							option.value = sequenceName.value;
+							option.text = savedName;
+							option.value = savedName;
 							sequenceSelector.add(option);
 						}
 					}
 
-					sequenceSelector.value = sequenceName.value;
-					selectSequence(sequenceName.value);
+					sequenceSelector.value = savedName;
+					selectSequence(savedName);
 
-					Debug.info("Sequence '" + sequenceName.value + "' was successfully saved!");
+					Debug.info("Sequence '" + savedName + "' was successfully saved!");
 				}, //end save handler
 				0 /*reqParam*/,
 				0 /*progressHandler*/,
@@ -4793,6 +5000,21 @@ Here is the json string received:
 
 				var commandString = selectedSequence_[keys[currentIndex]];
 				var command = JSON.parse(commandString);
+
+				// handle delay action entries
+				if (command["macroType"] === "__delay__") {
+					var delayTuple = command["inputArgs"].split(",");
+					var delaySec = delayTuple.length > 1 ? parseFloat(decodeURIComponent(delayTuple[1])) : 0;
+					updateCurrentMacroDisplay("⏱ Delay " + delaySec + "s...", currentIndex + 1, totalMacros);
+					setTimeout(function() {
+						++currentIndex;
+						if (!pauseSequenceFlag)
+							setTimeout(executeMacro, delayBetweenMacros);
+						else
+							executeMacro();
+					}, delaySec * 1000);
+					return;
+				}
 
 				updateCurrentMacroDisplay(command["macroName"], currentIndex + 1, totalMacros);
 
@@ -4958,10 +5180,9 @@ Here is the json string received:
 		//=====================================================================================
 		//closeSequence ~~
 		function closeSequence() {
-			// reset the container
+			// reset the builder container
 			tempSequence_ = {};
 			showSequence("sequence-builder", tempSequence_);
-			statusActionButtons(false);
 			statusEditButtons(false);
 			// hide the edit buttons
 			var builderActions = document.getElementById("sequence-builder-buttons");
@@ -4969,8 +5190,15 @@ Here is the json string received:
 			document.getElementById("sequence-builder-buttons-top").style.display = "none";
 			// stop building
 			sequenceBuilding_ = false;
+			var displayEl = document.getElementById("currentMacroDisplay");
+			if (displayEl) displayEl.textContent = "No Macro Running";
 			var momWarn = document.getElementById("history-mom-warning");
 			if (momWarn) momWarn.style.display = "none";
+			// restore read-only view of selected sequence
+			if (Object.keys(selectedSequence_).length > 0) {
+				showSequence("show-sequence", selectedSequence_);
+				statusActionButtons(false);
+			}
 			var outputEl = document.getElementById("macroModule-output");
 			if (outputEl)
 				outputEl.innerHTML = "<h3 style='display:flex;align-items:center;justify-content:center;white-space:nowrap;'>" +
@@ -5035,6 +5263,206 @@ Here is the json string received:
 			Debug.log("down", tempSequence_);
 			return;
 		} //end moveDownSequence()
+
+		//=====================================================================================
+		//toggleSequenceEdit ~~
+		function toggleSequenceEdit(index) {
+			var editDiv = document.getElementById("sequenceEdit-" + index);
+			if (!editDiv) return;
+
+			if (editDiv.style.display !== "none") {
+				editDiv.style.display = "none";
+				return;
+			}
+
+			var command = JSON.parse(tempSequence_[index]);
+
+			// delay entries have their own edit UI, just show it
+			if (command["macroType"] === "__delay__") {
+				editDiv.style.display = "block";
+				var delayInput = document.getElementById("seqEditValue-" + index);
+				if (delayInput) { delayInput.focus(); delayInput.select(); }
+				return;
+			}
+
+			var selectEl = document.getElementById("seqEditSelect-" + index);
+			var valueEl = document.getElementById("seqEditValue-" + index);
+
+			selectEl.innerHTML = "";
+			var inputPairs = command["inputArgs"].split(";");
+			var hasInputs = false;
+			for (var i = 0; i < inputPairs.length; i++) {
+				var tuple = inputPairs[i].split(",");
+				if (tuple[0] === "") continue;
+				hasInputs = true;
+				var argName = decodeURIComponent(tuple[0]);
+				var opt = document.createElement("option");
+				opt.value = i;
+				opt.textContent = argName;
+				selectEl.appendChild(opt);
+			}
+
+			if (!hasInputs) {
+				selectEl.innerHTML = "<option>No inputs</option>";
+				valueEl.value = "";
+				valueEl.disabled = true;
+			} else {
+				valueEl.disabled = false;
+				selectEl.selectedIndex = 0;
+				onSequenceEditInputChange(index);
+			}
+
+			editDiv.style.display = "block";
+			if (valueEl && !valueEl.disabled) { valueEl.focus(); valueEl.select(); }
+		} //end toggleSequenceEdit()
+
+		//=====================================================================================
+		//onSequenceEditInputChange ~~
+		function onSequenceEditInputChange(index) {
+			var selectEl = document.getElementById("seqEditSelect-" + index);
+			var valueEl = document.getElementById("seqEditValue-" + index);
+			var command = JSON.parse(tempSequence_[index]);
+			var inputPairs = command["inputArgs"].split(";");
+			var pairIndex = parseInt(selectEl.value);
+			var tuple = inputPairs[pairIndex].split(",");
+			valueEl.value = decodeURIComponent(tuple[1] || "");
+			valueEl.focus();
+			valueEl.select();
+		} //end onSequenceEditInputChange()
+
+		//=====================================================================================
+		//onSequenceEditValueChange ~~
+		function onSequenceEditValueChange(index) {
+			var selectEl = document.getElementById("seqEditSelect-" + index);
+			var valueEl = document.getElementById("seqEditValue-" + index);
+			var command = JSON.parse(tempSequence_[index]);
+			var inputPairs = command["inputArgs"].split(";");
+			var pairIndex = parseInt(selectEl.value);
+			var tuple = inputPairs[pairIndex].split(",");
+			tuple[1] = encodeURIComponent(valueEl.value);
+			inputPairs[pairIndex] = tuple.join(",");
+			command["inputArgs"] = inputPairs.join(";");
+			tempSequence_[index] = JSON.stringify(command);
+
+			// update the displayed span text without re-rendering
+			var component = document.getElementById("sequenceComponent-" + index);
+			if (component) {
+				var span = component.querySelector("span");
+				if (span) {
+					var recordName = "";
+					var titleArgs = "";
+					for (var j = 0; j < inputPairs.length; j++) {
+						var t = inputPairs[j].split(",");
+						if (t[0] !== "") {
+							var argName = decodeURIComponent(t[0]);
+							var argVal = decodeURIComponent(t[1]);
+							if (j) recordName += "; ";
+							recordName += argName + "=" + argVal;
+							titleArgs += "\n    " + argName + "=" + argVal;
+						}
+					}
+					var recordText = "";
+					if (command["feUID"] === "*" && command["feClass"] !== "*")
+						recordText = "(all " + command["feClass"] + ") ";
+					else
+						recordText = "(" + command["feUID"] + ") ";
+					recordText += command["macroName"];
+
+					var seqNum = span.querySelector("i").textContent;
+					span.innerHTML = "<i>" + seqNum + "</i> " + recordText + ": " +
+						(recordName === "" ? "No arguments" : recordName);
+					span.title = seqNum.replace("#","#") + " " + recordText +
+						(titleArgs === "" ? "\n    No arguments" : titleArgs);
+				}
+			}
+			// feedback in the MoM status display and output pane
+			var setArgName = decodeURIComponent(tuple[0]);
+			var setArgVal = valueEl.value;
+			var feedbackMsg = "Set " + command["macroName"] + " '" + setArgName + "' = '" + setArgVal + "'";
+
+			var displayEl = document.getElementById("currentMacroDisplay");
+			if (displayEl) {
+				var prevText = displayEl.textContent;
+				displayEl.textContent = "Set to '" + setArgVal + "'";
+				setTimeout(function() {
+					if (displayEl.textContent === "Set to '" + setArgVal + "'")
+						displayEl.textContent = prevText;
+				}, 5000);
+			}
+
+			// orange toast in the edit area
+			var editDiv = document.getElementById("sequenceEdit-" + index);
+			if (editDiv) {
+				editDiv.style.position = "relative";
+				var toast = document.createElement("span");
+				toast.style.cssText = "color:#cc5500; font-weight:bold; position:absolute; top:-1.4em; left:0;";
+				toast.textContent = "Set to '" + setArgVal + "'";
+				editDiv.appendChild(toast);
+				setTimeout(function() { if (toast.parentNode) toast.remove(); }, 5000);
+			}
+
+			var outputEl = document.getElementById("macroModule-output");
+			if (outputEl) {
+				var outDiv = document.getElementById("verticalLayoutOutputDiv");
+				var prevContent = outDiv ? outDiv.innerHTML : "";
+				var str = feedbackMsg + " &mdash; " + getDateString(new Date()) + "<br>" + prevContent;
+				if (outDiv)
+					outDiv.innerHTML = str;
+				else
+					outputEl.innerHTML = "<div id='verticalLayoutOutputDiv'>" + str + "</div>";
+			}
+		} //end onSequenceEditValueChange()
+
+		//=====================================================================================
+		//onDelayEditChange ~~
+		function onDelayEditChange(index) {
+			var valueEl = document.getElementById("seqEditValue-" + index);
+			if (!valueEl) return;
+			var newVal = parseFloat(valueEl.value);
+			if (isNaN(newVal) || newVal <= 0) {
+				alert("Please enter a valid number greater than 0");
+				return;
+			}
+			var command = JSON.parse(tempSequence_[index]);
+			command["inputArgs"] = "Duration%20(s)," + encodeURIComponent(newVal);
+			tempSequence_[index] = JSON.stringify(command);
+
+			var feedbackMsg = "Set Delay = '" + newVal + "s'";
+
+			var displayEl = document.getElementById("currentMacroDisplay");
+			if (displayEl) {
+				var prevText = displayEl.textContent;
+				displayEl.textContent = "Set to '" + newVal + "s'";
+				setTimeout(function() {
+					if (displayEl.textContent === "Set to '" + newVal + "s'")
+						displayEl.textContent = prevText;
+				}, 5000);
+			}
+
+			var outputEl = document.getElementById("macroModule-output");
+			if (outputEl) {
+				var outDiv = document.getElementById("verticalLayoutOutputDiv");
+				var prevContent = outDiv ? outDiv.innerHTML : "";
+				var str = feedbackMsg + " &mdash; " + getDateString(new Date()) + "<br>" + prevContent;
+				if (outDiv)
+					outDiv.innerHTML = str;
+				else
+					outputEl.innerHTML = "<div id='verticalLayoutOutputDiv'>" + str + "</div>";
+			}
+
+			showSequence("sequence-builder", tempSequence_);
+
+			var editDiv = document.getElementById("sequenceEdit-" + index);
+			if (editDiv) {
+				editDiv.style.position = "relative";
+				var toast = document.createElement("span");
+				toast.style.cssText = "color:#cc5500; font-weight:bold; position:absolute; top:-1.4em; left:0;";
+				toast.textContent = "Set to '" + newVal + "s'";
+				editDiv.appendChild(toast);
+				editDiv.style.display = "block";
+				setTimeout(function() { if (toast.parentNode) toast.remove(); }, 5000);
+			}
+		} //end onDelayEditChange()
 
 		//=====================================================================================
 		//handleEnterPressDelaySequence ~~
@@ -5194,13 +5622,21 @@ Here is the json string received:
 
 	<div id="popupSetSequenceDelay" class="smallPopup">
 		<center>
-			<h4>Set Delay Between Macros (sec):</h4>
-			<input type="number" id="sequenceDelayInput" min="0" maxlength="30" onkeypress="return handleEnterPressDelaySequence(event)"></input>
-			<div class="buttongroup" style="margin-top: 20px;">
-				<button onclick="delaySequence()">Confirm</button>
+			<h4>Delay between all Macros (sec):</h4>
+			<input type="number" id="sequenceDelayInput" min="0" maxlength="30" onkeypress="return handleEnterPressDelaySequence(event)">
+			<div class="buttongroup" style="margin-top: 10px;">
+				<button onclick="delaySequence()">Set Global Delay</button>
+			</div>
+			<hr style="margin: 15px 0; border-color: #666;">
+			<h4>Add a Delay action to sequence (sec):</h4>
+			<input type="number" id="delayActionInput" min="0" value="5" onkeypress="return handleEnterPressDelayAction(event)">
+			<div class="buttongroup" style="margin-top: 10px;">
+				<button onclick="addDelayToSequence()">Add to Sequence</button>
+			</div>
+			<div class="buttongroup" style="margin-top: 15px;">
 				<button onclick="hideSmallPopup(this)">Cancel</button>
+			</div>
 		</center>
-	</div>
 	</div>
 
 	<div id="popupSetInterval" class="smallPopup">
@@ -5265,14 +5701,24 @@ Here is the json string received:
 
 	<div id="popupSaveSequence" class="smallPopup">
 		<center>
-			<h4>Type a name for the MoM sequence</h4>
-			<input type="text" id="sequenceName" maxlength="30" onkeypress="return handleEnterPressSaveSequence(event)"></input>
-			<span id="sequenceName-error" style="color: red; display: block; margin-top: 10px;"></span>
-			<div class="buttongroup" style="margin-top: 10px;">
-				<button onclick="saveSequence()">Confirm</button>
-				<button onclick="hideSmallPopup(this)">Cancel</button>
+			<div id="saveAsDiv">
+				<h4>Type a name for the MoM sequence</h4>
+				<input type="text" id="sequenceName" maxlength="30" onkeypress="return handleEnterPressSaveSequence(event)"></input>
+				<span id="sequenceName-error" style="color: red; display: block; margin-top: 10px;"></span>
+				<div class="buttongroup" style="margin-top: 10px;">
+					<button onclick="saveSequence()">Confirm</button>
+					<button onclick="hidePopupSaveSequence()">Cancel</button>
+				</div>
+			</div>
+			<div id="overwriteDiv" style="display:none;">
+				<h4>Select a sequence to overwrite</h4>
+				<select id="overwriteSequenceSelect" style="font-size:1em; min-width:150px;"></select>
+				<div class="buttongroup" style="margin-top: 10px;">
+					<button onclick="confirmOverwriteSequence()">Confirm Overwrite</button>
+					<button onclick="hidePopupSaveSequence()">Cancel</button>
+				</div>
+			</div>
 		</center>
-	</div>
 	</div>
 
 	<div id="popupSaveMoM" class="smallPopup">
