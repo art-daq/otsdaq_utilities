@@ -1530,14 +1530,16 @@ SubsystemLaunch.create = function() {
 				else {
 					el = document.getElementById("subsystem_" + s + "_" + fieldIds[i]);
 
-					if(fieldIds[i] == "detail" && SubsystemLaunch.subsystems[s].lastStatusChangeTime &&
-							SubsystemLaunch.subsystems[s].lastStatusChangeTime != "0")
+					if(fieldIds[i] == "detail")
 					{
 						//use a temporary element to decode html entities (like &lt; &apos; and &gt;)
 						const tel = document.createElement("textarea");
 						tel.innerHTML = decodeURIComponent(SubsystemLaunch.subsystems[s][fieldIds[i]]);
 
-						const detailText = tel.value + " ( " +
+						var detailText = tel.value;
+						if(SubsystemLaunch.subsystems[s].lastStatusChangeTime &&
+								SubsystemLaunch.subsystems[s].lastStatusChangeTime != "0")
+							detailText += " ( " +
 										SubsystemLaunch.subsystems[s].lastStatusChangeTime + " )";
 
 						const scrollEl = document.getElementById("subsystem_" + s + "_detail_scroll");
@@ -2968,9 +2970,8 @@ SubsystemLaunch.create = function() {
 				if(lastLogEntry && lastLogEntry != "")
 					lastLogEntry = decodeURIComponent(lastLogEntry);
 
-				var writeToEcl = false; // updated by checkbox onchange before popup is cleared
 				SubsystemLaunch._pendingWriteToEcl = false; // reset each time popup opens
-				SubsystemLaunch._pendingDiscardRun = false; // reset each time popup opens
+				SubsystemLaunch._pendingDiscardRun = false;
 
 				DesktopContent.popUpVerification(
 					/* prompt */
@@ -2986,8 +2987,7 @@ SubsystemLaunch.create = function() {
 
 						var writeToEcl = SubsystemLaunch._pendingWriteToEcl || false;
 						var discardRun = SubsystemLaunch._pendingDiscardRun || false;
-						Debug.log("writeToEcl = " + writeToEcl);
-						Debug.log("discardRun = " + discardRun);
+						Debug.log("writeToEcl = " + writeToEcl + ", discardRun = " + discardRun);
 
 						//save last entry
 						lastLogEntry = entry;
