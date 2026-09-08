@@ -518,48 +518,49 @@ void VisualSupervisor::request(const std::string&               requestType,
 			}
 			////STDLINE(std::string("Opening ")+ dirpath,"") ;
 			if(path != "/")
-			while((entry = readdir(pDIR)))
-			{
-				//__SUP_COUT__ << int(entry->d_type) << " " << entry->d_name << "\n" <<
-				// __E__;
-				if(entry->d_name[0] != '.' &&
-				   (entry->d_type ==
-				        0 ||  // 0 == UNKNOWN (which can happen - seen in SL7 VM)
-				    entry->d_type == 4 ||
-				    entry->d_type == 8))
+				while((entry = readdir(pDIR)))
 				{
-					//__SUP_COUT__ << int(entry->d_type) << " " << entry->d_name << "\n"
-					//<< __E__;
-					isNotRtCfg =
-					    std::string(entry->d_name).find(".rcfg") == std::string::npos;
-					isDir = false;
-
-					if(entry->d_type == 0)
+					//__SUP_COUT__ << int(entry->d_type) << " " << entry->d_name << "\n" <<
+					// __E__;
+					if(entry->d_name[0] != '.' &&
+					   (entry->d_type ==
+					        0 ||  // 0 == UNKNOWN (which can happen - seen in SL7 VM)
+					    entry->d_type == 4 ||
+					    entry->d_type == 8))
 					{
-						// unknown type .. determine if directory
-						////STDLINE(std::string("Opening ")+dirpath+entry->d_name,"") ;
-						DIR* pTmpDIR = opendir((dirpath + entry->d_name).c_str());
-						if(pTmpDIR)
+						//__SUP_COUT__ << int(entry->d_type) << " " << entry->d_name << "\n"
+						//<< __E__;
+						isNotRtCfg =
+						    std::string(entry->d_name).find(".rcfg") == std::string::npos;
+						isDir = false;
+
+						if(entry->d_type == 0)
 						{
-							////STDLINE("is a directory","") ;
-							isDir = true;
-							closedir(pTmpDIR);
+							// unknown type .. determine if directory
+							////STDLINE(std::string("Opening ")+dirpath+entry->d_name,"") ;
+							DIR* pTmpDIR = opendir((dirpath + entry->d_name).c_str());
+							if(pTmpDIR)
+							{
+								////STDLINE("is a directory","") ;
+								isDir = true;
+								closedir(pTmpDIR);
+							}
+							// else //assume file
 						}
-						// else //assume file
+
+						if((entry->d_type == 8 ||
+						    (!isDir && entry->d_type == 0))  // file type
+						   && std::string(entry->d_name).find(".root") ==
+						          std::string::npos &&
+						   isNotRtCfg)
+							continue;  // skip if not a root file or a config file
+						else if(entry->d_type == 4)
+							isDir = true;  // flag directory types
+
+						xmlOut.addTextElementToData(
+						    isDir ? "dir" : (isNotRtCfg ? "dir" : "file"), entry->d_name);
 					}
-
-					if((entry->d_type == 8 ||
-					    (!isDir && entry->d_type == 0))  // file type
-					   && std::string(entry->d_name).find(".root") == std::string::npos &&
-					   isNotRtCfg)
-						continue;  // skip if not a root file or a config file
-					else if(entry->d_type == 4)
-						isDir = true;  // flag directory types
-
-					xmlOut.addTextElementToData(
-					    isDir ? "dir" : (isNotRtCfg ? "dir" : "file"), entry->d_name);
 				}
-			}
 			closedir(pDIR);
 		}
 		else
@@ -580,12 +581,14 @@ void VisualSupervisor::request(const std::string&               requestType,
 		if(filePath.find("/" + HISTORY_DIR + "/") == 0)
 			filePath = filePath.substr(HISTORY_DIR.length() + 1);
 
-		unsigned splitter = filePath.find(".root") + 5;  // 5 = std::string(".root").size();
+		unsigned splitter =
+		    filePath.find(".root") + 5;  // 5 = std::string(".root").size();
 		std::string rootFileName =
 		    std::string(__ENV__("ROOT_BROWSER_PATH")) + filePath.substr(0, splitter);
 		__SUP_COUTV__(rootFileName);
 
-		std::string rootDirectoryName = filePath.substr(splitter, filePath.length() - splitter);
+		std::string rootDirectoryName =
+		    filePath.substr(splitter, filePath.length() - splitter);
 		__SUP_COUTV__(rootDirectoryName);
 
 		// std::string fullPathToObject = rootFileName + ":" + rootDirectoryName;
