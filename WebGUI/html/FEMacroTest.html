@@ -5371,7 +5371,7 @@ Here is the json string received:
 					var seqNum = span.querySelector("i").textContent;
 					span.innerHTML = "<i>" + seqNum + "</i> " + recordText + ": " +
 						(recordName === "" ? "No arguments" : recordName);
-					span.title = seqNum.replace("#","#") + " " + recordText +
+					span.title = seqNum + " " + recordText +
 						(titleArgs === "" ? "\n    No arguments" : titleArgs);
 				}
 			}
